@@ -30,6 +30,7 @@ die "Please specify valid directory for --taxonomyInDirectory" unless(-d $taxono
 
 print "Reading taxonomy from $taxonomyInDirectory ..\n";
 my $taxonomy_href = taxTree::readTaxonomy($taxonomyInDirectory);
+my $merged_href = taxTree::readMerged($taxonomyInDirectory);
 print "\tdone.\n\n";
 
 my @expected_taxonomy_files = taxTree::getTaxonomyFileNames();
@@ -110,6 +111,11 @@ sub wanted {
 
 		$included_genome++;
 		
+		unless(exists $taxonomy_href->{$taxonID})
+		{
+			warn "Taxon ID $taxonID not defined in tree in $taxonomyInDirectory - try recovering from merged nodes.";
+			$taxonID = taxTree::findCurrentNodeID($taxonomy_href, $merged_href, $taxonID);
+		}
 		if(exists $taxonomy_href->{$taxonID})
 		{
 			$file_2_taxonID{$file} = $taxonID;
@@ -247,11 +253,6 @@ foreach my $assemblyReportFile (keys %file_2_taxonID)
 }
 
 print "Annotated $contigCounter contigs\n";
-
-my $taxonomy_names_f_in = $taxonomyInDirectory . '/names.dmp';
-my $taxonomy_nodes_f_in = $taxonomyInDirectory . '/nodes.dmp';
-
-
 my $taxonomy_names_f_out = $taxonomyOutDirectory . '/names.dmp';
 my $taxonomy_nodes_f_out = $taxonomyOutDirectory . '/nodes.dmp';
 

@@ -93,12 +93,6 @@ void mapAgainstPrefix(const skch::Parameters& parameters, std::string prefix)
 
 int main(int argc, char** argv)
 {
-	meta::taxonomy T("/data/projects/phillippy/projects/mashsim/NCBI_taxonomy");
-
-	std::cout << "Read taxonomy!" << std::endl;
-
-	assert( 2 == 4);
-
 	{
 		/*
 		{

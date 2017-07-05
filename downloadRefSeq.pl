@@ -52,6 +52,7 @@ $ftp->login("anonymous",'-anonymous@') or die "Cannot login ", $ftp->message;
 $ftp->binary();
 
 # Download taxonomy
+use taxTree;
 my @expected_taxonomy_files = taxTree::getTaxonomyFileNames();
 chdir($taxonomyOutDirectory) or die "Cannot chdir into $taxonomyOutDirectory";
 foreach my $f (@expected_taxonomy_files)
@@ -127,7 +128,7 @@ foreach my $subDir (@target_subdirs)
 	  
 			my @genomic_fna_files = grep {$_ =~ /_genomic.fna.gz$/} grep {$_ !~ /(_cds_from_)|(_rna_from_g)/} @assembly_dir_contents;
 			my @assembly_report_files = grep {$_ =~ /_assembly_report.txt$/} @assembly_dir_contents;
-			die Dumper("Problem identifying files for download", \@genomic_fna_files, \@assembly_report_files) unless((scalar(@assembly_report_files) == 1) and (scalar(@genomic_fna_files) == 1));
+			die Dumper("Problem identifying files for download", \@genomic_fna_files, \@assembly_report_files, join('/', $ftp_root_genomes,  $DB, $subDir, $speciesDir_with_latest), $assembly_version) unless((scalar(@assembly_report_files) == 1) and (scalar(@genomic_fna_files) == 1));
 			
 			my $assemblyVersion_local = $speciesDir_local . '/'. $assembly_version;
 			mkdir($assemblyVersion_local);

@@ -15,6 +15,7 @@
 #include <fstream>
 #include <regex>
 #include <assert.h>
+#include <boost/regex.hpp>
 
 #include "util.h"
 
@@ -56,6 +57,8 @@ public:
 
 		std::string line;
 
+		boost::regex re_space("\\s");
+
 		std::map<std::string, oneTaxonName> names;
 		{
 			std::ifstream namesStream;
@@ -75,12 +78,11 @@ public:
 					continue;
 				}
 
-				std::regex re_space {"\\s"};
 
 				std::vector<std::string> line_components = split(line, "|");
 				for(auto& f : line_components)
 				{
-					f = std::regex_replace(f, re_space, "");
+					f = boost::regex_replace(f, re_space, "");
 				}
 				assert(line_components.at(0).length());
 				assert(line_components.at(1).length());
@@ -118,12 +120,10 @@ public:
 					continue;
 				}
 
-				std::regex re_space {"\\s"};
-
 				std::vector<std::string> line_components = split(line, "|");
 				for(auto& f : line_components)
 				{
-					f = std::regex_replace(f, re_space, "");
+					f = boost::regex_replace(f, re_space, "");
 				}
 				assert(line_components.at(0).length());
 
@@ -161,6 +161,8 @@ public:
 				}
 			}
 		}
+		
+		std::cout << "Read taxonomy from " << dir << " -- have " << T.size() << " nodes." << std::endl;
 	}
 };
 
