@@ -16,6 +16,9 @@
 #include "map/include/map_stats.hpp"
 #include "map/include/commonFunc.hpp"
 
+//More includes
+#include "meta/taxonomy.h"
+
 //External includes
 #include "common/argvparser.hpp"
 

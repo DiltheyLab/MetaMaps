@@ -1,0 +1,168 @@
+/*
+ * taxonomy.h
+ *
+ *  Created on: Jul 5, 2017
+ *      Author: diltheyat
+ */
+
+#ifndef META_TAXONOMY_H_
+#define META_TAXONOMY_H_
+
+#include <string>
+#include <set>
+#include <map>
+#include <iostream>
+#include <fstream>
+#include <regex>
+#include <assert.h>
+
+#include "util.h"
+
+namespace meta
+{
+
+class oneTaxonName {
+public:
+	std::string scientific_name;
+	std::string genbank_common_name;
+
+};
+class oneTaxonNode {
+public:
+	std::string id;
+	std::string parent_id;
+	std::string rank;
+	oneTaxonName name;
+	std::set<std::string> children;
+};
+
+class taxonomy {
+protected:
+
+public:
+	std::map<std::string, oneTaxonNode> T;
+
+	const oneTaxonNode& getNode(std::string nodeID)
+	{
+		assert(T.count(nodeID));
+		return T.at(nodeID);
+	}
+
+	taxonomy(std::string dir)
+	{
+		std::string fn_names = dir + "/names.dmp";
+		std::string fn_nodes = dir + "/nodes.dmp";
+		std::string fn_merged = dir + "/merged.dmp";
+
+		std::string line;
+
+		std::map<std::string, oneTaxonName> names;
+		{
+			std::ifstream namesStream;
+			namesStream.open(fn_names.c_str());
+			if(! namesStream.is_open())
+			{
+				std::cerr << "Cannot open file " << fn_names << " -- is '" << dir << "' a valid NCBI taxonomy?" << std::endl;
+				exit(1);
+			}
+
+			while(namesStream.good())
+			{
+				std::getline(namesStream, line);
+				eraseNL(line);
+				if(line.length() == 0)
+				{
+					continue;
+				}
+
+				std::regex re_space {"\\s"};
+
+				std::vector<std::string> line_components = split(line, "|");
+				for(auto& f : line_components)
+				{
+					f = std::regex_replace(f, re_space, "");
+				}
+				assert(line_components.at(0).length());
+				assert(line_components.at(1).length());
+
+				std::string id = line_components.at(0);
+				std::string name = line_components.at(1);
+				std::string type = line_components.at(3);
+
+				if(type == "scientificname")
+				{
+					names[id].scientific_name = name;
+				}
+				else if(type == "genbankcommonname")
+				{
+					names[id].genbank_common_name = name;
+				}
+			}
+		}
+
+		{
+			std::ifstream nodesStream;
+			nodesStream.open(fn_nodes.c_str());
+			if(! nodesStream.is_open())
+			{
+				std::cerr << "Cannot open file " << fn_nodes << " -- is '" << dir << "' a valid NCBI taxonomy?" << std::endl;
+				exit(1);
+			}
+
+			while(nodesStream.good())
+			{
+				std::getline(nodesStream, line);
+				eraseNL(line);
+				if(line.length() == 0)
+				{
+					continue;
+				}
+
+				std::regex re_space {"\\s"};
+
+				std::vector<std::string> line_components = split(line, "|");
+				for(auto& f : line_components)
+				{
+					f = std::regex_replace(f, re_space, "");
+				}
+				assert(line_components.at(0).length());
+
+				std::string id = line_components.at(0);
+				std::string parent = line_components.at(1);
+				std::string rank = line_components.at(2);
+				if(rank == "norank")
+					rank = "no rank";
+				assert(rank.length());
+
+				if(names.count(id) == 0)
+				{
+					std::cerr << "No name for taxon ID " << id << " in taxonomy directory " << dir << std::endl;
+					exit(1);
+				}
+
+				oneTaxonNode thisNode;
+				thisNode.name = names.at(id);
+				thisNode.id = id;
+				thisNode.parent_id = parent;
+				thisNode.rank = rank;
+
+				assert(T.count(id) == 0);
+				T[id] = thisNode;
+			}
+
+			for(const auto& n : T)
+			{
+				const oneTaxonNode& thisNode = n.second;
+				assert(thisNode.id == n.first);
+				if(thisNode.parent_id != "1")
+				{
+					assert(T.count(thisNode.parent_id));
+					T.at(thisNode.parent_id).children.insert(thisNode.id);
+				}
+			}
+		}
+	}
+};
+
+}
+#endif /* META_TAXONOMY_H_ */
