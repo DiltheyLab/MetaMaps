@@ -52,7 +52,7 @@ $ftp->login("anonymous",'-anonymous@') or die "Cannot login ", $ftp->message;
 $ftp->binary();
 
 # Download taxonomy
-my @expected_taxonomy_files = qw/delnodes.dmp merged.dmp names.dmp nodes.dmp/;
+my @expected_taxonomy_files = taxTree::getTaxonomyFileNames();
 chdir($taxonomyOutDirectory) or die "Cannot chdir into $taxonomyOutDirectory";
 foreach my $f (@expected_taxonomy_files)
 {
@@ -163,9 +163,9 @@ print "\nDownload for $DB complete. Have $DB_downloaded_assemblies assemblies.\n
 # Print success message
 
 my $suggested_command = 'NA';
-if(-e abs_path($FindBin::Bin . '/annotateRefSeqSequences.pl'))
+if(-e abs_path($FindBin::Bin . '/annotateRefSeqSequencesWithUniqueTaxonIDs.pl'))
 {
-	$suggested_command = 'perl ' . abs_path($FindBin::Bin . '/annotateRefSeqSequences.pl') . qq( --refSeqDirectory $seqencesOutDirectory --taxonomyInDirectory $taxonomyOutDirectory --taxonomyOutDirectory DIR);
+	$suggested_command = 'perl ' . abs_path($FindBin::Bin . '/annotateRefSeqSequencesWithUniqueTaxonIDs.pl') . qq( --refSeqDirectory $seqencesOutDirectory --taxonomyInDirectory $taxonomyOutDirectory --taxonomyOutDirectory DIR);
 }
 
 print qq(
