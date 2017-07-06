@@ -32,6 +32,7 @@ namespace skch
   void initCmdParser(CommandLineProcessing::ArgvParser &cmd)
   {
     cmd.setIntroductoryDescription("Approximate read mapper based on Jaccard similarity");
+    cmd.setIntroductoryDescription("");
 
     cmd.setHelpOption("h", "help", "Print this help page");
 

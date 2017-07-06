@@ -107,6 +107,10 @@ sub wanted {
 		
 		$refSeq_categories{$refSeq_category}++;
 		$assemblyLevels{$assembly_level}++;
+		if(not $refSeq_category)
+		{
+			warn "No assembly level info in $file";
+		}
 		$category_level_combined{join('_', $refSeq_category, $assembly_level)}++;
 
 		$included_genome++;
@@ -193,12 +197,12 @@ foreach my $taxonID (keys %taxonID_2_files)
 	do {
 		$need_taxonID{$current_id} = 1;
 		die unless(defined $taxonomy_href->{$current_id});	
-		$current_id = $taxonomy_href->{$current_id}[0];
+		$current_id = $taxonomy_href->{$current_id}{parent};
 	} while($current_id != 1);	
 
 	if(scalar(@{$taxonID_2_files{$taxonID}}) > 1)
 	{
-		my $thisNode_rank = $taxonomy_href->{$taxonomy_href, $taxonID}{rank};
+		my $thisNode_rank = $taxonomy_href->{$taxonID}{rank};
 		die unless(defined $thisNode_rank);
 		unless(($thisNode_rank eq 'species') or ($thisNode_rank eq 'no rank') or ($thisNode_rank eq 'subspecies'))
 		{
@@ -290,6 +294,34 @@ sub remove_existing_fnaFile_for_assemblyReportFile
 		unlink($fna_file) or die "Cannot unlink $fna_file";
 	}			
 }
+
+sub get_fresh_fnaFile_for_assemblyReportFile
+{
+	my $assemblyReport = shift;
+	die "Weird apparent assembly report file $assemblyReport" unless($assemblyReport =~ /_assembly_report\.txt$/);
+	
+	my $gzFile = $assemblyReport;
+	$gzFile =~ s/_assembly_report\.txt/_genomic.fna.gz/;
+	die "Expected file $gzFile  not existing" unless(-e $gzFile);
+	
+	my $fna_file = $gzFile;
+	$fna_file =~ s/\.gz$//;
+	if(-e $fna_file)
+	{
+		unlink($fna_file) or die "Cannot unlink $fna_file";
+	}
+	my $cmd = qq(gunzip -c $gzFile > $fna_file);
+	if(system($cmd))
+	{
+		unlink($fna_file);
+		die "Command $cmd failed";
+	}
+
+	die unless(-e $fna_file);
+	
+	return $fna_file;			
+}
+
 
 
 sub print_help

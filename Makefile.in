@@ -1,4 +1,4 @@
-CXXFLAGS += -ggdb -std=c++11 -Isrc -L @boostlib@ -I @mathinc@ 
+CXXFLAGS += -O2 -ggdb -std=c++11 -Isrc -L @boostlib@ -I @mathinc@ 
 CPPFLAGS += @amcppflags@
 
 UNAME_S=$(shell uname -s)

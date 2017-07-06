@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <unordered_map>
 #include <map>
+#include <cmath>
 #include <cassert>
 #include <zlib.h>  
 
@@ -170,6 +171,7 @@ namespace skch
     	  std::cout << "\t" << "- p_value: " << param.p_value << "\n";
     	  std::cout << "\t" << "- percentageIdentity: " << param.percentageIdentity << "\n";
     	  std::cout << "\t" << "- windowSize: " << param.windowSize << "\n";
+    	  std::cout << "\t" << "- maximumMemory: ~" << maximumMemory/std::pow(1024,3) << " GB\n";
     	  std::cout << "\n" << std::flush;
 
           std::string fn_serialize_arguments = prefix + ".arguments";
@@ -193,7 +195,7 @@ namespace skch
 		  auto storeCurrentState = [&](int N)
 		  {
 			  assert(metadata.size() == currentIndex_counter_sawSequences);
-			  std::cerr << "Call storeCurrentState with " << currentIndex_counter_sawSequences << "\n" << std::flush;
+			  std::cerr << "\nCall storeCurrentState with " << currentIndex_counter_sawSequences << "\n\n" << std::flush;
 
 			  this->computeFreqHist();
 
@@ -223,7 +225,7 @@ namespace skch
             while ((len = kseq_read(seq)) >= 0)
             {
 
-              std::cerr << "Adding " << seq->name.s << " with length " << len << std::endl;
+              // std::cerr << "Adding " << seq->name.s << " with length " << len << std::endl;
 
               //Is the sequence too short?
               if(len < param.windowSize || len < param.kmerSize)
@@ -243,7 +245,7 @@ namespace skch
                 size_t thisContig_wouldAdd_minimizers = thisContig_minimizerIndex.size();
 
                 std::set<MinimizerMapKeyType> uniqueNovelHashes;
-                for(auto &e : thisContig_minimizerIndex)
+                for(const auto &e : thisContig_minimizerIndex)
                 {
                 	if((uniqueNovelHashes.count(e.hash) == 0) && (minimizerPosLookupIndex.count(e.hash) == 0))
                 	{
@@ -256,12 +258,16 @@ namespace skch
                 size_t ifAdd_total_minimizers = runningMinimizers + thisContig_wouldAdd_minimizers;
 
                 size_t memory_after_add = getMemoryOf(ifAdd_total_hashes, ifAdd_total_minimizers);
-
+				
+				/*
                 std::cerr << "thisContig_wouldAdd_hashes" << ": " << thisContig_wouldAdd_hashes << "\n";
-                std::cerr << "thisContig_wouldAdd_hashes" << ": " << thisContig_wouldAdd_minimizers << "\n";
+                std::cerr << "thisContig_wouldAdd_minimizers" << ": " << thisContig_wouldAdd_minimizers << "\n";
                 std::cerr << "ifAdd_total_hashes" << ": " << ifAdd_total_hashes << "\n";
                 std::cerr << "ifAdd_total_minimizers" << ": " << ifAdd_total_minimizers << "\n";
-
+                std::cerr << "memory_after_add" << ": " << memory_after_add << "\n";
+                std::cerr << "maximumMemory" << ": " << maximumMemory << "\n\n";
+				*/
+				
                 if(memory_after_add > maximumMemory)
                 {
                 	storeCurrentState(runningIndexNumber);
@@ -295,7 +301,7 @@ namespace skch
 
                 }
 
-				for(auto &e : thisContig_minimizerIndex)
+				for(const auto &e : thisContig_minimizerIndex)
 				{
 				  // [hash value -> info about minimizer]
 				  minimizerPosLookupIndex[e.hash].push_back(
@@ -310,6 +316,8 @@ namespace skch
 				runningMinimizers = ifAdd_total_minimizers;
 				currentIndex_counter_sawSequences++;
 				seqCounter++;
+				
+				std::cerr << "Added " << seq->name.s << " with length " << len << "; est. memory ~" << (memory_after_add/pow(1024,3)) << " GB" << std::endl;
 
               }
 

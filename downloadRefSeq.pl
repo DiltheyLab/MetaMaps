@@ -78,6 +78,8 @@ print "\nTaxonomy downloaded and extracted into $taxonomyOutDirectory\n\n";
 chdir($cwd) or die "Cannot chdir into $cwd";
 
 my @target_subdirs = qw/archaea bacteria fungi protozoa viral invertebrate plant unknown vertebrate_other vertebrate_mammalian/;
+#my @target_subdirs = qw/bacteria fungi protozoa viral invertebrate plant unknown vertebrate_other vertebrate_mammalian/;
+
 my $ftp_root_genomes = '/genomes'; die unless(substr($ftp_root_genomes, 0, 1) eq '/');
 
 my $DB_downloaded_assemblies = 0;

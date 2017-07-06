@@ -6,12 +6,14 @@
 
 #include <iostream>
 #include <ctime>
+#include <cmath>
 #include <chrono>
 #include <functional>
 #include <fstream>
 #include <exception>
 #include <stdexcept>
 #include <assert.h>
+#include <cstring>
 
 //Own includes
 #include "map/include/map_parameters.hpp"
@@ -23,6 +25,8 @@
 //External includes
 #include "common/argvparser.hpp"
 #include <boost/filesystem.hpp>
+
+void highLevelUsage();
 
 void mapAgainstPrefix(const skch::Parameters& parameters, std::string prefix)
 {
@@ -93,6 +97,7 @@ void mapAgainstPrefix(const skch::Parameters& parameters, std::string prefix)
 
 int main(int argc, char** argv)
 {
+	if(1 == 0)
 	{
 		/*
 		{
@@ -141,7 +146,7 @@ int main(int argc, char** argv)
 
 		std::cout << "Referenze size / window size: " << parameters.referenceSize << " / " << parameters.windowSize << "\n" << std::flush;
 
-		skch::Sketch referSketch(parameters, "index", 500 * 1024);
+		skch::Sketch referSketch(parameters, "index", 2*std::pow(1024,3));
 
 		mapAgainstPrefix(parameters, "index");
 
@@ -191,34 +196,72 @@ int main(int argc, char** argv)
 
 		std::cout << "\n\nDone.\n\n" << std::flush;
 	}
-	assert( 2 == 4);
 
-  CommandLineProcessing::ArgvParser cmd;
+	if((argc < 2) || (!((std::strcmp(argv[1], "index") == 0) || (std::strcmp(argv[1], "map") == 0) || (std::strcmp(argv[1], "classify") == 0))))
+	{
+		highLevelUsage();
+		exit(1);
+	}
+	
+	std::string firstArgument(argv[1]);	
+	for(int i = 1; i < (argc-1); i++)
+	{
+		argv[i] = argv[i+1];
+	}
+	argc--;
+		
+	if(firstArgument == "index")
+	{
+		// std::cout << "Now in correct code path" << std::endl;
 
-  //Setup command line options
-  skch::initCmdParser(cmd);
+		//argv[1] = empty;
+		CommandLineProcessing::ArgvParser cmd;
 
-  //Parse command line arguements   
-  skch::Parameters parameters;        //sketching and mapping parameters
+		//Setup command line options
+		skch::initCmdParser(cmd);
 
-  skch::parseandSave(argc, argv, cmd, parameters);   
+		//Parse command line arguements   
+		skch::Parameters parameters;        //sketching and mapping parameters
 
-  auto t0 = skch::Time::now();
+		skch::parseandSave(argc, argv, cmd, parameters);   
 
-  //Build the sketch for reference
-  skch::Sketch referSketch(parameters);
+		assert(parameters.alphabetSize == 4);
+		parameters.reportAll = true;		
+		
+		auto t0 = skch::Time::now();
 
-  std::chrono::duration<double> timeRefSketch = skch::Time::now() - t0;
-  std::cout << "INFO, skch::main, Time spent sketching the reference : " << timeRefSketch.count() << " sec" << std::endl;
+		//Build the sketch for reference
+		//skch::Sketch referSketch(parameters);
+		skch::Sketch referSketch(parameters, "index", 2*std::pow(1024,3));
 
-  //Map the sequences in query file
-  t0 = skch::Time::now();
+		std::chrono::duration<double> timeRefSketch = skch::Time::now() - t0;
+		std::cout << "INFO, skch::main, Time spent sketching the reference : " << timeRefSketch.count() << " sec" << std::endl;
 
-  skch::Map mapper = skch::Map(parameters, referSketch);
+		//Map the sequences in query file
+		t0 = skch::Time::now();
+		// skch::Sketch referSketch(parameters, "index", 500 * 1024);
 
-  std::chrono::duration<double> timeMapQuery = skch::Time::now() - t0;
-  std::cout << "INFO, skch::main, Time spent mapping the query : " << timeMapQuery.count() << " sec" << std::endl;
+		// skch::Map mapper = skch::Map(parameters, referSketch);
 
-  std::cout << "INFO, skch::main, mapping results saved in : " << parameters.outFileName << std::endl;
+		std::chrono::duration<double> timeMapQuery = skch::Time::now() - t0;
+		std::cout << "INFO, skch::main, Time spent mapping the query : " << timeMapQuery.count() << " sec" << std::endl;
 
+		std::cout << "INFO, skch::main, mapping results saved in : " << parameters.outFileName << std::endl;
+	}
+}
+
+void highLevelUsage()
+{
+	std::cout << "\n\
+MetaMap v 0.1 \n\
+\n\
+  Metagenomic classification and mapping.\n\
+\n\
+Usage:\n\
+\n\
+  ./metamap index|map|classify\n\
+\n\
+Parameters:\n\
+\n\
+   ./metamap COMMAND -h for help\n\n";
 }
