@@ -104,7 +104,7 @@ void mapAgainstPrefix(const skch::Parameters& parameters, std::string prefix)
 */
 int main(int argc, char** argv)
 {
-	if(1 == 1)
+	if(1 == 0)
 	{
 		{
 			// build an index
@@ -248,7 +248,7 @@ int main(int argc, char** argv)
 	//	std::cout << "\n\nDone.\n\n" << std::flush;
 	}
 
-	if((argc < 2) || (!((std::strcmp(argv[1], "index") == 0) || (std::strcmp(argv[1], "map") == 0) || (std::strcmp(argv[1], "classify") == 0))))
+	if((argc < 2) || (!((std::strcmp(argv[1], "index") == 0) || (std::strcmp(argv[1], "mapDirectly") == 0) || (std::strcmp(argv[1], "mapAgainstIndex") == 0) || (std::strcmp(argv[1], "classify") == 0))))
 	{
 		highLevelUsage();
 		exit(1);
@@ -261,51 +261,29 @@ int main(int argc, char** argv)
 	}
 	argc--;
 		
+	CommandLineProcessing::ArgvParser cmd;
+	skch::Parameters parameters;        //sketching and mapping parameters
+	skch::initCmdParser(cmd, firstArgument);
+	skch::parseandSave(argc, argv, cmd, parameters, firstArgument);
+
+	mapWrap mW;
+
 	if(firstArgument == "index")
 	{
-		// std::cout << "Now in correct code path" << std::endl;
-
-		//argv[1] = empty;
-		CommandLineProcessing::ArgvParser cmd;
-
-		//Setup command line options
-		skch::initCmdParser(cmd);
-
-		//Parse command line arguements   
-		skch::Parameters parameters;        //sketching and mapping parameters
-
-		skch::parseandSave(argc, argv, cmd, parameters);   
-
-		/*
-		assert(parameters.alphabetSize == 4);
-		parameters.reportAll = true;		
-		
-		auto t0 = skch::Time::now();
-
-		//Build the sketch for reference
-		//skch::Sketch referSketch(parameters);
-		skch::Sketch referSketch(parameters, "index", 2*std::pow(1024,3));
-
-		std::chrono::duration<double> timeRefSketch = skch::Time::now() - t0;
-		std::cout << "INFO, skch::main, Time spent sketching the reference : " << timeRefSketch.count() << " sec" << std::endl;
-
-		//Map the sequences in query file
-		t0 = skch::Time::now();
-		// skch::Sketch referSketch(parameters, "index", 500 * 1024);
-
-		// skch::Map mapper = skch::Map(parameters, referSketch);
-
-		std::chrono::duration<double> timeMapQuery = skch::Time::now() - t0;
-		std::cout << "INFO, skch::main, Time spent mapping the query : " << timeMapQuery.count() << " sec" << std::endl;
-
-		std::cout << "INFO, skch::main, mapping results saved in : " << parameters.outFileName << std::endl;
-		*/
-
-		mapWrap mW;
-		mW.createIndex(parameters, "index", 1e6);
-
-
+		assert(parameters.index.length());
+		mW.createIndex(parameters, parameters.index, parameters.maximumMemory);
 	}
+	else if(firstArgument == "mapDirectly")
+	{
+		mW.mapDirectly(parameters, parameters.maximumMemory);
+	}
+	else if(firstArgument == "mapAgainstIndex")
+	{
+		assert(parameters.index.length());
+		mW.mapAgainstIndex(parameters, parameters.index);
+	}
+
+	return 0;
 }
 
 void highLevelUsage()

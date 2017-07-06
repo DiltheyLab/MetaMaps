@@ -48,6 +48,8 @@ namespace skch
 			ar & querySequences;
 			ar & outFileName;
 			ar & reportAll;
+			ar & index;
+			ar & maximumMemory;
 		}
 
   public:
@@ -65,6 +67,8 @@ namespace skch
     //const static int L2slideJump = 5;                 //parameter to jump read during L2 evaluation, 
                                                       //  1 is the most accurate
 
+    std::string index;
+    size_t maximumMemory;
   };
 }
 

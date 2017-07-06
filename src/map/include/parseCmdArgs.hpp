@@ -29,50 +29,64 @@ namespace skch
    * @brief           Initialize the command line argument parser 
    * @param[out] cmd  command line parser object
    */
-  void initCmdParser(CommandLineProcessing::ArgvParser &cmd)
+  void initCmdParser(CommandLineProcessing::ArgvParser &cmd, std::string mode)
   {
     cmd.setIntroductoryDescription("Approximate read mapper based on Jaccard similarity");
     cmd.setIntroductoryDescription("");
 
     cmd.setHelpOption("h", "help", "Print this help page");
 
-    cmd.defineOption("subject", "an input reference file (fasta/fastq)[.gz]", ArgvParser::OptionRequiresValue);
-    cmd.defineOptionAlternative("subject","s");
+    if(mode == "mapAgainstIndex")
+    {
+        cmd.defineOption("index", "output prefix for ", ArgvParser::OptionRequired | ArgvParser::OptionRequiresValue);
+        cmd.defineOptionAlternative("index","i");
 
-    cmd.defineOption("subjectList", "a file containing list of reference files, one per line", ArgvParser::OptionRequiresValue);
-    cmd.defineOptionAlternative("subjectList","sl");
+        cmd.defineOption("query", "an input query file (fasta/fastq)[.gz]", ArgvParser::OptionRequiresValue);
+        cmd.defineOptionAlternative("query","q");
 
-    cmd.defineOption("query", "an input query file (fasta/fastq)[.gz]", ArgvParser::OptionRequiresValue);
-    cmd.defineOptionAlternative("query","q");
+        cmd.defineOption("all", "report all the mapping locations for a read, default is to consider few best ones");
+    }
+    else if(mode == "mapDirectly" || mode == "index")
+    {
+        cmd.defineOption("reference", "an input reference file (fasta/fastq)[.gz]", ArgvParser::OptionRequiresValue | ArgvParser::OptionRequiresValue);
+        cmd.defineOptionAlternative("reference", "r");
 
-    cmd.defineOption("queryList", "a file containing list of query files, one per line", ArgvParser::OptionRequiresValue);
-    cmd.defineOptionAlternative("queryList","ql");
+        cmd.defineOption("kmer", "kmer size <= 16 [default 16 (DNA)]", ArgvParser::OptionRequiresValue);
+        cmd.defineOptionAlternative("kmer","k");
 
-    cmd.defineOption("kmer", "kmer size <= 16 [default 16 (DNA), 5 (AA)]", ArgvParser::OptionRequiresValue);
-    cmd.defineOptionAlternative("kmer","k");
+        cmd.defineOption("pval", "p-value cutoff, used to determine window/sketch sizes [default e-03]", ArgvParser::OptionRequiresValue);
+        cmd.defineOptionAlternative("pval","p");
 
-    cmd.defineOption("pval", "p-value cutoff, used to determine window/sketch sizes [default e-03]", ArgvParser::OptionRequiresValue);
-    cmd.defineOptionAlternative("pval","p");
+        cmd.defineOption("maxmemory", "maximum memory, in GB [default e-03]", ArgvParser::OptionRequiresValue);
+        cmd.defineOptionAlternative("maxmemory","mm");
 
-    cmd.defineOption("window", "window size [default : computed using pvalue cutoff]\n\
-P-value is not considered if a window value is provided. Lower window size implies denser sketch", 
-        ArgvParser::OptionRequiresValue);
-    cmd.defineOptionAlternative("window","w");
+        cmd.defineOption("window", "window size [default : computed using pvalue cutoff]\n\
+    P-value is not considered if a window value is provided. Lower window size implies denser sketch",
+            ArgvParser::OptionRequiresValue);
+        cmd.defineOptionAlternative("window","w");
 
-    cmd.defineOption("minReadLen", "minimum read length to map [default : 5000]", ArgvParser::OptionRequiresValue);
-    cmd.defineOptionAlternative("minReadLen","m");
+        cmd.defineOption("minReadLen", "minimum read length to map [default : 2000]", ArgvParser::OptionRequiresValue);
+        cmd.defineOptionAlternative("minReadLen","m");
 
-    cmd.defineOption("perc_identity", "threshold for identity [default : 85]", ArgvParser::OptionRequiresValue);
-    cmd.defineOptionAlternative("perc_identity","pi");
+        cmd.defineOption("perc_identity", "threshold for identity [default : 80]", ArgvParser::OptionRequiresValue);
+        cmd.defineOptionAlternative("perc_identity","pi");
 
-    cmd.defineOption("protein", "set alphabet type to proteins, default is nucleotides");
-    cmd.defineOptionAlternative("protein","a");
+        if(mode == "index")
+        {
+            cmd.defineOption("index", "output prefix for ", ArgvParser::OptionRequired | ArgvParser::OptionRequiresValue);
+            cmd.defineOptionAlternative("index","i");
+        }
+        if(mode == "mapDirectly")
+        {
+            cmd.defineOption("query", "an input query file (fasta/fastq)[.gz]", ArgvParser::OptionRequiresValue);
+            cmd.defineOptionAlternative("query","q");
 
-    cmd.defineOption("all", "report all the mapping locations for a read, default is to consider few best ones");
+            cmd.defineOption("all", "report all the mapping locations for a read, default is to consider few best ones");
 
-    cmd.defineOption("output", "output file name", ArgvParser::OptionRequired | ArgvParser::OptionRequiresValue);
-    cmd.defineOptionAlternative("output","o");
+        }
+    }
   }
+
 
   /**
    * @brief                   Parse the file which has list of reference or query files
@@ -154,168 +168,182 @@ P-value is not considered if a window value is provided. Lower window size impli
    * @param[in]   cmd
    * @param[out]  parameters  sketch parameters are saved here
    */
-  void parseandSave(int argc, char** argv, 
-      CommandLineProcessing::ArgvParser &cmd, 
-      skch::Parameters &parameters)
-  {
-    int result = cmd.parse(argc, argv);
+void parseandSave(int argc, char** argv,  CommandLineProcessing::ArgvParser &cmd, skch::Parameters &parameters, std::string mode)
+{
+	int result = cmd.parse(argc, argv);
 
-    //Make sure we get the right command line args
-    if (result != ArgvParser::NoParserError)
-    {
-      std::cout << cmd.parseErrorDescription(result) << "\n";
-      exit(1);
-    }
-    else if (!cmd.foundOption("subject") && !cmd.foundOption("subjectList"))
-    {
-      std::cout << "Provide reference file (s)\n";
-      exit(1);
-    }
-    else if (!cmd.foundOption("query") && !cmd.foundOption("queryList"))
-    {
-      std::cout << "Provide reference file (s)\n";
-      exit(1);
-    }
+	//Make sure we get the right command line args
+	if (result != ArgvParser::NoParserError)
+	{
+		std::cout << cmd.parseErrorDescription(result) << "\n";
+		exit(1);
+	}
 
-    std::stringstream str;
+	if(mode == "mapAgainstIndex")
+	{
+		if(!cmd.foundOption("index"))
+		{
+			std::cerr << "Please provide index" << std::endl;
+			exit(1);
+		}
+		else
+		{
+			std::stringstream str;
+			std::string index;
+			str << cmd.optionValue("index");
+			str >> index;
+			parameters.index = index;
+		}
+	}
 
-    //Parse reference files
-    if(cmd.foundOption("subject"))
-    {
-      std::string ref;
+	if((mode == "mapDirectly") || (mode == "index"))
+	{
+		if (!cmd.foundOption("reference"))
+		{
+			std::cerr << "Provide reference file (s)\n";
+			exit(1);
+		}
+		else
+		{
+			std::stringstream str;
+			std::string ref;
+			str << cmd.optionValue("reference");
+			str >> ref;
+			parameters.refSequences.push_back(ref);
+		}
 
-      str << cmd.optionValue("subject");
-      str >> ref;
+		parameters.referenceSize = skch::CommonFunc::getReferenceSize(parameters.refSequences);
+		parameters.alphabetSize = 4;
 
-      parameters.refSequences.push_back(ref);
-    }
-    else //list of files
-    {
-      std::string listFile;
+		if(cmd.foundOption("maxmemory"))
+		{
+			std::stringstream str;
+			str << cmd.optionValue("maxmemory");
+			size_t mm;
+			str >> mm;
+			parameters.maximumMemory = pow(1024,3) * mm;
+		}
+		else
+		{
+			parameters.maximumMemory = 0;
+		}
 
-      str << cmd.optionValue("subjectList");
-      str >> listFile;
+		if(cmd.foundOption("kmer"))
+		{
+			std::stringstream str;
+			str << cmd.optionValue("kmer");
+			str >> parameters.kmerSize;
+		}
+		else
+		{
+			if(parameters.alphabetSize == 4)
+				parameters.kmerSize = 16;
+			else
+				parameters.kmerSize = 5;
+		}
 
-      parseFileList(listFile, parameters.refSequences);
-    }
+		if(cmd.foundOption("pval"))
+		{
+			std::stringstream str;
+			str << cmd.optionValue("pval");
+			str >> parameters.p_value;
+		}
+		else
+		{
+			parameters.p_value = 1e-03;
+		}
 
-    //Size of reference
-    parameters.referenceSize = skch::CommonFunc::getReferenceSize(parameters.refSequences); 
-    str.clear();
+		if(cmd.foundOption("minReadLen"))
+		{
+			std::stringstream str;
+			str << cmd.optionValue("minReadLen");
+			str >> parameters.minReadLength;
+		}
+		else
+		{
+			parameters.minReadLength = 2000;
+		}
 
-    //Parse query files
-    if(cmd.foundOption("query"))
-    {
-      std::string query;
-
-      str << cmd.optionValue("query");
-      str >> query;
-
-      parameters.querySequences.push_back(query);
-    }
-    else //list of files
-    {
-      std::string listFile;
-
-      str << cmd.optionValue("queryList");
-      str >> listFile;
-
-      parseFileList(listFile, parameters.querySequences);
-    }
-
-    str.clear();
-
-    if(cmd.foundOption("protein"))
-    {
-      parameters.alphabetSize = 20;
-    }
-    else
-      parameters.alphabetSize = 4;
-
-    if(cmd.foundOption("all"))
-    {
-      parameters.reportAll = true;
-    }
-    else
-      parameters.reportAll = false;
+		if(cmd.foundOption("perc_identity"))
+		{
+			std::stringstream str;
+			str << cmd.optionValue("perc_identity");
+			str >> parameters.percentageIdentity;
+		}
+		else
+		{
+			parameters.percentageIdentity = 80;
+		}
 
 
-    //Parse algorithm parameters
-    if(cmd.foundOption("kmer"))
-    {
-      str << cmd.optionValue("kmer");
-      str >> parameters.kmerSize;
-      str.clear();
-    }
-    else
-    {
-      if(parameters.alphabetSize == 4)
-        parameters.kmerSize = 16;
-      else
-        parameters.kmerSize = 5;
-    }
+		if(cmd.foundOption("window"))
+		{
+			std::stringstream str;
+			str << cmd.optionValue("window");
+			str >> parameters.windowSize;
 
-    if(cmd.foundOption("pval"))
-    {
-      str << cmd.optionValue("pval");
-      str >> parameters.p_value;
-      str.clear();
-    }
-    else
-      parameters.p_value = 1e-03;
+			//Re-estimate p value
+			int s = parameters.minReadLength * 2 / parameters.windowSize;
+			parameters.p_value = skch::Stat::estimate_pvalue (s, parameters.kmerSize, parameters.alphabetSize,
+			parameters.percentageIdentity,
+			parameters.minReadLength, parameters.referenceSize);
+		}
+		else
+		{
+			//Compute optimal window size
+			parameters.windowSize = skch::Stat::recommendedWindowSize(parameters.p_value,
+			parameters.kmerSize, parameters.alphabetSize,
+			parameters.percentageIdentity,
+			parameters.minReadLength, parameters.referenceSize);
+		}
+	}
 
-    if(cmd.foundOption("minReadLen"))
-    {
-      str << cmd.optionValue("minReadLen");
-      str >> parameters.minReadLength;
-      str.clear();
-    }
-    else
-      parameters.minReadLength = 5000;
+	if((mode == "mapDirectly") || (mode == "mapAgainstIndex"))
+	{
+		if(!cmd.foundOption("query"))
+		{
+			std::cerr << "Provide query file (s)\n";
+			exit(1);
+		}
+		else
+		{
+			std::stringstream str;
+			std::string query;
+			str << cmd.optionValue("query");
+			str >> query;
+			parameters.querySequences.push_back(query);
+		}
 
-    if(cmd.foundOption("perc_identity"))
-    {
-      str << cmd.optionValue("perc_identity");
-      str >> parameters.percentageIdentity;
-      str.clear();
-    }
-    else
-      parameters.percentageIdentity = 85;
 
-    /*
-     * Compute window size for sketching
-     */
+		if(cmd.foundOption("all"))
+		{
+			parameters.reportAll = true;
+		}
+		else
+		{
+			parameters.reportAll = false;
+		}
 
-    if(cmd.foundOption("window"))
-    {
-      str << cmd.optionValue("window");
-      str >> parameters.windowSize;
-      str.clear();
+		if(!cmd.foundOption("output"))
+		{
+			std::cerr << "Provide output file\n";
+			exit(1);
+		}
+		else
+		{
+			std::stringstream str;
+			std::string output;
+			str << cmd.optionValue("output");
+			str >> output;
+			parameters.outFileName = output;
+		}
+	}
 
-      //Re-estimate p value
-      int s = parameters.minReadLength * 2 / parameters.windowSize; 
-      parameters.p_value = skch::Stat::estimate_pvalue (s, parameters.kmerSize, parameters.alphabetSize, 
-          parameters.percentageIdentity, 
-          parameters.minReadLength, parameters.referenceSize);
-    }
-    else
-    {
-      //Compute optimal window size
-      parameters.windowSize = skch::Stat::recommendedWindowSize(parameters.p_value,
-          parameters.kmerSize, parameters.alphabetSize,
-          parameters.percentageIdentity,
-          parameters.minReadLength, parameters.referenceSize);
-    }
+	printCmdOptions(parameters);
 
-    str << cmd.optionValue("output");
-    str >> parameters.outFileName;
-    str.clear();
-
-    printCmdOptions(parameters);
-
-    //Check if files are valid
-    validateInputFiles(parameters.querySequences, parameters.refSequences);
-  }
+	//Check if files are valid
+	validateInputFiles(parameters.querySequences, parameters.refSequences);
+}
 }
 
 
