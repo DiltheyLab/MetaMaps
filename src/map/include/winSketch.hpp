@@ -14,6 +14,7 @@
 #include <cmath>
 #include <cassert>
 #include <zlib.h>  
+#include <fstream>
 
 //Own includes
 #include "map/include/base_types.hpp"
@@ -37,6 +38,7 @@ class access;
 }
 }
 
+
 KSEQ_INIT(gzFile, gzread)
 
 namespace skch
@@ -53,6 +55,16 @@ namespace skch
    *
    *            2.  Index hashes into appropriate format to enable fast search at L1 mapping stage
    */
+
+	/*
+	class Sketch;
+
+	class Map {
+		Map(const skch::Parameters &p, const skch::Sketch &refsketch, PostProcessResultsFn_t f = nullptr);
+	};
+
+	*/
+
     class Sketch
     {
 	private:
@@ -133,16 +145,19 @@ namespace skch
 
       }
 
+      /*
       Sketch(skch::Parameters &p)
       {
            this->build(p);
            this->index();
            this->computeFreqHist();
       }
+	  */
 
-      Sketch(skch::Parameters &p, std::string outputPrefix, size_t maximumMemory)
+      Sketch(skch::Parameters &p, size_t maximumMemory, std::function<void(Sketch*, size_t)>* oneIndexAction = nullptr)
       {
-          this->build_and_store_index(p, outputPrefix, maximumMemory);
+    	  assert(p.outFileName.length() == 0);
+          this->build_and_store_index(p, maximumMemory, oneIndexAction);
       }
 
       private:
@@ -162,7 +177,7 @@ namespace skch
     	  return memory_hash_table + memory_vector;
       }
 
-      void build_and_store_index(skch::Parameters &param, std::string prefix, size_t maximumMemory)
+      std::vector<std::string> build_and_store_index(skch::Parameters &param, size_t maximumMemory, std::function<void(Sketch*, size_t)>* oneIndexAction)
       {
     	  std::cout << "Parameters used:\n";
     	  std::cout << "\t" << "- alphabetSize: " << param.alphabetSize << "\n";
@@ -174,15 +189,14 @@ namespace skch
     	  std::cout << "\t" << "- maximumMemory: ~" << maximumMemory/std::pow(1024,3) << " GB\n";
     	  std::cout << "\n" << std::flush;
 
-          std::string fn_serialize_arguments = prefix + ".arguments";
-          std::ofstream arguments_serialization_ostream(fn_serialize_arguments.c_str());
-          if(! arguments_serialization_ostream.is_open())
-          {
-        	  throw std::runtime_error("Cannot open file " + fn_serialize_arguments + " for serialization.");
-          }
-          boost::archive::text_oarchive arguments_archive(arguments_serialization_ostream);
-          arguments_archive & param;
-          arguments_serialization_ostream.close();
+    	  bool mappingMode = (oneIndexAction != nullptr);
+
+    	  if(! mappingMode)
+    	  {
+
+    	  }
+
+
 
           seqno_t seqCounter = 0;
           MI_Type thisContig_minimizerIndex;
@@ -192,24 +206,46 @@ namespace skch
 
     	  size_t currentIndex_counter_sawSequences = 0;
 
-		  auto storeCurrentState = [&](int N)
+    	  std::string outputFn = param.outFileName;
+
+    	  std::vector<std::string> generatedFiles;
+
+		  auto processCurrentState = [&](int N)
 		  {
 			  assert(metadata.size() == currentIndex_counter_sawSequences);
 			  std::cerr << "\nCall storeCurrentState with " << currentIndex_counter_sawSequences << "\n\n" << std::flush;
 
 			  this->computeFreqHist();
 
-			  std::string outputFn = prefix + "." + std::to_string(N);
-			  std::ofstream ostream(outputFn.c_str());
-			  if(! ostream.is_open())
-			  {
-				  throw std::runtime_error("Cannot open file " + outputFn + " for serialization.");
-			  }
-			  boost::archive::text_oarchive archive(ostream);
-			  archive & (*this);
-			  arguments_serialization_ostream.close();
-			  std::cout << "Stored state in file " << outputFn << "\n" << std::flush;
+			  (*oneIndexAction)(this, N);
 
+			  /*
+			  if(mappingMode)
+			  {
+				  (*oneIndexAction)(this, N);
+				  //std::cout << "Mapping for fragment " << N << std::endl;
+				  //std::string thisN_outputFn = outputFn + "." + std::to_string(N);
+				  //skch::Parameters param_thisN = param;
+				  //param_thisN.outFileName = thisN_outputFn;
+				  // skch::Map* mapper = new skch::Map(param_thisN, *(this));
+				  //generatedFiles.push_back(thisN_outputFn);
+			  }
+			  else
+			  {
+				  std::string outputFn = prefix + "." + std::to_string(N);
+				  std::ofstream ostream(outputFn.c_str());
+				  if(! ostream.is_open())
+				  {
+					  throw std::runtime_error("Cannot open file " + outputFn + " for serialization.");
+				  }
+				  boost::archive::text_oarchive archive(ostream);
+				  archive & (*this);
+				  ostream.close();
+				  std::cout << "Stored state in file " << outputFn << "\n" << std::flush;
+				  generatedFiles.push_back(outputFn);
+			  }
+
+			  */
 		  };
 
           for(const auto &fileName : param.refSequences)
@@ -268,9 +304,9 @@ namespace skch
                 std::cerr << "maximumMemory" << ": " << maximumMemory << "\n\n";
 				*/
 				
-                if(memory_after_add > maximumMemory)
+                if((maximumMemory > 0) && (memory_after_add > maximumMemory))
                 {
-                	storeCurrentState(runningIndexNumber);
+                	processCurrentState(runningIndexNumber);
 
                 	minimizerIndex.clear();
                 	minimizerPosLookupIndex.clear();
@@ -318,9 +354,7 @@ namespace skch
 				seqCounter++;
 				
 				std::cerr << "Added " << seq->name.s << " with length " << len << "; est. memory ~" << (memory_after_add/pow(1024,3)) << " GB" << std::endl;
-
               }
-
             }
 
             sequencesByFileInfo.push_back(seqCounter);
@@ -331,7 +365,7 @@ namespace skch
 
           }
 
-          storeCurrentState(runningIndexNumber);
+          processCurrentState(runningIndexNumber);
 
 
           std::cout << "INFO, skch::Sketch::build, minimizers picked from reference = " << minimizerIndex.size() << std::endl;
@@ -344,6 +378,8 @@ namespace skch
        * @details   compute and save minimizers from the reference sequence(s)
        *            assuming a fixed window size
        */
+
+      /*
       void build(skch::Parameters &param)
       {
 
@@ -399,9 +435,11 @@ namespace skch
 
       }
 
+	*/
       /**
        * @brief   build the index for fast lookups using minimizer table
        */
+      /*
       void index()
       {
         //Parse all the minimizers and push into the map
@@ -414,6 +452,7 @@ namespace skch
 
         std::cout << "INFO, skch::Sketch::index, unique minimizers = " << minimizerPosLookupIndex.size() << std::endl;
       }
+	*/
 
       /**
        * @brief   report the frequency histogram of minimizers using position lookup index

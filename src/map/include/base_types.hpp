@@ -9,6 +9,7 @@
 
 #include <tuple>
 #include <boost/serialization/serialization.hpp>
+#include <vector>
 
 namespace boost {
 namespace serialization {

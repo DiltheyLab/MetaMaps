@@ -16,11 +16,15 @@
 #include <cstring>
 
 //Own includes
+#include "mapWrap.h"
+
 #include "map/include/map_parameters.hpp"
-#include "map/include/base_types.hpp"
 #include "map/include/parseCmdArgs.hpp"
-#include "map/include/winSketch.hpp"
-#include "map/include/computeMap.hpp"
+
+//include "map/include/base_types.hpp"
+
+//include "map/include/winSketch.hpp"
+//include "map/include/computeMap.hpp"
 
 //External includes
 #include "common/argvparser.hpp"
@@ -28,6 +32,7 @@
 
 void highLevelUsage();
 
+/*
 void mapAgainstPrefix(const skch::Parameters& parameters, std::string prefix)
 {
 	skch::Parameters useParameters = parameters;
@@ -86,6 +91,7 @@ void mapAgainstPrefix(const skch::Parameters& parameters, std::string prefix)
 		std::cout << "Restored archive from " << prefix << "." << std::to_string(runningIndexNumber) << std::endl;
 
 		useParameters.outFileName = outputPrefix + "." + std::to_string(runningIndexNumber);
+
 		skch::Map mapper = skch::Map(useParameters, referSketchI);
 
 		runningIndexNumber++;
@@ -95,6 +101,7 @@ void mapAgainstPrefix(const skch::Parameters& parameters, std::string prefix)
 		throw std::runtime_error("No index files read for prefix " + prefix);
 }
 
+*/
 int main(int argc, char** argv)
 {
 	if(1 == 0)
@@ -115,6 +122,7 @@ int main(int argc, char** argv)
 		}
 		*/
 
+		/*
 		skch::Parameters parameters;        //sketching and mapping parameters
 
 		parameters.refSequences.push_back("C:/Temp/jh1_long.fasta");
@@ -132,7 +140,7 @@ int main(int argc, char** argv)
 		parameters.percentageIdentity = 85;
 
 		parameters.windowSize = 50;
-
+		*/
 		/*
 		parameters.windowSize = skch::Stat::recommendedWindowSize(
 				parameters.p_value,
@@ -144,6 +152,7 @@ int main(int argc, char** argv)
 		*/
 
 
+		/*
 		std::cout << "Referenze size / window size: " << parameters.referenceSize << " / " << parameters.windowSize << "\n" << std::flush;
 
 		skch::Sketch referSketch(parameters, "index", 2*std::pow(1024,3));
@@ -155,7 +164,9 @@ int main(int argc, char** argv)
 
 		std::string fn_serialize_sketch = "sketch_serialized";
 
+		 	*/
 		{
+			/*
 			skch::Sketch referSketch(parameters);
 
 			skch::Map mapper = skch::Map(parameters, referSketch);
@@ -171,9 +182,11 @@ int main(int argc, char** argv)
 			}
 			boost::archive::text_oarchive sketch_archive(sketch_serialization_ostream);
 			sketch_archive & referSketch;
+			*/
 		}
 
 		{
+			/*
 			std::ifstream sketch_serialization_istream(fn_serialize_sketch.c_str());
 			if(! sketch_serialization_istream.is_open())
 			{
@@ -185,16 +198,18 @@ int main(int argc, char** argv)
 
 			sketch_archive >> referSketch;
 
-			skch::Map mapper = skch::Map(parameters, referSketch);
+
+			// skch::Map mapper = skch::Map(parameters, referSketch);
 
 			std::cout << "INFO, skch::main, mapping results saved in : " << parameters.outFileName << std::endl;
 
 			std::cout << "\n\nMapping done, results in " << parameters.outFileName << "\n\n" << std::flush;
+			*/
 
 
 		}
 
-		std::cout << "\n\nDone.\n\n" << std::flush;
+	//	std::cout << "\n\nDone.\n\n" << std::flush;
 	}
 
 	if((argc < 2) || (!((std::strcmp(argv[1], "index") == 0) || (std::strcmp(argv[1], "map") == 0) || (std::strcmp(argv[1], "classify") == 0))))
@@ -225,6 +240,7 @@ int main(int argc, char** argv)
 
 		skch::parseandSave(argc, argv, cmd, parameters);   
 
+		/*
 		assert(parameters.alphabetSize == 4);
 		parameters.reportAll = true;		
 		
@@ -247,6 +263,10 @@ int main(int argc, char** argv)
 		std::cout << "INFO, skch::main, Time spent mapping the query : " << timeMapQuery.count() << " sec" << std::endl;
 
 		std::cout << "INFO, skch::main, mapping results saved in : " << parameters.outFileName << std::endl;
+		*/
+
+		mapWrap mW;
+		mW.createIndex(parameters, "index", 1024);
 	}
 }
 
