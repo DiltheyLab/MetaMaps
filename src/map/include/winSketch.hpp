@@ -157,7 +157,7 @@ namespace skch
       Sketch(skch::Parameters &p, size_t maximumMemory, std::function<void(Sketch*, size_t)>* oneIndexAction = nullptr)
       {
     	  assert(p.outFileName.length() == 0);
-          this->build_and_store_index(p, maximumMemory, oneIndexAction);
+          build_and_store_index(p, maximumMemory, oneIndexAction);
       }
 
       private:
@@ -177,7 +177,7 @@ namespace skch
     	  return memory_hash_table + memory_vector;
       }
 
-      std::vector<std::string> build_and_store_index(skch::Parameters &param, size_t maximumMemory, std::function<void(Sketch*, size_t)>* oneIndexAction)
+      void build_and_store_index(skch::Parameters &param, size_t maximumMemory, std::function<void(Sketch*, size_t)>* oneIndexAction)
       {
     	  std::cout << "Parameters used:\n";
     	  std::cout << "\t" << "- alphabetSize: " << param.alphabetSize << "\n";
@@ -188,15 +188,6 @@ namespace skch
     	  std::cout << "\t" << "- windowSize: " << param.windowSize << "\n";
     	  std::cout << "\t" << "- maximumMemory: ~" << maximumMemory/std::pow(1024,3) << " GB\n";
     	  std::cout << "\n" << std::flush;
-
-    	  bool mappingMode = (oneIndexAction != nullptr);
-
-    	  if(! mappingMode)
-    	  {
-
-    	  }
-
-
 
           seqno_t seqCounter = 0;
           MI_Type thisContig_minimizerIndex;

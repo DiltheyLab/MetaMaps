@@ -104,8 +104,44 @@ void mapAgainstPrefix(const skch::Parameters& parameters, std::string prefix)
 */
 int main(int argc, char** argv)
 {
-	if(1 == 0)
+	if(1 == 1)
 	{
+		{
+			// build an index
+
+			skch::Parameters parameters;        //sketching and mapping parameters
+
+			parameters.refSequences.push_back("C:/Temp/jh1_long.fasta");
+			parameters.querySequences.push_back("C:/Temp/reads.fasta");
+			parameters.outFileName = "";
+
+		    parameters.referenceSize = skch::CommonFunc::getReferenceSize(parameters.refSequences);
+		    parameters.alphabetSize = 4;
+			parameters.reportAll = true;
+			parameters.kmerSize = 16;
+
+			parameters.p_value = 1e-03;
+
+			parameters.minReadLength = 50;
+			parameters.percentageIdentity = 85;
+
+			parameters.windowSize = 50;
+
+			mapWrap mW;
+			mW.createIndex(parameters, "index", 0.0004 * pow(1024, 3));
+
+			parameters.outFileName = "mapFromIndex";
+			mW.mapAgainstIndex(parameters, "index");
+
+			parameters.outFileName = "mapDirectly_noLimit";
+			mW.mapDirectly(parameters, 1e6);
+
+			parameters.outFileName = "mapDirectly_withLimit";
+			mW.mapDirectly(parameters, 0.0004 * pow(1024, 3));
+		}
+
+		exit(0);
+
 		/*
 		{
 			std::ifstream sketch_serialization_istream("index.1");
@@ -266,7 +302,9 @@ int main(int argc, char** argv)
 		*/
 
 		mapWrap mW;
-		mW.createIndex(parameters, "index", 1024);
+		mW.createIndex(parameters, "index", 1e6);
+
+
 	}
 }
 
