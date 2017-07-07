@@ -13,6 +13,8 @@
 #include <boost/archive/text_oarchive.hpp>
 #include <fstream>
 #include <zlib.h>
+#include <utility>
+#include <boost/math/distributions/binomial.hpp>
 
 //Own includes
 #include "map/include/base_types.hpp"
@@ -23,9 +25,10 @@
 
 class mapWrap {
 protected:
-	void unifyFiles(std::string unifiedOutputFN, skch::Parameters param, std::vector<std::string> mappingFiles, std::vector<std::string> querySequences)
+	void unifyFiles(std::string unifiedOutputFN, const skch::Parameters& param, std::vector<std::string> mappingFiles, std::vector<std::string> querySequences)
 	{
-		std::cerr << "UNIFY!!" << std::endl;
+		bool paranoid = true;
+		std::set<std::string> processedReadIDs;
 
 		std::ofstream combinedOutput(unifiedOutputFN);
 		assert(combinedOutput.is_open());
@@ -41,9 +44,9 @@ protected:
 		std::string lineBuffer;
 		lineBuffer.reserve(100000);
 
-		auto queryOpenFileForReadData = [&](int fI, const std::string& readID) -> std::string
+		auto queryOpenFileForReadData = [&](int fI, const std::string& readID) -> std::vector<std::string>
 		{
-			lineBuffer.clear();
+			std::vector<std::string> forReturn;
 			if(openFiles.at(fI)->good())
 			{
 				std::streampos posBeforeStart = openFiles.at(fI)->tellg();
@@ -59,9 +62,14 @@ protected:
 					else
 					{
 						std::string thisLine_readID = line.substr(0, pos_first_space);
+						if(paranoid && (processedReadIDs.count(thisLine_readID) != 0))
+						{
+							std::cerr << "Seems that read ID " << thisLine_readID << " has already been processed - this target ID " << readID << "\n" << std::endl;
+							exit(1);
+						}
 						if(thisLine_readID == readID)
 						{
-							lineBuffer.append(line+"\n");
+							forReturn.push_back(line);
 							posBeforeStart = openFiles.at(fI)->tellg();
 						}
 						else
@@ -71,13 +79,12 @@ protected:
 					}
 				}
 				openFiles.at(fI)->seekg(posBeforeStart);
-				return lineBuffer;
+				return forReturn;
 			}
 			else
 			{
-				return "";
+				return forReturn;
 			}
-
 		};
 
 		for(const auto& qSF : querySequences)
@@ -100,9 +107,21 @@ protected:
 				else
 				{
 					std::string readID = seq->name.s;
+					std::vector<std::string> combinedLines;
 					for(unsigned int fI = 0; fI < openFiles.size(); fI++)
 					{
-						combinedOutput << queryOpenFileForReadData(fI, readID);
+						std::vector<std::string> file_lines = queryOpenFileForReadData(fI, readID);
+						combinedLines.insert(combinedLines.end(), file_lines.begin(), file_lines.end());
+					}
+
+					addMappingQualities(param, combinedLines);
+					for(auto l : combinedLines)
+					{
+						combinedOutput << l << "\n";
+					}
+					if(paranoid)
+					{
+						processedReadIDs.insert(readID);
 					}
 				}
 			}
@@ -114,11 +133,118 @@ protected:
 
 		for(auto iS : openFiles)
 		{
+			if(iS->good())
+			{
+				std::cerr << "Error: output file not completely processed.\n" << std::flush;
+				exit(1);
+			}
 			iS->close();
 			delete(iS);
 		}
 
 		combinedOutput.close();
+	}
+
+	void addMappingQualities(const skch::Parameters& param, std::vector<std::string>& lines)
+	{
+		if(lines.size() > 0)
+		{
+			std::set<std::string> readIDs;
+			std::set<int> read_lengths;
+
+			std::vector<unsigned int> fields_per_line;
+			std::vector<std::pair<unsigned int, unsigned int>> observed_set_sizes;
+			std::vector<double> identities;
+
+			double max_identity = -1;
+			for(const std::string& line : lines)
+			{
+				std::vector<std::string> fields = split(line, " ");
+
+				assert((fields.size() == 14) || (fields.size() == 15) || (fields.size() == 12));
+				fields_per_line.push_back(fields.size());
+
+				readIDs.insert(fields.at(0));
+				read_lengths.insert(std::stoi(fields.at(1)));
+
+				double identity = (std::stoi(fields.at(9)))/100.0;
+				int intersection_size = std::stoi(fields.at(10));
+				int sketch_size = std::stoi(fields.at(11));
+				assert(intersection_size <= sketch_size);
+				if(identity > max_identity)
+				{
+					max_identity = identity;
+				}
+
+				identities.push_back(identity);
+				observed_set_sizes.push_back(std::make_pair(sketch_size, intersection_size));
+			}
+
+			double identities_sum = 0;
+			for(auto idty : identities)
+			{
+				identities_sum += idty;
+			}
+			double mean_identity = identities_sum / (double)identities.size();
+
+			// convert to true max identity
+			assert(readIDs.size() == 1);
+			assert(read_lengths.size() == 1);
+			assert(max_identity != -1);
+			max_identity = exp(-(1-max_identity));
+
+			int read_length = *(read_lengths.begin());
+			assert(read_length > param.kmerSize);
+
+			int n_kmers = read_length - param.kmerSize + 1;
+
+			std::vector<double> likelihoods;
+			double likelihood_sum = 0;
+			for(auto p : observed_set_sizes)
+			{
+				double likelihood = likelihood_observed_set_sizes(param.kmerSize, n_kmers, max_identity, p.first, p.second);
+				assert(likelihood >= 0);
+				assert(likelihood <= 1);
+				likelihoods.push_back(likelihood);
+				likelihood_sum += likelihood;
+			}
+			assert(likelihood_sum > 0);
+			//std::cout << "max_identity: " << max_identity << "\n" << std::flush;
+			//std::cout << "n_kmers: " << n_kmers < "\n";
+			for(unsigned int lI = 0; lI < likelihoods.size(); lI++)
+			{
+				likelihoods.at(lI) = likelihoods.at(lI) / likelihood_sum;
+				assert(likelihoods.at(lI) >= 0);
+				assert(likelihoods.at(lI) <= 1);
+				//std::cout << "\t" << observed_set_sizes.at(lI).first << " " << observed_set_sizes.at(lI).second << " " << likelihoods.at(lI) << "\n" << std::flush;
+			}
+
+			for(unsigned int lineI = 0; lineI < lines.size(); lineI++)
+			{
+				double mappingQuality = likelihoods.at(lineI);
+				double reportedIdentity = identities.at(lineI);
+				float correctedIdentity = exp(-(1-reportedIdentity));
+
+				//std::string extension = "binomialIdentity=" + std::to_string(int(correctedIdentity*100+0.5)) + ";mappingQuality=" + std::to_string(mappingQuality);
+				//lines.at(lineI) += ((fields_per_line.at(lineI) <= 12) ? " " : ";") + extension;
+
+				std::stringstream toAdd;
+				toAdd << " " << correctedIdentity*100 << " " << mappingQuality;
+				lines.at(lineI) += toAdd.str();
+			}
+		}
+	}
+
+	double likelihood_observed_set_sizes(int k, int n_kmers, double identity, int sketch_size, int intersection_size)
+	{
+		assert(intersection_size <= sketch_size);
+		double p_kMer_survival = std::pow(identity, k);
+		double E_surviving_kMers = p_kMer_survival * n_kmers;
+		double E_surviving_kMers_int = std::round(E_surviving_kMers);
+		double E_union_size = n_kmers + (n_kmers - E_surviving_kMers_int);
+		double E_intersection_size = E_surviving_kMers_int;
+		double likelihood = boost::math::pdf(boost::math::binomial_distribution<>(sketch_size, E_intersection_size/E_union_size), intersection_size);
+		return likelihood;
 	}
 
 public:
