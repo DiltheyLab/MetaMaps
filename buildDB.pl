@@ -37,9 +37,21 @@ unless(-d $DB)
 {
 	mkdir($DB) or die "Cannot mkdir $DB";
 }
+
 my @files_in_DB = glob($DB.'/*');
 die "Database output directory (parameter --DB) is not empty" unless(scalar(@files_in_DB) == 0);
 
+# copy taxonomy
+
+my $dir_copy_taxonomy = $DB . '/taxonomy';
+mkdir($dir_copy_taxonomy) or die "Cannot mkdir $dir_copy_taxonomy";
+
+foreach my $f (taxTree::getTaxonomyFileNames())
+{
+	my $fP = $taxonomyDir . '/' . $f;
+	my $cmd_cp = qq(cp $fP $dir_copy_taxonomy);
+	system($cmd_cp) and die "Copy command $cmd_cp failed";
+}
 # Find input files
 
 my @FASTAfiles;
