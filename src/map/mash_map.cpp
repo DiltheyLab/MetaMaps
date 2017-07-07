@@ -295,7 +295,7 @@ void highLevelUsage()
 	std::cout << "\n\
 MetaMap v 0.1 \n\
 \n\
-  Metagenomic classification and mapping.\n\
+  Simulataenous metagenomic classification and mapping.\n\
 \n\
 Usage:\n\
 \n\

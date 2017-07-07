@@ -10,6 +10,8 @@
 #include <iostream>
 #include <string>
 #include <fstream>
+#include <exception>
+#include <stdexcept>
 
 //Own includes
 #include "map/include/map_parameters.hpp"
@@ -153,19 +155,51 @@ namespace skch
    * @brief                   Print the parsed cmd line options
    * @param[in]  parameters   parameters parsed from command line
    */
-  void printCmdOptions(skch::Parameters &parameters)
+  void printCmdOptions(skch::Parameters &parameters, std::string mode)
   {
-    std::cout << ">>>>>>>>>>>>>>>>>>" << std::endl;
-    std::cout << "Reference = " << parameters.refSequences << std::endl;
-    std::cout << "Query = " << parameters.querySequences << std::endl;
-    std::cout << "Kmer size = " << parameters.kmerSize << std::endl;
-    std::cout << "Window size = " << parameters.windowSize << std::endl;
-    std::cout << "Read length >= " << parameters.minReadLength << std::endl;
-    std::cout << "Alphabet = " << (parameters.alphabetSize == 4 ? "DNA" : "AA") << std::endl;
-    std::cout << "P-value = " << parameters.p_value << std::endl;
-    std::cout << "Percentage identity threshold = " << parameters.percentageIdentity << std::endl;
-    std::cout << "Mapping output file = " << parameters.outFileName << std::endl;
-    std::cout << ">>>>>>>>>>>>>>>>>>" << std::endl;
+	if(mode == "mapAgainstIndex")
+	{
+		std::cout << ">>>>>>>>>>>>>>>>>>" << std::endl;
+		std::cout << "Index = " << parameters.index << std::endl;
+		std::cout << "Query = " << parameters.querySequences << std::endl;
+		std::cout << "Report all = " << parameters.reportAll << std::endl;
+		std::cout << "Mapping output file = " << parameters.outFileName << std::endl;
+		std::cout << ">>>>>>>>>>>>>>>>>>" << std::endl;
+	}
+	else if(mode == "index")
+	{
+		std::cout << ">>>>>>>>>>>>>>>>>>" << std::endl;
+		std::cout << "Reference = " << parameters.refSequences << std::endl;
+		std::cout << "Kmer size = " << parameters.kmerSize << std::endl;
+		std::cout << "Window size = " << parameters.windowSize << std::endl;
+		std::cout << "Min. read length >= " << parameters.minReadLength << std::endl;
+		std::cout << "Alphabet = " << (parameters.alphabetSize == 4 ? "DNA" : "AA") << std::endl;
+		std::cout << "P-value = " << parameters.p_value << std::endl;
+		std::cout << "Percentage identity threshold = " << parameters.percentageIdentity << std::endl;
+		std::cout << "Target max. memory = " << parameters.maximumMemory << std::endl;
+		std::cout << "Index output prefix = " << parameters.index << std::endl;
+		std::cout << ">>>>>>>>>>>>>>>>>>" << std::endl;
+	}
+	else if(mode == "mapDirectly")
+	{
+		std::cout << ">>>>>>>>>>>>>>>>>>" << std::endl;
+		std::cout << "Reference = " << parameters.refSequences << std::endl;
+		std::cout << "Query = " << parameters.querySequences << std::endl;
+		std::cout << "Kmer size = " << parameters.kmerSize << std::endl;
+		std::cout << "Window size = " << parameters.windowSize << std::endl;
+		std::cout << "Min. read length >= " << parameters.minReadLength << std::endl;
+		std::cout << "Alphabet = " << (parameters.alphabetSize == 4 ? "DNA" : "AA") << std::endl;
+		std::cout << "P-value = " << parameters.p_value << std::endl;
+		std::cout << "Percentage identity threshold = " << parameters.percentageIdentity << std::endl;
+		std::cout << "Report all = " << parameters.reportAll << std::endl;
+		std::cout << "Target max. memory = " << parameters.maximumMemory << std::endl;
+		std::cout << "Mapping output file = " << parameters.outFileName << std::endl;
+		std::cout << ">>>>>>>>>>>>>>>>>>" << std::endl;
+	}
+	else
+	{
+		throw std::runtime_error("Invalid code path");
+	}
   }
 
   /**
@@ -344,7 +378,7 @@ void parseandSave(int argc, char** argv,  CommandLineProcessing::ArgvParser &cmd
 		}
 	}
 
-	printCmdOptions(parameters);
+	printCmdOptions(parameters, mode);
 
 	//Check if files are valid
 	validateInputFiles(parameters.querySequences, parameters.refSequences);
