@@ -66,7 +66,7 @@ sub wanted {
 	
 	if((not -d $file) and ($file =~ /_assembly_report\.txt$/))
 	{	
-		remove_existing_fnaFile_for_assemblyReportFile($file);
+		next unless(remove_existing_fnaFile_for_assemblyReportFile($file));
 		
 		my $taxonID;
 		my $organismName = 'NA';
@@ -285,7 +285,12 @@ sub remove_existing_fnaFile_for_assemblyReportFile
 	
 	my $gzFile = $assemblyReport;
 	$gzFile =~ s/_assembly_report\.txt/_genomic.fna.gz/;
-	die "Expected file $gzFile  not existing" unless(-e $gzFile);
+	
+	unless(-e $gzFile)
+	{
+		warn "Expected file $gzFile  not existing";
+		return 0;
+	}
 	
 	my $fna_file = $gzFile;
 	$fna_file =~ s/\.gz$//;
@@ -293,6 +298,8 @@ sub remove_existing_fnaFile_for_assemblyReportFile
 	{
 		unlink($fna_file) or die "Cannot unlink $fna_file";
 	}			
+	
+	return 1;
 }
 
 sub get_fresh_fnaFile_for_assemblyReportFile

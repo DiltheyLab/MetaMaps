@@ -216,6 +216,11 @@ namespace skch
       {
         //Open the file as binary, and set the position to end
         std::ifstream in(f, std::ifstream::ate | std::ifstream::binary);
+		if(! in.is_open())
+		{
+			std::cerr << "Cannot open " << f << " for size determination." << std::endl;
+			exit(1);
+		}
         assert(in.is_open());
 
         //the position of the current character

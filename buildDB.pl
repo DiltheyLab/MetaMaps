@@ -59,7 +59,7 @@ else
 	@FASTAfiles = split(/,/, $FASTAs);
 	foreach my $f (@FASTAfiles)
 	{
-		die "Specified FASTA file (via --FASTAs) doesn't exist: $f";
+		die "Specified FASTA file (via --FASTAs) doesn't exist: $f" unless(-e $f);
 	}
 }
 
@@ -144,9 +144,6 @@ for(my $contigI = 0; $contigI <= $#contigs; $contigI++)
 close(DB);
 
 print "\nProduced randomized-order database sequence file $outputFN\n\n";
-
-
-
 
 sub print_help
 {

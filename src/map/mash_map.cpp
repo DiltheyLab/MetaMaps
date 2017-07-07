@@ -104,7 +104,7 @@ void mapAgainstPrefix(const skch::Parameters& parameters, std::string prefix)
 */
 int main(int argc, char** argv)
 {
-	if(1 == 1)
+	if(1 == 0)
 	{
 		{
 			// build an index
@@ -246,9 +246,11 @@ int main(int argc, char** argv)
 		}
 
 	//	std::cout << "\n\nDone.\n\n" << std::flush;
+	
+		exit(0);
+
 	}
 
-	exit(0);
 
 	if((argc < 2) || (!((std::strcmp(argv[1], "index") == 0) || (std::strcmp(argv[1], "mapDirectly") == 0) || (std::strcmp(argv[1], "mapAgainstIndex") == 0) || (std::strcmp(argv[1], "classify") == 0))))
 	{

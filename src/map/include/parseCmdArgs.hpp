@@ -44,6 +44,9 @@ namespace skch
         cmd.defineOption("query", "an input query file (fasta/fastq)[.gz]", ArgvParser::OptionRequiresValue);
         cmd.defineOptionAlternative("query","q");
 
+        cmd.defineOption("output", "output file", ArgvParser::OptionRequiresValue);
+        cmd.defineOptionAlternative("output","o");
+
         cmd.defineOption("all", "report all the mapping locations for a read, default is to consider few best ones");
     }
     else if(mode == "mapDirectly" || mode == "index")
@@ -73,7 +76,7 @@ namespace skch
 
         if(mode == "index")
         {
-            cmd.defineOption("index", "output prefix for ", ArgvParser::OptionRequired | ArgvParser::OptionRequiresValue);
+            cmd.defineOption("index", "output prefix for index", ArgvParser::OptionRequired | ArgvParser::OptionRequiresValue);
             cmd.defineOptionAlternative("index","i");
         }
         if(mode == "mapDirectly")
@@ -83,6 +86,8 @@ namespace skch
 
             cmd.defineOption("all", "report all the mapping locations for a read, default is to consider few best ones");
 
+			cmd.defineOption("output", "output file", ArgvParser::OptionRequiresValue);
+			cmd.defineOptionAlternative("output","o");
         }
     }
   }
@@ -179,7 +184,7 @@ void parseandSave(int argc, char** argv,  CommandLineProcessing::ArgvParser &cmd
 		exit(1);
 	}
 
-	if(mode == "mapAgainstIndex")
+	if((mode == "mapAgainstIndex") || (mode == "index"))
 	{
 		if(!cmd.foundOption("index"))
 		{

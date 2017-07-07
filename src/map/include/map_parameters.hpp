@@ -69,6 +69,19 @@ namespace skch
 
     std::string index;
     size_t maximumMemory;
+	
+	Parameters()
+	{
+		kmerSize = 0;
+		windowSize = 0;
+		minReadLength = 0;
+		alphabetSize = 0;
+		referenceSize = 0;
+		percentageIdentity = 0;
+		p_value = 0;
+		reportAll = false;
+		maximumMemory = 0;
+	}
   };
 }
 

@@ -269,10 +269,11 @@ public:
 		{
 			throw std::runtime_error("Cannot open file " + fn_serialize_arguments + " for serialization.");
 		}
+		{
 		boost::archive::text_oarchive arguments_archive(arguments_serialization_ostream);
 		arguments_archive & param;
 		arguments_serialization_ostream.close();
-
+		}
 		std::vector<std::string> generatedIndexFiles;
 		std::function<void(skch::Sketch*, size_t)> indexStoreFunction = [&](skch::Sketch* referSketch, size_t N)
 		{
@@ -361,7 +362,7 @@ public:
 			std::cerr << "Expected file " << fn_serialize_arguments << " not found - have you supplied a valid index?" << std::endl;
 			exit(1);
 		}
-
+		
 		boost::archive::text_iarchive arguments_archive(arguments_serialization_istream);
 		skch::Parameters restoredParameters;
 		arguments_archive >> restoredParameters;
@@ -403,8 +404,6 @@ public:
 			sketch_archive >> referSketchI;
 
 			sketch_serialization_istream.close();
-
-			std::cout << "Restored archive from " << indexFile << "\n";
 
 			useParameters.outFileName = outputPrefix + "." + std::to_string(indexFileI);
 			useParameters.querySequences = param.querySequences;
