@@ -13,7 +13,6 @@
 #include <map>
 #include <iostream>
 #include <fstream>
-#include <regex>
 #include <assert.h>
 #include <boost/regex.hpp>
 

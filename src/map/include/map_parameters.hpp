@@ -69,6 +69,8 @@ namespace skch
 
     std::string index;
     size_t maximumMemory;
+    std::string DB;
+	std::string mappingsForClassification;
 	
 	Parameters()
 	{

@@ -20,6 +20,7 @@
 
 #include "map/include/map_parameters.hpp"
 #include "map/include/parseCmdArgs.hpp"
+#include "meta/fEM.h"
 
 //include "map/include/base_types.hpp"
 
@@ -285,6 +286,12 @@ int main(int argc, char** argv)
 	{
 		assert(parameters.index.length());
 		mW.mapAgainstIndex(parameters, parameters.index);
+	}
+	else if(firstArgument == "classify")
+	{
+		assert(parameters.DB.length());
+		assert(parameters.mappingsForClassification.length());
+		doEM(parameters.DB, parameters.mappingsForClassification);
 	}
 
 	return 0;

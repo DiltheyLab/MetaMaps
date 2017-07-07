@@ -87,6 +87,10 @@ protected:
 			}
 		};
 
+		size_t totalInputReads = 0;
+		size_t inputReads_mapped = 0;
+		size_t inputReads_tooShort = 0;
+		size_t inputReads_notMapped = 0;
 		for(const auto& qSF : querySequences)
 		{
 			//Open the file using kseq
@@ -99,9 +103,12 @@ protected:
 
 			while ((len = kseq_read(seq)) >= 0)
 			{
+				totalInputReads++;
+
 				//Is the read too short?
 				if(len < param.windowSize || len < param.kmerSize || len < param.minReadLength)
 				{
+					inputReads_tooShort++;
 					continue;
 				}
 				else
@@ -114,6 +121,14 @@ protected:
 						combinedLines.insert(combinedLines.end(), file_lines.begin(), file_lines.end());
 					}
 
+					if(combinedLines.size() == 0)
+					{
+						inputReads_notMapped++;
+					}
+					else
+					{
+						inputReads_mapped++;
+					}
 					addMappingQualities(param, combinedLines);
 					for(auto l : combinedLines)
 					{
@@ -141,6 +156,14 @@ protected:
 			iS->close();
 			delete(iS);
 		}
+
+		std::ofstream metaOutput(unifiedOutputFN+".meta");
+		assert(metaOutput.is_open());
+		metaOutput << "TotalReads" << " " << totalInputReads << "\n";
+		metaOutput << "ReadsTooShort" << " " << inputReads_tooShort << "\n";
+		metaOutput << "ReadsMapped" << " " << inputReads_mapped << "\n";
+		metaOutput << "ReadsNotMapped" << " " << inputReads_notMapped << "\n";
+		metaOutput.close();
 
 		combinedOutput.close();
 	}
