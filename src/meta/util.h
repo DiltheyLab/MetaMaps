@@ -19,6 +19,22 @@ void errEx(const std::string& s)
 	exit(1);
 }
 
+std::string join(std::vector<std::string> parts, std::string delim)
+{
+	if(parts.size() == 0)
+		return "";
+
+	std::string ret = parts.at(0);
+
+	for(unsigned int i = 1; i < parts.size(); i++)
+	{
+		ret.append(delim);
+		ret.append(parts.at(i));
+	}
+
+	return ret;
+}
+
 void eraseNL(std::string& s)
 {
 	if (!s.empty() && s[s.length()-1] == '\n') {

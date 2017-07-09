@@ -42,7 +42,43 @@ protected:
 public:
 	std::map<std::string, oneTaxonNode> T;
 
-	const oneTaxonNode& getNode(std::string nodeID)
+	bool knowNode(std::string nodeID) const
+	{
+		return(T.count(nodeID) > 0);
+	}
+
+	std::map<std::string, std::string> getUpwardNodesByRanks(std::string nodeID) const
+	{
+		std::map<std::string, std::string> forReturn;
+		std::vector<std::string> uN = getUpwardNodes(nodeID);
+		for(auto n : uN)
+		{
+			std::string rank = T.at(nodeID).rank;
+			if(rank != "no rank")
+			{
+				assert(forReturn.count(rank) == 0);
+				forReturn[rank] = n;
+			}
+		}
+		return forReturn;
+	}
+
+	std::vector<std::string> getUpwardNodes(std::string nodeID) const
+	{
+		assert(T.count(nodeID));
+		std::vector<std::string> u;
+		u.push_back(nodeID);
+
+		while(nodeID != "1")
+		{
+			nodeID = T.at(nodeID).parent_id;
+			u.push_back(nodeID);
+		}
+
+		return u;
+	}
+
+	const oneTaxonNode& getNode(std::string nodeID) const
 	{
 		assert(T.count(nodeID));
 		return T.at(nodeID);
