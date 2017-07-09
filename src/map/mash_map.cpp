@@ -291,7 +291,7 @@ int main(int argc, char** argv)
 	{
 		assert(parameters.DB.length());
 		assert(parameters.mappingsForClassification.length());
-		doEM(parameters.DB, parameters.mappingsForClassification);
+		meta::doEM(parameters.DB, parameters.mappingsForClassification);
 	}
 
 	return 0;

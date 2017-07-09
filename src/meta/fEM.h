@@ -101,7 +101,7 @@ void producePotFile(std::string outputFN, const taxonomy& T, std::map<std::strin
 
 		for(auto taxonID : l.second)
 		{
-			std::string taxonIDName = T.getNode(taxonID).name;
+			std::string taxonIDName = T.getNode(taxonID).name.scientific_name;
 			double f = (f_per_level[levelName].count(taxonID)) ? f_per_level[levelName][taxonID] : 0;
 			size_t rC = (rC_per_level[levelName].count(taxonID)) ? rC_per_level[levelName][taxonID] : 0;
 
@@ -293,7 +293,8 @@ void doEM(std::string DBdir, std::string mappedFile)
 
 	std::string output_pot_frequencies = mappedFile + ".WIMP";
 	std::string output_recalibrated_mappings = mappedFile + ".postEM";
-	std::string output_assigned_reads_and_identities = mappedFile + ".lengthAndIdentitiesPerContig";
+	std::string output_assigned_reads_and_identities = mappedFile + ".lengthAndIdentitiesPerMappingUnit";
+	std::string output_contig_coverage = mappedFile + ".contigCoverage";
 
 	std::ofstream strout_reads_identities(output_assigned_reads_and_identities);
 	assert(strout_reads_identities.is_open());
@@ -301,6 +302,10 @@ void doEM(std::string DBdir, std::string mappedFile)
 
 	std::ofstream strout_recalibrated_mappings(output_recalibrated_mappings);
 	assert(strout_recalibrated_mappings.is_open());
+
+	size_t coverage_windowSize = 1000;
+	std::map<std::string, std::map<std::string, std::vector<size_t>>> coverage_per_contigID;
+	std::map<std::string, std::map<std::string, size_t>> size_last_window;
 
 	std::map<std::string, size_t> reads_per_taxonID;
 	size_t runningReadI = 0;
@@ -325,6 +330,48 @@ void doEM(std::string DBdir, std::string mappedFile)
 			reads_per_taxonID[bestMapping.taxonID] = 0;
 		}
 		reads_per_taxonID[bestMapping.taxonID]++;
+
+		if(coverage_per_contigID[bestMapping.taxonID].count(bestMapping.contigID) == 0)
+		{
+			size_t contigLength = taxonInfo.at(bestMapping.taxonID).at(bestMapping.contigID);
+			size_t n_windows = contigLength / coverage_windowSize;
+			if(n_windows == 0)
+			{
+				n_windows++;
+				size_last_window[bestMapping.taxonID][bestMapping.contigID] = contigLength;
+			}
+			else
+			{
+				if((n_windows * coverage_windowSize) != contigLength)
+				{
+					n_windows++;
+					size_last_window[bestMapping.taxonID][bestMapping.contigID] = contigLength - (n_windows * coverage_windowSize);
+				}
+			}
+			coverage_per_contigID[bestMapping.taxonID][bestMapping.contigID].resize(n_windows, 0);
+		}
+
+		size_t bestMappingStopPos = (bestMapping.stop >= taxonInfo.at(bestMapping.taxonID).at(bestMapping.contigID)) ? (taxonInfo.at(bestMapping.taxonID).at(bestMapping.contigID) - 1) : bestMapping.stop;
+		for(size_t contigPos = bestMapping.start; contigPos <= bestMappingStopPos; contigPos += coverage_windowSize)
+		{
+			size_t windowI = contigPos / coverage_windowSize;
+			assert(windowI >= 0);
+			assert(windowI < coverage_per_contigID.at(bestMapping.taxonID).at(bestMapping.contigID).size());
+
+			size_t windowStart = windowI * coverage_windowSize;
+			size_t windowStop = (windowI+1) * coverage_windowSize - 1;
+			if(windowStop > taxonInfo.at(bestMapping.taxonID).at(bestMapping.contigID))
+			{
+				windowStop = taxonInfo.at(bestMapping.taxonID).at(bestMapping.contigID) - 1;
+			}
+			assert(windowStop >= windowStart);
+
+			size_t read_window_overlap = overlap(windowStart, windowStop, bestMapping.start, bestMappingStopPos);
+			assert(read_window_overlap > 0);
+			assert(read_window_overlap <= coverage_windowSize);
+			coverage_per_contigID.at(bestMapping.taxonID).at(bestMapping.contigID).at(windowI) += read_window_overlap;
+		}
+
 		runningReadI++;
 	};
 
@@ -332,6 +379,34 @@ void doEM(std::string DBdir, std::string mappedFile)
 	strout_reads_identities.close();
 
 	producePotFile(output_pot_frequencies, T, f, reads_per_taxonID, nUnmapped, nTooShort);
+
+	std::ofstream strout_coverage(output_contig_coverage);
+	strout_coverage << "taxonID" << "\t" << "equalCoverageUnitLabel" << "\t" << "contigID" << "\t" << "start" << "\t" << "stop" << "\t" << "nBases" << "\t" << "readCoverage" << "\n";
+
+	for(auto taxonData : coverage_per_contigID)
+	{
+		for(auto contigData : taxonData.second)
+		{
+			for(size_t windowI = 0; windowI < contigData.second.size(); windowI++)
+			{
+				size_t windowLength = coverage_windowSize;
+				if((windowI == (contigData.second.size()-1)) && (size_last_window.at(taxonData.first).at(contigData.first) != 0))
+				{
+					windowLength = size_last_window.at(taxonData.first).at(contigData.first);
+				}
+
+				size_t nBases = coverage_per_contigID.at(taxonData.first).at(contigData.first).at(windowI);
+				strout_coverage <<
+						taxonData.first << "\t" <<
+						T.getNode(taxonData.first).name.scientific_name << "\t" <<
+						contigData.first << "\t" <<
+						nBases << "\t" <<
+						(double)nBases/(double)windowLength << "\n";
+			}
+		}
+	}
+
+
 }
 
 void callBackForAllReads(std::string mappedFile, std::function<void(const std::vector<std::string>&)>& callbackFunction)
