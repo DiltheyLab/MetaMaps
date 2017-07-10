@@ -63,11 +63,13 @@ public:
 		return forReturn;
 	}
 
-	std::vector<std::string> getUpwardNodes(std::string nodeID) const
+	std::vector<std::string> getUpwardNodes(std::string nodeID, bool includeStartNode = true) const
 	{
 		assert(T.count(nodeID));
 		std::vector<std::string> u;
-		u.push_back(nodeID);
+
+		if(includeStartNode)
+			u.push_back(nodeID);
 
 		while(nodeID != "1")
 		{

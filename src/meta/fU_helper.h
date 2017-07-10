@@ -24,33 +24,34 @@ namespace meta
 class identityAndReadLengthHistogram
 {
 protected:
-	int minimum;
-	std::map<int, double> h;
+	int minimumIdentity;
+	std::map<int, double> identityHistogram;
+	std::map<size_t, double> readLengthHistogram;
 
 public:
 
-	std::set<int> getKeys() const
+	std::set<int> getIdentityKeys() const
 	{
 		std::set<int> forReturn;
-		for(auto hI : h)
+		for(auto hI : identityHistogram)
 		{
 			forReturn.insert(hI.first);
 		}
 		return forReturn;
 	}
 
-	int getMinimum() const
+	int getIdentityMinimum() const
 	{
-		return minimum;
+		return minimumIdentity;
 	}
 
-	double getP(int idty) const
+	double getIdentityP(int idty) const
 	{
 		assert(idty <= 100);
 		assert(idty >= 0);
-		if(h.count(idty))
+		if(identityHistogram.count(idty))
 		{
-			return h.at(idty);
+			return identityHistogram.at(idty);
 		}
 		else
 		{
@@ -58,61 +59,168 @@ public:
 		}
 	}
 
-	void readFromEMOutput(std::string fn)
+	void readFromEMOutput(std::string fn, size_t minimumReadsPerContig)
 	{
-		minimum = -1;
+		minimumIdentity = -1;
 		std::ifstream f (fn);
 		assert(f.is_open());
 
+		std::map<std::string, std::vector<double>> identitiesPerUnit;
+		std::map<std::string, std::vector<size_t>> lengthPerUnit;
+
 		std::string line;
-		assert(f.good());
-		std::getline(f, line);
-		eraseNL(line);
-		int minIdty = int(100 * std::stod(line) + 0.5);
 		while(f.good())
 		{
 			std::getline(f, line);
 			eraseNL(line);
 			assert(line.length());
 			std::vector<std::string> line_fields = split(line, "\t");
-			assert(line_fields.size() == 2);
-			int idty = int(100 * std::stod(line_fields.at(0)) + 0.5);
-			double p = std::stod(line_fields.at(1));
-			assert(idty >= 0);
-			assert(idty <= 100);
-			assert(p >= 0);
-			assert(p <= 1);
-			h[idty] = p;
-			if((minimum == -1) || (idty < minimum))
+
+			std::string contigID = line_fields.at(1);
+			double identity = std::stod(line_fields.at(3));
+			size_t length = std::stoull(line_fields.at(4));
+
+			identitiesPerUnit[contigID].push_back(identity);
+			lengthPerUnit[contigID].push_back(length);
+		}
+
+		double highestMedian;
+		std::string highestMedianContigID;
+		for(auto contigData : identitiesPerUnit)
+		{
+			if(contigData.second.size() > minimumReadsPerContig)
 			{
-				minimum = idty;
+				std::vector<double> identities = contigData.second;
+				std::sort(identities.begin(), identities.end());
+				double medianIdentity = identities.at(identities.size()/2);
+				if((highestMedianContigID.length() == 0) || (medianIdentity > highestMedian))
+				{
+					highestMedian = medianIdentity;
+					highestMedianContigID = contigData.first;
+				}
 			}
 		}
 
-		assert(minimum == minIdty);
+		if(highestMedianContigID.length() == 0)
+		{
+			std::cerr << "\n\nERROR: Cannot fit read length and identity distribution from file " << fn << "\n";
+			std::cerr << "\nThe most likely explanation is that no contig in the fitted data has more than " << minimumReadsPerContig << " (this is a parameter that can be changed) reads assigned to it - abort.\n\n";
+			std::cerr << std::flush;
+			exit(1);
+		}
+
+		std::vector<double> identities_bestContig = identitiesPerUnit.at(highestMedianContigID);
+		std::vector<size_t> lengths_bestContig = lengthPerUnit.at(highestMedianContigID);
+
+		std::map<int, size_t> identityHistogram_int;
+		for(auto i : identities_bestContig)
+		{
+			int iI = int((i*100) + 0.5);
+			if(identityHistogram_int.count(iI) == 0)
+			{
+				identityHistogram_int[iI] = 0;
+			}
+			assert(iI >= 0);
+			assert(iI <= 100);
+			identityHistogram_int.at(iI)++;
+			if((minimumIdentity == -1) || (iI < minimumIdentity))
+			{
+				minimumIdentity = iI;
+			}
+		}
+
+		identityHistogram.clear();
+		for(auto i_and_p : identityHistogram_int)
+		{
+			identityHistogram[i_and_p.first] = (double)i_and_p.second/(double)identities_bestContig.size();
+		}
+
+		std::map<size_t, size_t> readLengthHistogram_int;
+		for(auto l : lengths_bestContig)
+		{
+			size_t l_1000 = 1000 * int((l / 1000) + 0.5);
+			if(readLengthHistogram_int.count(l_1000) == 0)
+			{
+				readLengthHistogram_int[l_1000] = 0;
+			}
+			readLengthHistogram_int.at(l_1000)++;
+		}
+
+		readLengthHistogram.clear();
+		for(auto lI : readLengthHistogram_int)
+		{
+			readLengthHistogram[lI.first] = (double)lI.second / lengths_bestContig.size();
+		}
+
 
 		int notDefined = 0;
-		for(int i = minimum; i < 100; i++)
+		for(int i = minimumIdentity; i < 100; i++)
 		{
-			if(h.count(i) == 0)
+			if(identityHistogram.count(i) == 0)
 			{
 				notDefined++;
 			}
 		}
+
 		double newP_notDefined = 1.0/(double)notDefined;
 		double newSum = 0;
-		for(int i = minimum; i < 100; i++)
+		for(int i = minimumIdentity; i < 100; i++)
 		{
-			if(h.count(i) == 0)
+			if(identityHistogram.count(i) == 0)
 			{
-				h[i] = newP_notDefined;
+				identityHistogram[i] = newP_notDefined;
 			}
-			newSum += h.at(i);
+			newSum += identityHistogram.at(i);
 		}
-
-		for(auto& p : h)
+		for(auto& p : identityHistogram)
 		{
 			p.second /= newSum;
+		}
+	}
+
+
+	double getReadLengthP(size_t readLength)
+	{
+		std::vector<size_t> readLengths_vec;
+		readLengths_vec.reserve(readLengthHistogram.size());
+		for(auto rL : readLengthHistogram)
+		{
+			readLengths_vec.push_back(rL.first);
+		}
+		std::sort(readLengths_vec.begin(), readLengths_vec.end());
+		if(readLengths_vec.size() > 1)
+		{
+			assert(readLengths_vec.at(0) < readLengths_vec.at(1));
+		}
+		if(readLength < readLengths_vec.at(0))
+		{
+			return readLengthHistogram.at(readLengths_vec.at(0));
+		}
+		else if(readLength >= readLengths_vec.at(readLengths_vec.size()-1))
+		{
+			return readLengthHistogram.at(readLengths_vec.at(readLengths_vec.size()-1));
+		}
+		else
+		{
+			bool found = false;
+			for(size_t i = 0; i < (readLengths_vec.size() - 1); i++)
+			{
+				size_t rL_i = readLengths_vec.at(i);
+				size_t rL_ip1 = readLengths_vec.at(i+1);
+				if((readLength >= rL_i) && (readLength < rL_ip1))
+				{
+					found = true;
+					double readLength_diff = rL_ip1 - rL_i;
+					assert(readLength_diff > 0);
+					double weight_right = (readLength - rL_i)/readLength_diff;
+					assert((weight_right >= 0) && (weight_right <= 1));
+					double weight_left = 1 - weight_right;
+					double combinedP = readLengthHistogram.at(rL_i) * weight_left + readLengthHistogram.at(rL_ip1) * weight_right;
+					return combinedP;
+				}
+			}
+			assert(found);
+			return 0;
 		}
 	}
 };
@@ -121,6 +229,11 @@ class treeAdjustedIdentities
 {
 public:
 	std::map<std::string, std::map<size_t, std::map<int, double>>> D;
+
+	bool nodeForIndirectAttachment(std::string taxonID)
+	{
+		return (D.count(taxonID) > 0);
+	}
 
 	void readFromFile(std::string fn, const std::set<std::string>& mappings_taxonIDs, const taxonomy& T)
 	{
@@ -187,23 +300,22 @@ std::map<size_t, double> readReadLengthHistogram(std::string fn)
 class identityManager
 {
 protected:
-	identityHistogram& iH;
+	identityAndReadLengthHistogram& iH;
 	treeAdjustedIdentities& tAI;
-	std::map<size_t, double> readLengthHistogram;
 
 	std::map<std::string, std::map<int, double>> indirectMapping_cache;
 
 public:
-	identityManager(identityHistogram& iH, treeAdjustedIdentities& tAI, std::map<size_t, double> readLengthHistogram) : iH(iH), tAI(tAI)
+	identityManager(identityAndReadLengthHistogram& iH, treeAdjustedIdentities& tAI) : iH(iH), tAI(tAI)
 	{
 
 	}
 
-	double getP(int identity, std::string taxonID, bool directlyAttached)
+	double getIdentityP(int identity, std::string taxonID, bool directlyAttached)
 	{
 		if(directlyAttached)
 		{
-			double p = iH.getP(identity);
+			double p = iH.getIdentityP(identity);
 			if(p == 0)
 			{
 				return 1e-4;
@@ -228,7 +340,7 @@ public:
 		}
 	}
 
-	std::map<int, double> getShiftedIdentityHistogramForNode(std::string taxonID)
+	std::map<int, double> getShiftedIdentityHistogramForNode(std::string taxonID) const
 	{
 		assert(tAI.D.count(taxonID));
 		std::map<int, double> forReturn;
@@ -237,13 +349,13 @@ public:
 		for(auto rLI : tAI.D.at(taxonID))
 		{
 			size_t readLength = rLI.first;
-			double readLength_P = getReadLengthP(readLength);
+			double readLength_P = iH.getReadLengthP(readLength);
 
-			std::set<int> keys_iH = iH.getKeys();
+			std::set<int> keys_iH = iH.getIdentityKeys();
 
 			for(auto k1 : keys_iH)
 			{
-				double p1 = iH.getP(k1);
+				double p1 = iH.getIdentityP(k1);
 				for(auto k2P: rLI.second)
 				{
 					int k2 = k2P.first;
@@ -258,7 +370,7 @@ public:
 					assert(newP > 0);
 					assert(newP <= 1);
 
-					if(newK_int < iH.getMinimum())
+					if(newK_int < iH.getIdentityMinimum())
 					{
 						newK_int = 0;
 					}
@@ -283,13 +395,13 @@ public:
 		return forReturn;
 	}
 
-	static std::map<int, double> getConvolutedHistogram(const identityHistogram& iH, std::map<int, double> additionalHistogram)
+	static std::map<int, double> getConvolutedHistogram(const identityAndReadLengthHistogram& iH, std::map<int, double> additionalHistogram)
 	{
 		std::map<int, double> forReturn;
-		std::set<int> keys_iH = iH.getKeys();
+		std::set<int> keys_iH = iH.getIdentityKeys();
 		for(auto k1 : keys_iH)
 		{
-			double p1 = iH.getP(k1);
+			double p1 = iH.getIdentityP(k1);
 			for(auto k2P: additionalHistogram)
 			{
 				int k2 = k2P.first;
@@ -301,7 +413,7 @@ public:
 				int newK_int = int((newK*100) + 0.5);
 				double newP = p1 * p2;
 
-				if(newK_int < iH.getMinimum())
+				if(newK_int < iH.getIdentityMinimum())
 				{
 					newK_int = 0;
 				}
@@ -316,50 +428,6 @@ public:
 		return forReturn;
 	}
 
-	double getReadLengthP(size_t readLength)
-	{
-		std::vector<size_t> readLengths_vec;
-		readLengths_vec.reserve(readLengthHistogram.size());
-		for(auto rL : readLengthHistogram)
-		{
-			readLengths_vec.push_back(rL.first);
-		}
-		std::sort(readLengths_vec.begin(), readLengths_vec.end());
-		if(readLengths_vec.size() > 1)
-		{
-			assert(readLengths_vec.at(0) < readLengths_vec.at(1));
-		}
-		if(readLength < readLengths_vec.at(0))
-		{
-			return readLengthHistogram.at(readLengths_vec.at(0));
-		}
-		else if(readLength >= readLengths_vec.at(readLengths_vec.size()-1))
-		{
-			return readLengthHistogram.at(readLengths_vec.at(readLengths_vec.size()-1));
-		}
-		else
-		{
-			bool found = false;
-			for(size_t i = 0; i < (readLengths_vec.size() - 1); i++)
-			{
-				size_t rL_i = readLengths_vec.at(i);
-				size_t rL_ip1 = readLengths_vec.at(i+1);
-				if((readLength >= rL_i) && (readLength < rL_ip1))
-				{
-					found = true;
-					double readLength_diff = rL_ip1 - rL_i;
-					assert(readLength_diff > 0);
-					double weight_right = (readLength - rL_i)/readLength_diff;
-					assert((weight_right >= 0) && (weight_right <= 1));
-					double weight_left = 1 - weight_right;
-					double combinedP = readLengthHistogram.at(rL_i) * weight_left + readLengthHistogram.at(rL_ip1) * weight_right;
-					return combinedP;
-				}
-			}
-			assert(found);
-			return 0;
-		}
-	}
 };
 
 

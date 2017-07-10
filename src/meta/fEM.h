@@ -131,6 +131,7 @@ oneMappingLocation getBestMapping(const std::vector<oneMappingLocation>& locatio
 	}
 	return locations.at(whichI_maxP);
 }
+
 std::vector<oneMappingLocation> getMappingLocations(const std::map<std::string, std::map<std::string, size_t>>& taxonInfo, const std::map<std::string, double>& f, const std::vector<std::string>& readLines)
 {
 	assert(readLines.size() > 0);
@@ -166,7 +167,9 @@ std::vector<oneMappingLocation> getMappingLocations(const std::map<std::string, 
 		else
 			assert(readID == line_fields.at(0));
 
-		double identity = (std::stoi(line_fields.at(12)))/100.0;
+		double identity = std::stod(line_fields.at(12))/100.0;
+		assert(identity >= 0);
+		assert(identity <= 1);
 
 		saw_taxonIDs.insert(contig_taxonID);
 		saw_contigIDs.insert(contigID);
@@ -249,7 +252,6 @@ void doEM(std::string DBdir, std::string mappedFile)
 	std::set<std::string> relevantTaxonIDs = getTaxonIDsFromMappingsFile(mappedFile);
 
 	// Get numbers of unmapped, short reads
-	// todo
 	std::map<std::string, size_t> mappingStats = getMappingStats(mappedFile);
 	size_t nUnmapped = mappingStats.at("ReadsNotMapped");
 	size_t nTooShort = mappingStats.at("ReadsTooShort");
