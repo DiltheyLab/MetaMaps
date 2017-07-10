@@ -137,5 +137,19 @@ size_t overlap(size_t eins_left, size_t eins_right, size_t zwei_left, size_t zwe
 	return O;
 }
 
+bool fileExists(std::string filepath)
+{
+	std::ifstream ifile(filepath);
+	if(ifile.good())
+	{
+		ifile.close();
+		return true;
+	}
+	else
+	{
+		return false;
+	}
+}
+
 
 #endif /* META_UTIL_H_ */

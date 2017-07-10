@@ -224,7 +224,25 @@ std::vector<oneMappingLocation> getMappingLocations(const std::map<std::string, 
 	return mappingLocations;
 }
 
-
+std::map<std::string, size_t> getMappingStats(std::string mappedFile)
+{
+	std::map<std::string, size_t> forReturn;
+	std::ifstream statsStream (mappedFile + ".meta");
+	assert(statsStream.is_open());
+	std::string line;
+	while(statsStream.good())
+	{
+		std::getline(statsStream, line);
+		eraseNL(line);
+		if(line.length() == 0)
+		{
+			std::vector<std::string> line_fields = split(line, " ");
+			assert(line_fields.size() == 2);
+			forReturn[line_fields.at(0)] = std::stoull(line_fields.at(1));
+		}
+	}
+	return forReturn;
+}
 
 void doEM(std::string DBdir, std::string mappedFile)
 {
@@ -232,8 +250,9 @@ void doEM(std::string DBdir, std::string mappedFile)
 
 	// Get numbers of unmapped, short reads
 	// todo
-	size_t nUnmapped = 0;
-	size_t nTooShort = 0;
+	std::map<std::string, size_t> mappingStats = getMappingStats(mappedFile);
+	size_t nUnmapped = mappingStats.at("ReadsNotMapped");
+	size_t nTooShort = mappingStats.at("ReadsTooShort");
 
 	// get genome info
 	std::map<std::string, std::map<std::string, size_t>> taxonInfo = loadRelevantTaxonInfo(DBdir, relevantTaxonIDs);
