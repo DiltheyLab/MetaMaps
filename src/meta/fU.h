@@ -13,6 +13,7 @@
 #include <vector>
 #include <map>
 #include <fstream>
+#include <utility>
 
 #include "fEM.h"
 #include "util.h"
@@ -44,41 +45,47 @@ void producePotFile_U(std::string outputFN, const taxonomy& T, std::pair<std::ma
 		combinedKeys.insert(f.first);
 	}
 
+	std::map<std::string, std::pair<std::map<std::string, double>, std::map<std::string, double>>> frequencies_perLevel;
+	std::map<std::string, std::pair<std::map<std::string, size_t>, std::map<std::string, size_t>>> readCount_perLevel;
+
 	std::map<std::string, std::set<std::string>> combinedKeys_perLevel;
 
-	std::map<std::string, std::map<std::string, double>> f_direct_per_level;
-	for(auto freq_per_node : frequencies.first)
+	for(auto taxonID : combinedKeys)
 	{
-		std::string nodeID = freq_per_node.first;
-		assert(T.knowNode(nodeID));
-		std::map<std::string, std::string> upwardByLevel = T.getUpwardNodesByRanks(nodeID);
-		upwardByLevel["EqualCoverageUnit"] = nodeID;
+		std::map<std::string, std::string> upwardByLevel = T.getUpwardNodesByRanks(taxonID);
 		for(auto uN : upwardByLevel)
 		{
-			if(f_per_level[uN.first].count(uN.second) == 0)
-				f_per_level[uN.first][uN.second] = 0;
+			std::string level = uN.first;
+			std::string levelValue = uN.second;
+			combinedKeys_perLevel[level].insert(levelValue);
 
-			f_per_level[uN.first][uN.second] += freq_per_node.second;
-			combinedKeys_perLevel[uN.first].insert(uN.second);
+			if(frequencies_perLevel[level].first.count(levelValue) == 0)
+			{
+				frequencies_perLevel[level].first[levelValue] = 0;
+				frequencies_perLevel[level].second[levelValue] = 0;
+				readCount_perLevel[level].first[levelValue] = 0;
+				readCount_perLevel[level].second[levelValue] = 0;
+			}
 
-			assert(f_per_level[uN.first][uN.second] >= 0);
-			assert(f_per_level[uN.first][uN.second] <= 1);
-		}
-	}
-	std::map<std::string, std::map<std::string, size_t>> rC_per_level;
-	for(auto count_per_node : readCount)
-	{
-		std::string nodeID = count_per_node.first;
-		assert(T.knowNode(nodeID));
-		std::map<std::string, std::string> upwardByLevel = T.getUpwardNodesByRanks(nodeID);
-		upwardByLevel["EqualCoverageUnit"] = nodeID;
-		for(auto uN : upwardByLevel)
-		{
-			if(f_per_level[uN.first].count(uN.second) == 0)
-				rC_per_level[uN.first][uN.second] = 0;
+			if(frequencies.first.count(taxonID))
+			{
+				frequencies_perLevel.at(level).first.at(levelValue) += frequencies.first.at(taxonID);
+			}
 
-			rC_per_level[uN.first][uN.second] += count_per_node.second;
-			combinedKeys_perLevel[uN.first].insert(uN.second);
+			if(frequencies.second.count(taxonID))
+			{
+				frequencies_perLevel.at(level).second.at(levelValue) += frequencies.second.at(taxonID);
+			}
+
+			if(readCount.first.count(taxonID))
+			{
+				readCount_perLevel.at(level).first.at(levelValue) += readCount.first.at(taxonID);
+			}
+
+			if(readCount.second.count(taxonID))
+			{
+				readCount_perLevel.at(level).second.at(levelValue) += readCount.second.at(taxonID);
+			}
 		}
 	}
 
@@ -86,7 +93,7 @@ void producePotFile_U(std::string outputFN, const taxonomy& T, std::pair<std::ma
 	std::ofstream strout_frequencies(outputFN);
 	assert(strout_frequencies.is_open());
 
-	strout_frequencies << "AnalysisLevel" << "\t" <<  "ID" << "\t" << "Name" << "\t" <<  "Absolute" << "\t" <<  "PotFrequency" << "\n";
+	strout_frequencies << "AnalysisLevel" << "\t" <<  "ID" << "\t" << "Name" << "\t" << "Absolute_direct" << "\t" << "Absolute_indirect" << "\t" << "PotFrequency_direct" << "\t" << "Potfrequency_indirect" << "\t" <<  "Absolute" << "\t" <<  "PotFrequency" << "\n";
 
 	for(auto l : combinedKeys_perLevel)
 	{
@@ -95,14 +102,18 @@ void producePotFile_U(std::string outputFN, const taxonomy& T, std::pair<std::ma
 		for(auto taxonID : l.second)
 		{
 			std::string taxonIDName = T.getNode(taxonID).name.scientific_name;
-			double f = (f_per_level[levelName].count(taxonID)) ? f_per_level[levelName][taxonID] : 0;
-			size_t rC = (rC_per_level[levelName].count(taxonID)) ? rC_per_level[levelName][taxonID] : 0;
 
-			strout_frequencies << levelName << "\t" << taxonID << "\t" << taxonIDName << "\t" << rC << "\t" << f << "\n";
+			strout_frequencies <<
+					levelName << "\t" <<
+					taxonID << "\t" <<
+					taxonIDName << "\t" <<
+					readCount_perLevel.at(levelName).first.at(taxonID) << "\t" <<
+					readCount_perLevel.at(levelName).second.at(taxonID) << "\t" <<
+					frequencies_perLevel.at(levelName).first.at(taxonID) << "\t" <<
+					frequencies_perLevel.at(levelName).second.at(taxonID) << "\t" <<
+					(readCount_perLevel.at(levelName).first.at(taxonID) + readCount_perLevel.at(levelName).second.at(taxonID)) << "\t" <<
+					(frequencies_perLevel.at(levelName).first.at(taxonID) + frequencies_perLevel.at(levelName).second.at(taxonID)) << "\n";
 		}
-		strout_frequencies << levelName << "\t" << 0 << "\t" <<  "Unmapped" << "\t" << nUnmapped << "\t" << 0 << "\n";
-		strout_frequencies << levelName << "\t" << 0 << "\t" <<  "TooShort" << "\t" << nTooShort << "\t" << 0 << "\n";
-
 	}
 
 	strout_frequencies.close();
@@ -181,7 +192,7 @@ std::vector<oneMappingLocation_U> getMappingLocations_U(identityManager& iM, con
 		l.readLength = readLength;
 		l.identity = identity;
 		l.direct = true;
-		l.l = f.first.at(contig_taxonID) * iM.getIdentityP(identityInt, contig_taxonID, true);
+		l.l = f.first.at(contig_taxonID) * iM.getIdentityP(identityInt, contig_taxonID, readLength, true);
 		mappingLocations.push_back(l);
 
 		for(auto indirectTaxon : indirectUpwardNodes.at(contig_taxonID))
@@ -195,7 +206,7 @@ std::vector<oneMappingLocation_U> getMappingLocations_U(identityManager& iM, con
 			lI.readLength = readLength;
 			lI.identity = identity;
 			lI.direct = false;
-			lI.l = f.second.at(indirectTaxon) * iM.getIdentityP(identityInt, indirectTaxon, false);
+			lI.l = f.second.at(indirectTaxon) * iM.getIdentityP(identityInt, indirectTaxon, readLength, false);
 			mappingLocations.push_back(l);
 		}
 	}
@@ -216,6 +227,8 @@ std::vector<oneMappingLocation_U> getMappingLocations_U(identityManager& iM, con
 
 void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestContig)
 {
+	unsigned int round_first_unknown = 0;
+
 	taxonomy T(DBdir+"/taxonomy");
 
 	std::set<std::string> taxonIDsInMappings = getTaxonIDsFromMappingsFile(mappedFile);
@@ -238,7 +251,9 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 	// mapping stats
 	std::map<std::string, size_t> mappingStats = getMappingStats(mappedFile);
 	size_t nUnmapped = mappingStats.at("ReadsNotMapped");
-	size_t nTooShort = mappingStats.at("ReadsTooShort");
+
+	std::vector<size_t> unmappedReadsLengths = getUnmappedReadsStats(mappedFile);
+	assert(unmappedReadsLengths.size() == nUnmapped); // can remove later
 
 	// set up nodes to map to
 
@@ -271,14 +286,14 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 		f.second[nI] = 1.0/(double)relevantTaxonIDs_indirect.size();
 	}
 
-	// set up EM
+	// set up U-EM
 
 	double ll_lastIteration;
 	size_t EMiteration = 0;
 	bool continueEM = true;
 	while(continueEM)
 	{
-		double ll_thisIteration = 0;
+		double ll_thisIteration_mapped = 0;
 		std::pair<std::map<std::string, double>, std::map<std::string, double>> f_nextIteration = f;
 		for(auto& fNextEntry : f_nextIteration.first)
 		{
@@ -307,17 +322,70 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 					f_nextIteration.second.at(mL.taxonID) += mL.p;
 				}
 			}
-			ll_thisIteration += log(l_read);
+			ll_thisIteration_mapped += log(l_read);
 		};
 
 		callBackForAllReads(mappedFile, processOneRead);
 
+		double ll_thisIteration_unmapped = 0;
+		if(EMiteration >= round_first_unknown)
+		{
+			for(auto oneUnmappedReadLength : unmappedReadsLengths)
+			{
+				std::map<std::string, double> unmapped_p;
+				double unmapped_p_sum = 0;
+
+				for(auto taxonIDf : f.second)
+				{
+					double p_unmapped = taxonIDf.second * iM.getIdentityP(0, taxonIDf.first, oneUnmappedReadLength, false);
+					unmapped_p[taxonIDf.first] = p_unmapped;
+					unmapped_p_sum += p_unmapped;
+				}
+
+				for(auto& tID : unmapped_p)
+				{
+					tID.second /= unmapped_p_sum;
+				}
+
+				for(auto tID : unmapped_p)
+				{
+					f_nextIteration.second.at(tID.first) += tID.second;
+				}
+
+				ll_thisIteration_unmapped += log(unmapped_p_sum);
+			}
+		}
+
+		double f_sum = 0;
+		for(auto tF : f_nextIteration.first)
+		{
+			f_sum += tF.second;
+		}
+		for(auto tF : f_nextIteration.second)
+		{
+			f_sum += tF.second;
+		}
+
+		for(auto& tF : f_nextIteration.first)
+		{
+			tF.second /= f_sum;
+		}
+		for(auto& tF : f_nextIteration.second)
+		{
+			tF.second /= f_sum;
+		}
+
+
+		double ll_thisIteration = ll_thisIteration_mapped + ll_thisIteration_unmapped;
+
 		double ll_diff = ll_thisIteration - ll_lastIteration;
-		assert(ll_diff >= 0);
+
+		if(EMiteration != round_first_unknown)
+			assert(ll_diff >= 0);
 
 		double ll_improvement = ll_thisIteration / ll_lastIteration;
 
-		if((EMiteration > 0) && (ll_improvement < 1.1))
+		if((EMiteration > 0) && (ll_improvement < 1.1) && (EMiteration != round_first_unknown))
 		{
 			continueEM = false;
 		}
@@ -327,10 +395,65 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 		ll_lastIteration = ll_thisIteration;
 	}
 
+	// output file names
+
+	std::string output_assigned_reads_and_identities = mappedFile + ".U.lengthAndIdentitiesPerTaxonID";
+	std::string output_pot_frequencies = mappedFile + ".U.WIMP";
 
 
+	std::ofstream strout_reads_identities(output_assigned_reads_and_identities);
+	assert(strout_reads_identities.is_open());
+	strout_reads_identities << "taxonID" << "\t" << "directIndirect" << "\t" << "taxonName" << "\t" << "Identity" << "\t" << "Length" << "\n";
 
+	std::pair<std::map<std::string, size_t>, std::map<std::string, size_t>> assignedReads;
 
+	std::function<void(const std::vector<std::string>&)> processOneRead_final = [&](const std::vector<std::string>& readLines) -> void
+	{
+		assert(readLines.size() > 0);
+		std::vector<oneMappingLocation_U> mappingLocations = getMappingLocations_U(iM, indirectUpwardNodes, f, readLines);
+
+		oneMappingLocation_U bestMapping = getBestMapping_U(mappingLocations);
+
+		std::map<std::string, size_t>& assignedReads_dirIndir = (bestMapping.direct) ? assignedReads.first : assignedReads.second;
+		if(assignedReads_dirIndir.count(bestMapping.taxonID) == 0)
+		{
+			assignedReads_dirIndir[bestMapping.taxonID] = 0;
+		}
+		assignedReads_dirIndir.at(bestMapping.taxonID)++;
+
+		strout_reads_identities <<
+				bestMapping.taxonID << "\t" <<
+				((bestMapping.direct) ? "direct" : "indirect") << "\t" <<
+				T.getNode(bestMapping.taxonID).name.scientific_name << "\t" <<
+				bestMapping.identity << "\t" <<
+				bestMapping.readLength << "\n";
+	};
+
+	callBackForAllReads(mappedFile, processOneRead_final);
+
+	for(auto oneUnmappedReadLength : unmappedReadsLengths)
+	{
+		std::map<std::string, double> unmapped_p;
+		double unmapped_p_sum = 0;
+
+		double best_unmapped_P;
+		std::string best_unmapped_P_which;
+		for(auto taxonIDf : f.second)
+		{
+			double p_unmapped = taxonIDf.second * iM.getIdentityP(0, taxonIDf.first, oneUnmappedReadLength, false);
+			if((best_unmapped_P_which.length() == 0) || (best_unmapped_P < p_unmapped))
+			{
+				best_unmapped_P = p_unmapped;
+				best_unmapped_P_which = taxonIDf.first;
+			}
+		}
+
+		assignedReads.second[best_unmapped_P_which]++;
+	}
+
+	producePotFile_U(output_pot_frequencies, T, f, assignedReads);
+
+	strout_reads_identities.close();
 }
 
 }

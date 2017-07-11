@@ -87,6 +87,7 @@ protected:
 			}
 		};
 
+		std::vector<size_t> unmappedReadsLengths;
 		size_t totalInputReads = 0;
 		size_t inputReads_mapped = 0;
 		size_t inputReads_tooShort = 0;
@@ -124,6 +125,7 @@ protected:
 					if(combinedLines.size() == 0)
 					{
 						inputReads_notMapped++;
+						unmappedReadsLengths.push_back(len);
 					}
 					else
 					{
@@ -164,6 +166,14 @@ protected:
 		metaOutput << "ReadsMapped" << " " << inputReads_mapped << "\n";
 		metaOutput << "ReadsNotMapped" << " " << inputReads_notMapped << "\n";
 		metaOutput.close();
+
+		std::ofstream metaLengths(unifiedOutputFN+".meta.unmappedReadsLengths");
+		assert(metaLengths.is_open());
+		for(auto l : unmappedReadsLengths)
+		{
+			metaLengths << l << "\n";
+		}
+		metaLengths.close();
 
 		combinedOutput.close();
 	}

@@ -237,11 +237,30 @@ std::map<std::string, size_t> getMappingStats(std::string mappedFile)
 	{
 		std::getline(statsStream, line);
 		eraseNL(line);
-		if(line.length() == 0)
+		if(line.length() != 0)
 		{
 			std::vector<std::string> line_fields = split(line, " ");
 			assert(line_fields.size() == 2);
 			forReturn[line_fields.at(0)] = std::stoull(line_fields.at(1));
+		}
+	}
+	return forReturn;
+}
+
+std::vector<size_t> getUnmappedReadsStats(std::string mappedFile)
+{
+	std::vector<size_t> forReturn;
+	std::ifstream statsStream (mappedFile + ".meta.unmappedReadsLengths");
+	assert(statsStream.is_open());
+	std::string line;
+	while(statsStream.good())
+	{
+		std::getline(statsStream, line);
+		eraseNL(line);
+		if(line.length() != 0)
+		{
+			size_t l = std::stoull(line);
+			forReturn.push_back(l);
 		}
 	}
 	return forReturn;
@@ -312,10 +331,10 @@ void doEM(std::string DBdir, std::string mappedFile)
 		ll_lastIteration = ll_thisIteration;
 	}
 
-	std::string output_pot_frequencies = mappedFile + ".WIMP";
-	std::string output_recalibrated_mappings = mappedFile + ".postEM";
-	std::string output_assigned_reads_and_identities = mappedFile + ".lengthAndIdentitiesPerMappingUnit";
-	std::string output_contig_coverage = mappedFile + ".contigCoverage";
+	std::string output_pot_frequencies = mappedFile + ".EM.WIMP";
+	std::string output_recalibrated_mappings = mappedFile + ".EM";
+	std::string output_assigned_reads_and_identities = mappedFile + ".EM.lengthAndIdentitiesPerMappingUnit";
+	std::string output_contig_coverage = mappedFile + ".EM.contigCoverage";
 
 	std::ofstream strout_reads_identities(output_assigned_reads_and_identities);
 	assert(strout_reads_identities.is_open());

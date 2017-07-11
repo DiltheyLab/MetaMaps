@@ -178,7 +178,6 @@ public:
 		}
 	}
 
-
 	double getReadLengthP(size_t readLength)
 	{
 		std::vector<size_t> readLengths_vec;
@@ -210,9 +209,9 @@ public:
 				if((readLength >= rL_i) && (readLength < rL_ip1))
 				{
 					found = true;
-					double readLength_diff = rL_ip1 - rL_i;
+					long long readLength_diff = rL_ip1 - rL_i;
 					assert(readLength_diff > 0);
-					double weight_right = (readLength - rL_i)/readLength_diff;
+					double weight_right = (readLength - rL_i)/(double)readLength_diff;
 					assert((weight_right >= 0) && (weight_right <= 1));
 					double weight_left = 1 - weight_right;
 					double combinedP = readLengthHistogram.at(rL_i) * weight_left + readLengthHistogram.at(rL_ip1) * weight_right;
@@ -229,6 +228,43 @@ class treeAdjustedIdentities
 {
 public:
 	std::map<std::string, std::map<size_t, std::map<int, double>>> D;
+
+	std::vector<size_t> getTwoClosestReadLenghts(std::string taxonID, size_t targetReadLength)
+	{
+		std::vector<size_t> readLengths_vec;
+		readLengths_vec.reserve(D.at(taxonID).size());
+		for(auto rL : D.at(taxonID))
+		{
+			readLengths_vec.push_back(rL.first);
+		}
+		std::sort(readLengths_vec.begin(), readLengths_vec.end());
+		assert(readLengths_vec.size());
+
+		if(targetReadLength < readLengths_vec.at(0))
+		{
+			return std::vector<size_t>({readLengths_vec.at(0)});
+		}
+		else if(targetReadLength >= readLengths_vec.at(readLengths_vec.size()-1))
+		{
+			return std::vector<size_t>({readLengths_vec.at(readLengths_vec.size()-1)});
+		}
+		else
+		{
+			bool found = false;
+			for(size_t i = 0; i < (readLengths_vec.size() - 1); i++)
+			{
+				size_t rL_thisI = readLengths_vec.at(i);
+				size_t rl_nextI = readLengths_vec.at(i+1);
+				if((targetReadLength >= rL_thisI) && (targetReadLength < rl_nextI))
+				{
+					return std::vector<size_t>({rL_thisI, rl_nextI});
+					found = true;
+				}
+			}
+			assert(found);
+			return std::vector<size_t>();
+		}
+	}
 
 	bool nodeForIndirectAttachment(std::string taxonID)
 	{
@@ -304,14 +340,17 @@ protected:
 	treeAdjustedIdentities& tAI;
 
 	std::map<std::string, std::map<int, double>> indirectMapping_cache;
+	std::map<std::string, std::map<size_t, std::map<int, double>>> indirectMapping_cache_granularReads;
+
+	bool granularReadIdentities;
 
 public:
 	identityManager(identityAndReadLengthHistogram& iH, treeAdjustedIdentities& tAI) : iH(iH), tAI(tAI)
 	{
-
+		granularReadIdentities = false;
 	}
 
-	double getIdentityP(int identity, std::string taxonID, bool directlyAttached)
+	double getIdentityP(int identity, std::string taxonID, size_t readLength, bool directlyAttached)
 	{
 		if(directlyAttached)
 		{
@@ -328,17 +367,95 @@ public:
 		else
 		{
 			assert(tAI.D.count(taxonID));
-			if(indirectMapping_cache[taxonID].count(identity))
+			if(granularReadIdentities)
 			{
-				return indirectMapping_cache.at(taxonID).at(identity);
+				// todo perhaps reconsider
+				readLength = size_t(readLength/(double)100 + 0.5) * 100;
+
+				if(indirectMapping_cache_granularReads[taxonID][readLength].count(identity))
+				{
+					return indirectMapping_cache_granularReads.at(taxonID).at(readLength).at(identity);
+				}
+				else
+				{
+					std::map<int, double> histogramForNode = getShiftedIdentityHistogramForNode_oneReadLength(taxonID, readLength);
+					double forReturn =(histogramForNode.count(identity)) ? histogramForNode.at(identity) : 0;
+					indirectMapping_cache_granularReads.at(taxonID).at(readLength)[identity] = forReturn;
+					return forReturn;
+				}
 			}
 			else
 			{
-				std::map<int, double> histogramForNode = getShiftedIdentityHistogramForNode(taxonID);
-				return (histogramForNode.count(identity)) ? histogramForNode.at(identity) : 0;
+				if(indirectMapping_cache[taxonID].count(identity))
+				{
+					return indirectMapping_cache.at(taxonID).at(identity);
+				}
+				else
+				{
+					std::map<int, double> histogramForNode = getShiftedIdentityHistogramForNode(taxonID);
+					double forReturn = (histogramForNode.count(identity)) ? histogramForNode.at(identity) : 0;
+					indirectMapping_cache.at(taxonID)[identity] = forReturn;
+					return forReturn;
+				}
 			}
 		}
 	}
+
+	std::map<int, double> getShiftedIdentityHistogramForNode_oneReadLength(std::string taxonID, size_t readLength) const
+	{
+		assert(tAI.D.count(taxonID));
+
+		std::vector<size_t> closestReadLengths = tAI.getTwoClosestReadLenghts(taxonID, readLength);
+		assert((closestReadLengths.size() == 1) || (closestReadLengths.size() == 2));
+		if(closestReadLengths.size() == 1)
+		{
+			return getConvolutedHistogram(iH, tAI.D.at(taxonID).at(closestReadLengths.at(0)));
+		}
+		else
+		{
+			size_t existing_rL1 = closestReadLengths.at(0);
+			size_t existing_rL2  = closestReadLengths.at(1);
+			assert(existing_rL1 < existing_rL2);
+
+			long long readLength_diff = existing_rL2 - existing_rL1;
+			assert(readLength_diff > 0);
+			double weight_right = (readLength - existing_rL1)/(double)readLength_diff;
+			assert((weight_right >= 0) && (weight_right <= 1));
+			double weight_left = 1 - weight_right;
+
+			std::map<int, double> h1 = getConvolutedHistogram(iH, tAI.D.at(taxonID).at(existing_rL1));
+			std::map<int, double> h2 = getConvolutedHistogram(iH, tAI.D.at(taxonID).at(existing_rL2));
+
+			std::set<int> combinedIdentities;
+			for(auto i : h1)
+			{
+				combinedIdentities.insert(i.first);
+			}
+			for(auto i : h2)
+			{
+				combinedIdentities.insert(i.first);
+			}
+			std::map<int, double> forReturn;
+
+			for(auto iV : combinedIdentities)
+			{
+				double v1 = (h1.count(iV)) ? h1.at(iV) : 0;
+				double v2 = (h2.count(iV)) ? h2.at(iV) : 0;
+				double vAvg = weight_left * v1 + weight_right * v2;
+				forReturn[iV] = vAvg;
+			}
+
+			double fR_sum = 0;
+			for(auto fR : forReturn)
+			{
+				fR_sum += fR.second;
+			}
+			assert(abs(1 - fR_sum) <= 1e-3);
+
+			return forReturn;
+		}
+	}
+
 
 	std::map<int, double> getShiftedIdentityHistogramForNode(std::string taxonID) const
 	{
