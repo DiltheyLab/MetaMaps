@@ -19,7 +19,6 @@
 #include "map/include/commonFunc.hpp"
 
 //More includes
-#include "meta/taxonomy.h"
 
 //External includes
 #include "common/argvparser.hpp"
@@ -91,6 +90,13 @@ namespace skch
 			cmd.defineOption("output", "output file", ArgvParser::OptionRequiresValue);
 			cmd.defineOptionAlternative("output","o");
         }
+    }
+
+    if(mode == "classify")
+    {
+        cmd.defineOption("DB", "Path to DB", ArgvParser::OptionRequired | ArgvParser::OptionRequiresValue);
+        cmd.defineOption("mappings", "Path to mappings file", ArgvParser::OptionRequired | ArgvParser::OptionRequiresValue);
+        cmd.defineOption("minreads", "Minimum number of reads per contig to be considered for fitting identity and length for the 'Unknown' functionality", ArgvParser::OptionRequiresValue);
     }
   }
 
@@ -194,6 +200,14 @@ namespace skch
 		std::cout << "Report all = " << parameters.reportAll << std::endl;
 		std::cout << "Target max. memory = " << parameters.maximumMemory << std::endl;
 		std::cout << "Mapping output file = " << parameters.outFileName << std::endl;
+		std::cout << ">>>>>>>>>>>>>>>>>>" << std::endl;
+	}
+	else if(mode == "classify")
+	{
+		std::cout << ">>>>>>>>>>>>>>>>>>" << std::endl;
+		std::cout << "DB = " << parameters.DB << std::endl;
+		std::cout << "Mappings = " << parameters.mappingsForClassification << std::endl;
+		std::cout << "Min. reads for 'U' = " << parameters.minimumReadsForU << std::endl;
 		std::cout << ">>>>>>>>>>>>>>>>>>" << std::endl;
 	}
 	else
@@ -375,6 +389,44 @@ void parseandSave(int argc, char** argv,  CommandLineProcessing::ArgvParser &cmd
 			str << cmd.optionValue("output");
 			str >> output;
 			parameters.outFileName = output;
+		}
+	}
+
+	if(mode == "classify")
+	{
+		if(!cmd.foundOption("DB"))
+		{
+			std::cerr << "Provide path to DB.\n";
+			exit(1);
+		}
+		else
+		{
+			std::stringstream str;
+			str << cmd.optionValue("DB");
+			str >> parameters.DB;
+		}
+
+		if(!cmd.foundOption("mappings"))
+		{
+			std::cerr << "Provide path to mappings.\n";
+			exit(1);
+		}
+		else
+		{
+			std::stringstream str;
+			str << cmd.optionValue("mappings");
+			str >> parameters.mappingsForClassification;
+		}
+
+		if(!cmd.foundOption("minreads"))
+		{
+			parameters.minimumReadsForU = 10000;
+		}
+		else
+		{
+			std::stringstream str;
+			str << cmd.optionValue("minreads");
+			str >> parameters.minimumReadsForU;
 		}
 	}
 

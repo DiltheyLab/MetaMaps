@@ -20,6 +20,8 @@
 
 #include "map/include/map_parameters.hpp"
 #include "map/include/parseCmdArgs.hpp"
+#include "meta/fEM.h"
+#include "meta/fU.h"
 
 //include "map/include/base_types.hpp"
 
@@ -285,6 +287,14 @@ int main(int argc, char** argv)
 	{
 		assert(parameters.index.length());
 		mW.mapAgainstIndex(parameters, parameters.index);
+	}
+	else if(firstArgument == "classify")
+	{
+		assert(parameters.DB.length());
+		assert(parameters.mappingsForClassification.length());
+
+		meta::doEM(parameters.DB, parameters.mappingsForClassification);
+		meta::doU(parameters.DB, parameters.mappingsForClassification, parameters.minimumReadsForU);
 	}
 
 	return 0;

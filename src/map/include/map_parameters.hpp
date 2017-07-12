@@ -69,6 +69,9 @@ namespace skch
 
     std::string index;
     size_t maximumMemory;
+    std::string DB;
+	std::string mappingsForClassification;
+	size_t minimumReadsForU;
 	
 	Parameters()
 	{
@@ -81,6 +84,7 @@ namespace skch
 		p_value = 0;
 		reportAll = false;
 		maximumMemory = 0;
+		minimumReadsForU = 0;
 	}
   };
 }
