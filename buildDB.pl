@@ -84,11 +84,16 @@ my $taxonomy_href = taxTree::readTaxonomy($taxonomyDir);
 print "\tdone.\n\n";
 
 # get list of contigs IDs and their positions			
-					
+			
+my %taxonID_2_contig;	
+my %contig_2_length;		
 my %taxonIDs;
 my @contigs;
 for(my $fileI = 0; $fileI <= $#FASTAfiles; $fileI++)
 {
+	my $currentContigID;
+	my $currentContigRunningLength;
+		
 	my $fileN = $FASTAfiles[$fileI];
 	open(F, '<', $fileN) or die "Cannot open file $fileN";
 	while(<F>)
@@ -110,9 +115,30 @@ for(my $fileI = 0; $fileI <= $#FASTAfiles; $fileI++)
 			{
 				die "Taxon ID $taxonID - from file $fileN, line $. - not found in taxonomy -- consider updating your taxonomy directory.";
 			}
+			
+			push(@{$taxonID_2_contig{$taxonID}}, substr($contigID, 1));
+			
+			if(defined $currentContigID)
+			{
+				die unless(defined $currentContigRunningLength);
+				$contig_2_length{$currentContigID} = $currentContigRunningLength;
+			}
+			$currentContigID = substr($contigID, 1);
+			$currentContigRunningLength = 0;
+			
+		}
+		else
+		{
+			chomp;
+			$currentContigRunningLength += length($_);
 		}
 	}
 	close(F);
+	if(defined $currentContigID)
+	{
+		die unless(defined $currentContigRunningLength);
+		$contig_2_length{$currentContigID} = $currentContigRunningLength;
+	}	
 }
 @contigs = shuffle @contigs;
 
@@ -145,6 +171,16 @@ my $getContigSequence = sub {
 	return $contigSequence;
 };
 
+my $outputTaxonsAndContigs = $DB . '/' . 'taxonInfo.txt';
+open(DB, '>', $outputTaxonsAndContigs) or die "Cannot open $outputTaxonsAndContigs - check whether I have write permissions";
+foreach my $taxonID (keys %taxonID_2_contig)
+{
+	my @contigs = @{$taxonID_2_contig{$taxonID}};
+	
+	print DB $taxonID, " ", join(';', map {die unless(defined $contig_2_length{$_}); $_ . '=' . $contig_2_length{$_}} @contigs), "\n";
+}
+close(DB);
+
 my $outputFN = $DB . '/' . 'DB.fa';
 open(DB, '>', $outputFN) or die "Cannot open $outputFN - check whether I have write permissions";
 for(my $contigI = 0; $contigI <= $#contigs; $contigI++)
@@ -155,7 +191,7 @@ for(my $contigI = 0; $contigI <= $#contigs; $contigI++)
 }
 close(DB);
 
-print "\nProduced randomized-order database sequence file $outputFN\n\n";
+print "\nProduced randomized-order database sequence file $outputFN and\n\ttaxon info file $outputTaxonsAndContigs\n\n";
 
 sub print_help
 {

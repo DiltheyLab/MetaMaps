@@ -10,6 +10,7 @@
 
 #include <string>
 #include <assert.h>
+#include <boost/filesystem.hpp>
 #include <boost/archive/text_oarchive.hpp>
 #include <fstream>
 #include <zlib.h>
@@ -143,6 +144,12 @@ protected:
 		}
 
 		combinedOutput.close();
+		
+		for(auto resultsFile : mappingFiles)
+		{
+			boost::filesystem::wpath F(resultsFile);
+			assert(boost::filesystem::remove(F));
+		}		
 	}
 
 	void addMappingQualities(const skch::Parameters& param, std::vector<std::string>& lines)
