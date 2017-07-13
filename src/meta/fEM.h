@@ -367,7 +367,7 @@ void doEM(std::string DBdir, std::string mappedFile)
 			std::cout << "\tImprovement: " << ll_diff << std::endl;
 			std::cout << "\tRelative   : " << ll_relative << std::endl;
 		
-			if(ll_relative < 1.01)
+			if(abs(1-ll_relative) < 0.01)
 			{
 				continueEM = false;
 			}
@@ -434,6 +434,10 @@ void doEM(std::string DBdir, std::string mappedFile)
 					n_windows++;
 					size_last_window[bestMapping.taxonID][bestMapping.contigID] = contigLength - (n_windows * coverage_windowSize);
 				}
+				else
+				{
+					size_last_window[bestMapping.taxonID][bestMapping.contigID] = coverage_windowSize;
+				}
 			}
 			coverage_per_contigID[bestMapping.taxonID][bestMapping.contigID].resize(n_windows, 0);
 		}
@@ -478,7 +482,7 @@ void doEM(std::string DBdir, std::string mappedFile)
 			for(size_t windowI = 0; windowI < contigData.second.size(); windowI++)
 			{
 				size_t windowLength = coverage_windowSize;
-				if((windowI == (contigData.second.size()-1)) && (size_last_window.at(taxonData.first).at(contigData.first) != 0))
+				if((windowI == (contigData.second.size()-1)))
 				{
 					windowLength = size_last_window.at(taxonData.first).at(contigData.first);
 				}

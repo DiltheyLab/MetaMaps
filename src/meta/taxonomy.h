@@ -55,10 +55,7 @@ public:
 		for(auto n : uN)
 		{
 			std::string rank = T.at(n).rank;
-			
-			std::cerr << "Node " << n << " rank " << rank << std::endl; // todo remove
-
-					
+								
 			if(rank != "no rank")
 			{
 				if(forReturn.count(rank))
