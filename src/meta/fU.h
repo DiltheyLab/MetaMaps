@@ -315,10 +315,12 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 				l_read += mL.l;
 				if(mL.direct)
 				{
+					assert(f_nextIteration.first.count(mL.taxonID));					
 					f_nextIteration.first.at(mL.taxonID) += mL.p;
 				}
 				else
 				{
+					assert(f_nextIteration.second.count(mL.taxonID));										
 					f_nextIteration.second.at(mL.taxonID) += mL.p;
 				}
 			}

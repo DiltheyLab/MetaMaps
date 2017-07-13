@@ -49,14 +49,23 @@ public:
 
 	std::map<std::string, std::string> getUpwardNodesByRanks(std::string nodeID) const
 	{
+		std::cerr << "Search for node " << nodeID << std::endl; // todo remove
 		std::map<std::string, std::string> forReturn;
 		std::vector<std::string> uN = getUpwardNodes(nodeID);
 		for(auto n : uN)
 		{
-			std::string rank = T.at(nodeID).rank;
+			std::string rank = T.at(n).rank;
+			
+			std::cerr << "Node " << n << " rank " << rank << std::endl; // todo remove
+
+					
 			if(rank != "no rank")
 			{
-				assert(forReturn.count(rank) == 0);
+				if(forReturn.count(rank))
+				{
+					std::cerr << "Node " << nodeID << " has multiple entries for rank " << rank << std::endl;
+					exit(1);
+				}
 				forReturn[rank] = n;
 			}
 		}

@@ -143,6 +143,7 @@ std::vector<oneMappingLocation> getMappingLocations(const std::map<std::string, 
 
 	std::string readID;
 	long long readLength = -1;
+	double mQ_sum = 0;
 	for(auto line : readLines)
 	{
 		std::vector<std::string> line_fields = split(line, " ");
@@ -153,12 +154,18 @@ std::vector<oneMappingLocation> getMappingLocations(const std::map<std::string, 
 
 		std::string contig_taxonID = extractTaxonId(contigID);
 
+		if(! taxonInfo.count(contig_taxonID))
+		{
+			std::cerr << "Unknown taxonID " << contig_taxonID << "; please check that your mappings file was mapped against the database now specified." << std::endl;
+			exit(1);
+		}
 		assert(taxonInfo.at(contig_taxonID).count(contigID));
 
 		double mappingQuality = std::stod(line_fields.at(13));
 		assert(mappingQuality >= 0);
 		assert(mappingQuality <= 1);
-
+		mQ_sum += mappingQuality;
+		
 		if(readLength == -1)
 			readLength = std::stoi(line_fields.at(1));
 
@@ -184,6 +191,7 @@ std::vector<oneMappingLocation> getMappingLocations(const std::map<std::string, 
 		l.identity = identity;
 		mappingLocations.push_back(l);
 	}
+	assert(abs(1 - mQ_sum) <= 1e-3);
 
 	std::map<std::string, size_t> mappingLocations_per_taxonID;
 	for(auto targetTaxonID : saw_taxonIDs)
@@ -215,12 +223,14 @@ std::vector<oneMappingLocation> getMappingLocations(const std::map<std::string, 
 	for(auto& mL : mappingLocations)
 	{
 		mL.l = f.at(mL.taxonID) * (1/(double)mappingLocations_per_taxonID.at(mL.taxonID)) * mL.p;
-		p_allLocations += mL.l ;
+		p_allLocations += mL.l;
 	}
 
 	assert(p_allLocations > 0);
 	for(auto& mL : mappingLocations)
 	{
+		assert(mL.l >= 0);
+		assert(mL.l <= 1);		
 		mL.p = mL.l / p_allLocations;
 	}
 
@@ -280,7 +290,7 @@ void doEM(std::string DBdir, std::string mappedFile)
 
 	// load taxonomy
 	taxonomy T(DBdir+"/taxonomy");
-
+	
 	// initialize frequency distribution
 	std::map<std::string, double> f;
 	for(auto t : relevantTaxonIDs)
@@ -293,6 +303,15 @@ void doEM(std::string DBdir, std::string mappedFile)
 	bool continueEM = true;
 	while(continueEM)
 	{
+		double f_sum = 0;
+		for(auto fE : f)
+		{
+			f_sum += fE.second;
+		}
+		assert(abs(1 - f_sum) <= 1e-3);
+		
+		// std::cout << "EM round " << EMiteration << std::endl;
+		
 		double ll_thisIteration = 0;
 		std::map<std::string, double> f_nextIteration = f;
 		for(auto& fNextEntry : f_nextIteration)
@@ -300,32 +319,60 @@ void doEM(std::string DBdir, std::string mappedFile)
 			fNextEntry.second = 0;
 		}
 
+		size_t processedRead = 0;
 		std::function<void(const std::vector<std::string>&)> processOneRead = [&](const std::vector<std::string>& readLines) -> void
 		{
+			processedRead++;
+			std::cout << "\r EM round " << EMiteration << ", read << " << processedRead << " / " << mappingStats.at("ReadsMapped") << "   " << std::flush;
+			
 			assert(readLines.size() > 0);
 			std::vector<oneMappingLocation> mappingLocations = getMappingLocations(taxonInfo, f, readLines);
 
 			double l_read = 0;
+			double mappingLocations_sum = 0;
 			for(const auto& mL : mappingLocations)
 			{
 				l_read += mL.l;
+				assert(f_nextIteration.count(mL.taxonID));
 				f_nextIteration.at(mL.taxonID) += mL.p;
+				mappingLocations_sum += mL.p;
 			}
+			assert(abs(1 - mappingLocations_sum) < 1e-3);
 			ll_thisIteration += log(l_read);
 		};
 
 		callBackForAllReads(mappedFile, processOneRead);
-
-		double ll_diff = ll_thisIteration - ll_lastIteration;
-		assert(ll_diff >= 0);
-
-		double ll_improvement = ll_thisIteration / ll_lastIteration;
-
-		if((EMiteration > 0) && (ll_improvement < 1.1))
+		std::cout << "\n";
+		std::cout << "\tLog likelihood: " << ll_thisIteration << std::endl;
+		
+		double sum_f_nextIteration = 0;
+		for(auto fNextIterationE : f_nextIteration)
 		{
-			continueEM = false;
+			sum_f_nextIteration += fNextIterationE.second;
 		}
+		
+		for(auto& fNextIterationE : f_nextIteration)
+		{
+			fNextIterationE.second /= sum_f_nextIteration;
+		}
+		
+		
+		if(EMiteration > 0) 
+		{
+			double ll_diff = ll_thisIteration - ll_lastIteration;
+			assert(ll_diff >= 0);
 
+			double ll_relative = ll_thisIteration/ll_lastIteration;
+
+			std::cout << "\tImprovement: " << ll_diff << std::endl;
+			std::cout << "\tRelative   : " << ll_relative << std::endl;
+		
+			if(ll_relative < 1.01)
+			{
+				continueEM = false;
+			}
+		}
+		
 		f = f_nextIteration;
 		EMiteration++;
 		ll_lastIteration = ll_thisIteration;
@@ -414,7 +461,8 @@ void doEM(std::string DBdir, std::string mappedFile)
 
 		runningReadI++;
 	};
-
+	
+	std::cout << "Outputting mappings with adjusted alignment qualities." << std::endl;
 	callBackForAllReads(mappedFile, processOneRead_final);
 	strout_reads_identities.close();
 
@@ -458,7 +506,7 @@ void callBackForAllReads(std::string mappedFile, std::function<void(const std::v
 	std::vector<std::string> runningReadLines;
 
 	std::string line;
-	while(mappingsStream.is_open())
+	while(mappingsStream.good())
 	{
 		std::getline(mappingsStream, line);
 		eraseNL(line);
@@ -472,8 +520,11 @@ void callBackForAllReads(std::string mappedFile, std::function<void(const std::v
 
 		if(runningReadID != readID)
 		{
-			callbackFunction(runningReadLines);
-
+			if(runningReadLines.size())
+			{
+				callbackFunction(runningReadLines);
+			}
+			
 			runningReadID = readID;
 			runningReadLines.clear();
 		}
@@ -532,14 +583,24 @@ std::set<std::string> getTaxonIDsFromMappingsFile(std::string mappedFile)
 	std::ifstream mappingsStream(mappedFile);
 	assert(mappingsStream.is_open());
 	std::string line;
+	size_t lineNumber = 0;
 	while(mappingsStream.good())
 	{
 		std::getline(mappingsStream, line);
 		eraseNL(line);
-		std::vector<std::string> line_fields = split(line, " ");
-		std::string mappingTarget = line_fields.at(5);
-		std::string taxonID = extractTaxonId(mappingTarget);
-		forReturn.insert(taxonID);
+		lineNumber++;
+		if(line.length())
+		{
+			std::vector<std::string> line_fields = split(line, " ");
+			if(line_fields.size() < 6)
+			{
+				std::cerr << "File " << mappedFile << " has weird format - is this a mappings file generated by MetaMap? Offending line: " << lineNumber << std::endl;
+				exit(1);
+			}
+			std::string mappingTarget = line_fields.at(5);
+			std::string taxonID = extractTaxonId(mappingTarget);
+			forReturn.insert(taxonID);
+		}
 	}
 	mappingsStream.close();
 	return forReturn;
@@ -550,7 +611,7 @@ boost::smatch matchBrackets;
 std::string extractTaxonId(std::string line)
 {
 	assert(boost::regex_search(line, matchBrackets, matchTaxonID));
-	std::string taxonID = matchBrackets[0];
+	std::string taxonID = matchBrackets[1];
 	return taxonID;
 }
 

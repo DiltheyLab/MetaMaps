@@ -39,12 +39,15 @@ unless(-d $DB)
 }
 
 my @files_in_DB = glob($DB.'/*');
-die "Database output directory (parameter --DB) is not empty" unless(scalar(@files_in_DB) == 0);
+#die "Database output directory (parameter --DB) is not empty" unless(scalar(@files_in_DB) == 0); # todo reactivate
 
 # copy taxonomy
 
 my $dir_copy_taxonomy = $DB . '/taxonomy';
-mkdir($dir_copy_taxonomy) or die "Cannot mkdir $dir_copy_taxonomy";
+unless(-e $dir_copy_taxonomy)
+{
+	mkdir($dir_copy_taxonomy) or die "Cannot mkdir $dir_copy_taxonomy";
+}
 
 foreach my $f (taxTree::getTaxonomyFileNames())
 {
