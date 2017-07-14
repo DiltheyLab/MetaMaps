@@ -12,6 +12,9 @@
 #include <assert.h>
 #include <boost/filesystem.hpp>
 #include <boost/archive/text_oarchive.hpp>
+#include <boost/archive/binary_oarchive.hpp>
+#include <boost/archive/binary_iarchive.hpp>
+
 #include <fstream>
 #include <zlib.h>
 #include <utility>
@@ -310,9 +313,9 @@ public:
 			throw std::runtime_error("Cannot open file " + fn_serialize_arguments + " for serialization.");
 		}
 		{
-		boost::archive::text_oarchive arguments_archive(arguments_serialization_ostream);
-		arguments_archive & param;
-		arguments_serialization_ostream.close();
+			boost::archive::text_oarchive arguments_archive(arguments_serialization_ostream);
+			arguments_archive & param;
+			arguments_serialization_ostream.close();
 		}
 		std::vector<std::string> generatedIndexFiles;
 		std::function<void(skch::Sketch*, size_t)> indexStoreFunction = [&](skch::Sketch* referSketch, size_t N)
@@ -323,7 +326,7 @@ public:
 			{
 			  throw std::runtime_error("Cannot open file " + outputFn + " for serialization.");
 			}
-			boost::archive::text_oarchive archive(ostream);
+			boost::archive::binary_oarchive archive(ostream);
 			archive & (*referSketch);
 			ostream.close();
 			std::cout << "Stored state in file " << outputFn << "\n" << std::flush;
@@ -437,7 +440,7 @@ public:
 			{
 					std::cerr << "Cannot open file " << indexFile << " for reading -- invalid index " << indexPrefix << std::endl;
 			}
-			boost::archive::text_iarchive sketch_archive(sketch_serialization_istream);
+			boost::archive::binary_iarchive sketch_archive(sketch_serialization_istream);
 
 			skch::Sketch referSketchI;
 
