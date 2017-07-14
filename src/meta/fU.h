@@ -233,7 +233,7 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 
 	std::set<std::string> taxonIDsInMappings = getTaxonIDsFromMappingsFile(mappedFile);
 
-	std::string fn_fittedLengthAndIdentities= mappedFile + ".lengthAndIdentitiesPerMappingUnit";
+	std::string fn_fittedLengthAndIdentities= mappedFile + ".EM.lengthAndIdentitiesPerMappingUnit";
 	if(! fileExists(fn_fittedLengthAndIdentities))
 	{
 		std::cerr << "\n\nERROR: File " << fn_fittedLengthAndIdentities << " not existing.\n\nThis file is generated automatically by the EM step. Run the EM step first.\n\n";
@@ -380,18 +380,21 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 
 		double ll_thisIteration = ll_thisIteration_mapped + ll_thisIteration_unmapped;
 
-		double ll_diff = ll_thisIteration - ll_lastIteration;
-
-		if(EMiteration != round_first_unknown)
+		if((EMiteration > 0) && (EMiteration != round_first_unknown))
+		{
+			double ll_diff = ll_thisIteration - ll_lastIteration;
 			assert(ll_diff >= 0);
 
-		double ll_improvement = ll_thisIteration / ll_lastIteration;
+			double ll_relative = ll_thisIteration/ll_lastIteration;
 
-		if((EMiteration > 0) && (ll_improvement < 1.1) && (EMiteration != round_first_unknown))
-		{
-			continueEM = false;
+			std::cout << "\tImprovement: " << ll_diff << std::endl;
+			std::cout << "\tRelative   : " << ll_relative << std::endl;
+		
+			if(abs(1-ll_relative) < 0.01)
+			{
+				continueEM = false;
+			}
 		}
-
 		f = f_nextIteration;
 		EMiteration++;
 		ll_lastIteration = ll_thisIteration;
