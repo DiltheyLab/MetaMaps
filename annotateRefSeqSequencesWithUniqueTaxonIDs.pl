@@ -7,6 +7,7 @@ use Getopt::Long;
 use FindBin;
 use File::Find;
 use lib "$FindBin::Bin/perlLib";
+use Cwd qw/abs_path/;
 
 use taxTree;
 
@@ -24,9 +25,10 @@ unless($refSeqDirectory and $taxonomyInDirectory and $taxonomyOutDirectory)
 	print_help();
 }
 
+$refSeqDirectory = abs_path($refSeqDirectory);
+
 die "Please specify valid directory for --refSeqDirectory" unless(-d $refSeqDirectory);
 die "Please specify valid directory for --taxonomyInDirectory" unless(-d $taxonomyInDirectory);
-
 
 print "Reading taxonomy from $taxonomyInDirectory ..\n";
 my $taxonomy_href = taxTree::readTaxonomy($taxonomyInDirectory);
@@ -59,102 +61,114 @@ print "Scanning $refSeqDirectory for *_assembly_report.txt\n";
 find(\&wanted, $refSeqDirectory);
 sub wanted {
 	my $file = $File::Find::name; 
+	
 	{	
 		no warnings;
 		$file = $File::Find::name; 
 	}
 	
+	die Dumper("Expected file nt existing", $file) unless(-e $file);
+	
 	if((not -d $file) and ($file =~ /_assembly_report\.txt$/))
 	{	
-		next unless(remove_existing_fnaFile_for_assemblyReportFile($file));
-		
-		my $taxonID;
-		my $organismName = 'NA';
-		my $refSeq_category = '';
-		my $assembly_level = '';
-		open(REPORT, '<', $file) or die "Cannot open assembly report $file";
-		while(<REPORT>)
+		my $gzFile = get_gz_for_assemblyReport($file);
+		if(-e $gzFile)
 		{
-			if($_ =~ /^# Taxid:\s*(\d+)/)
+			remove_existing_fnaFile_for_assemblyReportFile($file);
+			
+			my $taxonID;
+			my $organismName = 'NA';
+			my $refSeq_category = '';
+			my $assembly_level = '';
+			open(REPORT, '<', $file) or die "Cannot open assembly report $file";
+			while(<REPORT>)
 			{
-				$taxonID = $1;
+				if($_ =~ /^# Taxid:\s*(\d+)/)
+				{
+					$taxonID = $1;
+				}
+				
+				if($_ =~ /^# Organism name:\s*(.+)/)
+				{
+					$organismName = $1;
+					$organismName =~ s/[\n\r]//g;
+				}				
+				
+				if($_ =~ /^# RefSeq category:\s*(.+)/)
+				{
+					$refSeq_category = $1;
+					$refSeq_category =~ s/[\n\r]//g;
+				}				
+				
+				if($_ =~ /^# Assembly level:\s*(.+)/)
+				{
+					$assembly_level = $1;
+					$assembly_level =~ s/[\n\r]//g;
+				}				
+								
+			}
+			close(REPORT);
+			unless(defined $taxonID)
+			{
+				die "Assembly report $file has not taxon ID";
 			}
 			
-			if($_ =~ /^# Organism name:\s*(.+)/)
+			$refSeq_categories{$refSeq_category}++;
+			$assemblyLevels{$assembly_level}++;
+			if(not $refSeq_category)
 			{
-				$organismName = $1;
-				$organismName =~ s/[\n\r]//g;
-			}				
-			
-			if($_ =~ /^# RefSeq category:\s*(.+)/)
-			{
-				$refSeq_category = $1;
-				$refSeq_category =~ s/[\n\r]//g;
-			}				
-			
-			if($_ =~ /^# Assembly level:\s*(.+)/)
-			{
-				$assembly_level = $1;
-				$assembly_level =~ s/[\n\r]//g;
-			}				
-							
-		}
-		close(REPORT);
-		unless(defined $taxonID)
-		{
-			die "Assembly report $file has not taxon ID";
-		}
-		
-		$refSeq_categories{$refSeq_category}++;
-		$assemblyLevels{$assembly_level}++;
-		if(not $refSeq_category)
-		{
-			warn "No assembly level info in $file";
-		}
-		$category_level_combined{join('_', $refSeq_category, $assembly_level)}++;
+				$refSeq_category = 'Undefined';
+				# warn "No RefSeq category info in $file";
+			}
+			$category_level_combined{join('_', $refSeq_category, $assembly_level)}++;
 
-		$included_genome++;
-		
-		unless(exists $taxonomy_href->{$taxonID})
-		{
-			warn "Taxon ID $taxonID not defined in tree in $taxonomyInDirectory - try recovering from merged nodes.";
-			$taxonID = taxTree::findCurrentNodeID($taxonomy_href, $merged_href, $taxonID);
-		}
-		if(exists $taxonomy_href->{$taxonID})
-		{
-			$file_2_taxonID{$file} = $taxonID;
-			$file_2_organismName{$file} = $organismName;
-			push(@{$taxonID_2_files{$taxonID}}, $file);			
+			$included_genome++;
+			
+			unless(exists $taxonomy_href->{$taxonID})
+			{
+				warn "Taxon ID $taxonID not defined in tree in $taxonomyInDirectory - try recovering from merged nodes.";
+				$taxonID = taxTree::findCurrentNodeID($taxonomy_href, $merged_href, $taxonID);
+			}
+			if(exists $taxonomy_href->{$taxonID})
+			{
+				$file_2_taxonID{$file} = $taxonID;
+				$file_2_organismName{$file} = $organismName;
+				push(@{$taxonID_2_files{$taxonID}}, $file);			
+			}
+			else
+			{
+				die "Taxon ID $taxonID not defined in tree in $taxonomyInDirectory -- update your taxonomy directory?";
+			}
+				
+			# if(1) #  or $assembly_level eq 'Complete Genome'
+			# {
+
+			# }
+			# else
+			# {	
+				# die Dumper("Weird assembly_level", $assembly_level) unless(($assembly_level eq 'Contig') or ($assembly_level eq 'Scaffold') or ($assembly_level eq 'Chromosome'));
+				# if(($refSeq_category eq 'Representative Genome') and ($refSeq_category eq 'Reference Genome'))
+				# {
+					# $missed_reference_and_representative++;
+				# }
+				# elsif($refSeq_category eq 'Representative Genome')
+				# {
+					# $missed_representative++;
+				# }
+				# elsif($refSeq_category eq 'Reference Genome')
+				# {
+					# $missed_referenceGenome++;
+				# }
+				# else
+				# {
+					# die Dumper("Weird refSeq_category", $refSeq_category) unless(($refSeq_category eq '') or ($refSeq_category eq 'Representative Genome'));
+				# }
+			# }
 		}
 		else
 		{
-			die "Taxon ID $taxonID not defined in tree in $taxonomyInDirectory -- update your taxonomy directory?";
+			warn "No assembly data file - $gzFile";
 		}
-			
-		# if(1) #  or $assembly_level eq 'Complete Genome'
-		# {
-
-		# }
-		# else
-		# {	
-			# die Dumper("Weird assembly_level", $assembly_level) unless(($assembly_level eq 'Contig') or ($assembly_level eq 'Scaffold') or ($assembly_level eq 'Chromosome'));
-			# if(($refSeq_category eq 'Representative Genome') and ($refSeq_category eq 'Reference Genome'))
-			# {
-				# $missed_reference_and_representative++;
-			# }
-			# elsif($refSeq_category eq 'Representative Genome')
-			# {
-				# $missed_representative++;
-			# }
-			# elsif($refSeq_category eq 'Reference Genome')
-			# {
-				# $missed_referenceGenome++;
-			# }
-			# else
-			# {
-				# die Dumper("Weird refSeq_category", $refSeq_category) unless(($refSeq_category eq '') or ($refSeq_category eq 'Representative Genome'));
-			# }
-		# }
 	}
 }
 
@@ -278,13 +292,23 @@ close(NODESOUT);
 
 print "\nOutput new taxonomy into $taxonomyOutDirectory\n\n";
 
-sub remove_existing_fnaFile_for_assemblyReportFile
+sub get_gz_for_assemblyReport
 {
 	my $assemblyReport = shift;
 	die "Weird apparent assembly report file $assemblyReport" unless($assemblyReport =~ /_assembly_report\.txt$/);
 	
 	my $gzFile = $assemblyReport;
 	$gzFile =~ s/_assembly_report\.txt/_genomic.fna.gz/;
+	
+	return $gzFile;
+}
+
+sub remove_existing_fnaFile_for_assemblyReportFile
+{
+	my $assemblyReport = shift;
+	die "Weird apparent assembly report file $assemblyReport" unless($assemblyReport =~ /_assembly_report\.txt$/);
+	
+	my $gzFile = get_gz_for_assemblyReport($assemblyReport);
 	
 	unless(-e $gzFile)
 	{

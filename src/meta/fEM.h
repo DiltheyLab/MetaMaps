@@ -298,6 +298,7 @@ void doEM(std::string DBdir, std::string mappedFile)
 		f[t] = 1/(double)relevantTaxonIDs.size();
 	}
 
+	std::cout << "Starting EM..." << std::endl;	
 	double ll_lastIteration;
 	size_t EMiteration = 0;
 	bool continueEM = true;

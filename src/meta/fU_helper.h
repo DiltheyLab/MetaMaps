@@ -25,6 +25,8 @@ class identityAndReadLengthHistogram
 {
 protected:
 	int minimumIdentity;
+	int maximumIdentity;
+	
 	std::map<int, double> identityHistogram;
 	std::map<size_t, double> readLengthHistogram;
 
@@ -40,11 +42,21 @@ public:
 		return forReturn;
 	}
 
+	const std::map<int, double>& getCompleteIdentityHistogram()
+	{
+		return identityHistogram;
+	}
+	
 	int getIdentityMinimum() const
 	{
 		return minimumIdentity;
 	}
 
+	int getIdentityMaximum() const
+	{
+		return minimumIdentity;
+	}
+	
 	double getIdentityP(int idty) const
 	{
 		assert(idty <= 100);
@@ -55,13 +67,13 @@ public:
 		}
 		else
 		{
+			throw std::runtime_error("Invalid code branch.");
 			return 0;
 		}
 	}
 
 	void readFromEMOutput(std::string fn, size_t minimumReadsPerContig)
 	{
-		minimumIdentity = -1;
 		std::ifstream f (fn);
 		assert(f.is_open());
 
@@ -69,19 +81,46 @@ public:
 		std::map<std::string, std::vector<size_t>> lengthPerUnit;
 
 		std::string line;
+		
+		assert(f.good());
+		std::getline(f, line);
+		eraseNL(line);
+		std::vector<std::string> header_fields = split(line, "\t");
+		assert(header_fields.at(1) == "ID");
+		assert(header_fields.at(3) == "Identity");
+		assert(header_fields.at(4) == "Length");
+		
+		int allContigs_minimum_identity = -1;
+		int allContigs_maximum_identity = -1;
+		
 		while(f.good())
 		{
 			std::getline(f, line);
 			eraseNL(line);
-			assert(line.length());
+			if(! line.length())
+				continue;
+			
+			
 			std::vector<std::string> line_fields = split(line, "\t");
-
+			assert(line_fields.size() == 5);
+			
 			std::string contigID = line_fields.at(1);
 			double identity = std::stod(line_fields.at(3));
+			int iI = int((identity*100) + 0.5);			
+			
 			size_t length = std::stoull(line_fields.at(4));
 
 			identitiesPerUnit[contigID].push_back(identity);
 			lengthPerUnit[contigID].push_back(length);
+			
+			if((allContigs_maximum_identity == -1) || (allContigs_maximum_identity < iI))
+			{
+				allContigs_maximum_identity = iI;
+			}
+			if((allContigs_minimum_identity == -1) || (allContigs_minimum_identity > iI))
+			{
+				allContigs_minimum_identity = iI;
+			}	
 		}
 
 		double highestMedian;
@@ -108,10 +147,14 @@ public:
 			std::cerr << std::flush;
 			exit(1);
 		}
+		
+		std::cout << "Select mapping unit " << highestMedianContigID << " for estimation of read lenghts and identities; have " << identitiesPerUnit.at(highestMedianContigID).size() << " reads; median identity " << highestMedian << std::endl;
 
 		std::vector<double> identities_bestContig = identitiesPerUnit.at(highestMedianContigID);
 		std::vector<size_t> lengths_bestContig = lengthPerUnit.at(highestMedianContigID);
 
+		int maximumIdentity_defined = -1;
+		int minimumIdentity_defined = -1;
 		std::map<int, size_t> identityHistogram_int;
 		for(auto i : identities_bestContig)
 		{
@@ -123,17 +166,87 @@ public:
 			assert(iI >= 0);
 			assert(iI <= 100);
 			identityHistogram_int.at(iI)++;
-			if((minimumIdentity == -1) || (iI < minimumIdentity))
+			if((minimumIdentity_defined == -1) || (iI < minimumIdentity_defined))
 			{
-				minimumIdentity = iI;
+				minimumIdentity_defined = iI;
 			}
+			if((maximumIdentity_defined == -1) || (iI > maximumIdentity_defined))
+			{
+				maximumIdentity_defined = iI;
+			}			
 		}
-
+		assert(maximumIdentity_defined != -1);
+		assert(minimumIdentity_defined != -1);
+		assert(minimumIdentity_defined < maximumIdentity_defined); // could also be <= in theory
+		
+		assert(allContigs_minimum_identity != 1);
+		assert(allContigs_maximum_identity != 1);
+		assert(allContigs_minimum_identity < allContigs_maximum_identity); // could also be <= in theory
+		
+		assert(allContigs_minimum_identity <= minimumIdentity_defined);
+		assert(allContigs_maximum_identity >= maximumIdentity_defined);
+		
 		identityHistogram.clear();
+		double iH_sum_1 = 0;
 		for(auto i_and_p : identityHistogram_int)
 		{
 			identityHistogram[i_and_p.first] = (double)i_and_p.second/(double)identities_bestContig.size();
+			iH_sum_1 += identityHistogram[i_and_p.first];
 		}
+		assert(abs(1 - iH_sum_1) <= 1e-3);
+
+		// make sure that the non-defined identities are bigger than 
+		
+		double added_p_for_undefined = 0;
+		for(int i = allContigs_minimum_identity; i <= allContigs_maximum_identity; i++)
+		{	
+			if(identityHistogram.count(i) == 0)
+			{
+				assert((i < minimumIdentity_defined) || (i > maximumIdentity_defined));
+				if(i < minimumIdentity_defined)
+				{
+					int diff_from_defined = minimumIdentity_defined - i;
+					assert(diff_from_defined > 0);
+					double p_last_defined = identityHistogram.at(minimumIdentity_defined);
+					double new_p = pow(0.5, diff_from_defined) * p_last_defined;
+					identityHistogram[i] = new_p;
+					added_p_for_undefined += new_p;
+				}
+				else
+				{
+					int diff_from_defined = i - allContigs_maximum_identity;
+					assert(diff_from_defined > 0);
+					double p_last_defined = identityHistogram.at(maximumIdentity_defined);
+					double new_p = pow(0.5, diff_from_defined) * p_last_defined;
+					identityHistogram[i] = new_p;
+					added_p_for_undefined += new_p;
+				}
+			}
+		}
+		
+		std::cout << "\tAdded probability mass of " << added_p_for_undefined << " (pre-normalization) to account for observed identities outside of the range defined by the selected contig." << std::endl;
+
+		double iH_sum_2 = 0;
+		for(auto i_and_p : identityHistogram)
+		{
+			iH_sum_2 += i_and_p.second;
+		}
+		assert(iH_sum_2 > 0);
+		for(auto& i_and_p : identityHistogram)
+		{
+			i_and_p.second /= iH_sum_2;
+		}		
+		double iH_sum_3 = 0;
+		for(auto i_and_p : identityHistogram)
+		{
+			iH_sum_3 += i_and_p.second;
+		}
+		assert(abs(1 - iH_sum_3) <= 1e-3);		
+		
+		minimumIdentity = allContigs_minimum_identity;
+		maximumIdentity = allContigs_maximum_identity;
+		
+		// read lengths
 
 		std::map<size_t, size_t> readLengthHistogram_int;
 		for(auto l : lengths_bestContig)
@@ -151,31 +264,7 @@ public:
 		{
 			readLengthHistogram[lI.first] = (double)lI.second / lengths_bestContig.size();
 		}
-
-
-		int notDefined = 0;
-		for(int i = minimumIdentity; i < 100; i++)
-		{
-			if(identityHistogram.count(i) == 0)
-			{
-				notDefined++;
-			}
-		}
-
-		double newP_notDefined = 1.0/(double)notDefined;
-		double newSum = 0;
-		for(int i = minimumIdentity; i < 100; i++)
-		{
-			if(identityHistogram.count(i) == 0)
-			{
-				identityHistogram[i] = newP_notDefined;
-			}
-			newSum += identityHistogram.at(i);
-		}
-		for(auto& p : identityHistogram)
-		{
-			p.second /= newSum;
-		}
+		
 	}
 
 	double getReadLengthP(size_t readLength)
@@ -292,17 +381,24 @@ public:
 		{
 			std::getline(f, line);
 			eraseNL(line);
-			assert(line.length());
+			if(!line.length())
+				continue;
+			
 			std::vector<std::string> line_fields = split(line, "\t");
 
 			std::string nodeID = line_fields.at(0);
 			size_t readLength = std::stoull(line_fields.at(1));
-			int idty = int(100 * std::stod(line_fields.at(2)));
+			
+			double identityI = std::stoi(line_fields.at(2));
+			assert(identityI >= 0);
+			assert(identityI <= 100);
 			double p = std::stod(line_fields.at(3));
-
+			assert(p >= 0);
+			assert(p <= 1);
+			
 			if(relevantTaxonIDs.count(nodeID))
 			{
-				D[nodeID][readLength][idty] = p;
+				D[nodeID][readLength][identityI] = p;
 			}
 		}
 	}
@@ -346,7 +442,7 @@ protected:
 
 public:
 	identityManager(identityAndReadLengthHistogram& iH, treeAdjustedIdentities& tAI) : iH(iH), tAI(tAI)
-	{
+	{		
 		granularReadIdentities = false;
 	}
 
@@ -379,6 +475,9 @@ public:
 				else
 				{
 					std::map<int, double> histogramForNode = getShiftedIdentityHistogramForNode_oneReadLength(taxonID, readLength);
+					
+					printIdentityHistogram(histogramForNode, "node " + taxonID + ", read length " + std::to_string(readLength) );
+					
 					double forReturn =(histogramForNode.count(identity)) ? histogramForNode.at(identity) : 0;
 					indirectMapping_cache_granularReads.at(taxonID).at(readLength)[identity] = forReturn;
 					return forReturn;
@@ -456,11 +555,29 @@ public:
 		}
 	}
 
+	static void printIdentityHistogram(const std::map<int, double>& h, std::string additionalTitle = "")
+	{
+		std::vector<int> identities;
+		for(auto hI : h)
+		{
+			identities.push_back(hI.first);
+		}
+		std::sort(identities.begin(), identities.end());
+		
+		std::cout << "Identity histogram " << additionalTitle << "\n";
+		for(auto i : identities)
+		{
+			std::cout << "\t" << i << "\t" << h.at(i) << "\n";
+		}
+		std::cout << "\n" << std::flush;
+	}
 
 	std::map<int, double> getShiftedIdentityHistogramForNode(std::string taxonID) const
 	{
 		assert(tAI.D.count(taxonID));
 		std::map<int, double> forReturn;
+
+		const std::set<int> keys_iH = iH.getIdentityKeys();
 
 		double forReturn_sum = 0;
 		for(auto rLI : tAI.D.at(taxonID))
@@ -468,23 +585,30 @@ public:
 			size_t readLength = rLI.first;
 			double readLength_P = iH.getReadLengthP(readLength);
 
-			std::set<int> keys_iH = iH.getIdentityKeys();
-
 			for(auto k1 : keys_iH)
 			{
 				double p1 = iH.getIdentityP(k1);
 				for(auto k2P: rLI.second)
 				{
 					int k2 = k2P.first;
-					double p2 = k2P.first;
+					double p2 = k2P.second;
 
+					assert((k1 >= 0) && (k1 <= 100));
+					assert((k2 >= 0) && (k2 <= 100));
+					 
 					double newK = ((double)k1/100.0) * ((double)k2/100.0);
+					if(!((newK >= 0) && (newK <= 1))) 
+					{
+						std::cerr << newK << std::endl;
+						std::cerr << k1 << std::endl;
+						std::cerr << k2 << std::endl;
+					}
 					assert(newK >= 0);
 					assert(newK <= 1);
 					int newK_int = int((newK*100) + 0.5);
 
 					double newP = readLength_P * p1 * p2;
-					assert(newP > 0);
+					assert(newP >= 0);
 					assert(newP <= 1);
 
 					if(newK_int < iH.getIdentityMinimum())
@@ -496,6 +620,10 @@ public:
 					{
 						forReturn[newK_int] = 0;
 					}
+					
+					assert(newK_int >= 0);
+					assert(newK_int <= 100);
+					
 					forReturn.at(newK_int) += newP;
 					forReturn_sum += newP;
 				}
@@ -509,6 +637,13 @@ public:
 			fR.second /= forReturn_sum;
 		}
 
+		double fR_sum_conf = 0;
+		for(auto fRi : forReturn)
+		{
+			fR_sum_conf += fRi.second;
+		}
+		assert(abs(1 - fR_sum_conf) <= 1e-3);
+		
 		return forReturn;
 	}
 
@@ -542,6 +677,14 @@ public:
 				forReturn.at(newK_int) += newP;
 			}
 		}
+		
+		double fR_sum = 0;
+		for(auto fRI : forReturn)
+		{
+			fR_sum += fRI.second;
+		}
+		assert(abs(1 - fR_sum) <= 1e-3);
+		
 		return forReturn;
 	}
 

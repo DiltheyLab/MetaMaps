@@ -55,7 +55,7 @@ public:
 		for(auto n : uN)
 		{
 			std::string rank = T.at(n).rank;
-								
+					
 			if(rank != "no rank")
 			{
 				if(forReturn.count(rank))
@@ -100,7 +100,7 @@ public:
 
 		std::string line;
 
-		boost::regex re_space("\\s");
+		boost::regex re_space("\\s*\\|\\s*");
 
 		std::map<std::string, oneTaxonName> names;
 		{
@@ -120,25 +120,23 @@ public:
 				{
 					continue;
 				}
-
-
+				
+				line = boost::regex_replace(line, re_space, "|");				
 				std::vector<std::string> line_components = split(line, "|");
-				for(auto& f : line_components)
-				{
-					f = boost::regex_replace(f, re_space, "");
-				}
+
+				
 				assert(line_components.at(0).length());
 				assert(line_components.at(1).length());
 
 				std::string id = line_components.at(0);
 				std::string name = line_components.at(1);
 				std::string type = line_components.at(3);
-
-				if(type == "scientificname")
+				
+				if(type == "scientific name")
 				{
 					names[id].scientific_name = name;
 				}
-				else if(type == "genbankcommonname")
+				else if(type == "genbank common name")
 				{
 					names[id].genbank_common_name = name;
 				}
@@ -162,19 +160,16 @@ public:
 				{
 					continue;
 				}
-
+				
+				line = boost::regex_replace(line, re_space, "|");				
 				std::vector<std::string> line_components = split(line, "|");
-				for(auto& f : line_components)
-				{
-					f = boost::regex_replace(f, re_space, "");
-				}
+
 				assert(line_components.at(0).length());
 
 				std::string id = line_components.at(0);
 				std::string parent = line_components.at(1);
 				std::string rank = line_components.at(2);
-				if(rank == "norank")
-					rank = "no rank";
+				
 				assert(rank.length());
 
 				if(names.count(id) == 0)

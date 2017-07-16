@@ -195,6 +195,8 @@ std::vector<oneMappingLocation_U> getMappingLocations_U(identityManager& iM, con
 		l.l = f.first.at(contig_taxonID) * iM.getIdentityP(identityInt, contig_taxonID, readLength, true);
 		mappingLocations.push_back(l);
 
+		//std::cout << "\nTaxon " << contig_taxonID << " indirect-upward: " << indirectUpwardNodes.at(contig_taxonID).size() << "\n" << std::flush;
+		
 		for(auto indirectTaxon : indirectUpwardNodes.at(contig_taxonID))
 		{
 			oneMappingLocation_U lI;
@@ -264,6 +266,7 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 	for(auto tI : taxonIDsInMappings)
 	{
 		std::vector<std::string> upwardTaxonIDs = T.getUpwardNodes(tI);
+		indirectUpwardNodes[tI] = std::vector<std::string>();
 		for(auto uTI : upwardTaxonIDs)
 		{
 			if(tAI.nodeForIndirectAttachment(uTI))
@@ -288,6 +291,7 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 
 	// set up U-EM
 
+	std::cout << "Starting EM..." << std::endl;	
 	double ll_lastIteration;
 	size_t EMiteration = 0;
 	bool continueEM = true;
@@ -304,8 +308,12 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 			fNextEntry.second = 0;
 		}
 
+		size_t processedRead = 0;		
 		std::function<void(const std::vector<std::string>&)> processOneRead = [&](const std::vector<std::string>& readLines) -> void
 		{
+			processedRead++;
+			std::cout << "\r EM round " << EMiteration << ", read << " << processedRead << " / " << mappingStats.at("ReadsMapped") << "   " << std::flush;
+					
 			assert(readLines.size() > 0);
 			std::vector<oneMappingLocation_U> mappingLocations = getMappingLocations_U(iM, indirectUpwardNodes, f, readLines);
 
@@ -328,10 +336,16 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 		};
 
 		callBackForAllReads(mappedFile, processOneRead);
-
+		std::cout << "\n";
+		
 		double ll_thisIteration_unmapped = 0;
 		if(EMiteration >= round_first_unknown)
 		{
+			if(EMiteration == round_first_unknown)
+			{
+				std::cout << "\t ! Now incorporate unmapped reads.\n" << std::flush;
+			}
+			
 			for(auto oneUnmappedReadLength : unmappedReadsLengths)
 			{
 				std::map<std::string, double> unmapped_p;
@@ -377,9 +391,12 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 			tF.second /= f_sum;
 		}
 
-
 		double ll_thisIteration = ll_thisIteration_mapped + ll_thisIteration_unmapped;
 
+		std::cout << "\tLog likelihood: " << ll_thisIteration << std::endl;
+		std::cout << "\t\t contribution mapped reads  : " << ll_thisIteration_mapped << std::endl;
+		std::cout << "\t\t contribution unmapped reads: " << ll_thisIteration_unmapped << std::endl;
+		
 		if((EMiteration > 0) && (EMiteration != round_first_unknown))
 		{
 			double ll_diff = ll_thisIteration - ll_lastIteration;
@@ -398,6 +415,11 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 		f = f_nextIteration;
 		EMiteration++;
 		ll_lastIteration = ll_thisIteration;
+		
+		if(EMiteration == 2)
+		{
+			continueEM = false; // todo remove
+		}
 	}
 
 	// output file names
