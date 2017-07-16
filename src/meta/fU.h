@@ -312,7 +312,7 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 		std::function<void(const std::vector<std::string>&)> processOneRead = [&](const std::vector<std::string>& readLines) -> void
 		{
 			processedRead++;
-			std::cout << "\r EM round " << EMiteration << ", read << " << processedRead << " / " << mappingStats.at("ReadsMapped") << "   " << std::flush;
+			std::cout << "\r EM round " << EMiteration << ", mapped read << " << processedRead << " / " << mappingStats.at("ReadsMapped") << "   " << std::flush;
 					
 			assert(readLines.size() > 0);
 			std::vector<oneMappingLocation_U> mappingLocations = getMappingLocations_U(iM, indirectUpwardNodes, f, readLines);
@@ -341,10 +341,8 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 		double ll_thisIteration_unmapped = 0;
 		if(EMiteration >= round_first_unknown)
 		{
-			if(EMiteration == round_first_unknown)
-			{
-				std::cout << "\t ! Now incorporate unmapped reads.\n" << std::flush;
-			}
+			std::cout << "\tEM round " << EMiteration << ", " << unmappedReadsLengths.size() << " unmapped reads.\n" << std::flush;
+
 			
 			for(auto oneUnmappedReadLength : unmappedReadsLengths)
 			{
@@ -394,8 +392,8 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 		double ll_thisIteration = ll_thisIteration_mapped + ll_thisIteration_unmapped;
 
 		std::cout << "\tLog likelihood: " << ll_thisIteration << std::endl;
-		std::cout << "\t\t contribution mapped reads  : " << ll_thisIteration_mapped << std::endl;
-		std::cout << "\t\t contribution unmapped reads: " << ll_thisIteration_unmapped << std::endl;
+		std::cout << "\t\tcontribution mapped reads  : " << ll_thisIteration_mapped << std::endl;
+		std::cout << "\t\tcontribution unmapped reads: " << ll_thisIteration_unmapped << std::endl;
 		
 		if((EMiteration > 0) && (EMiteration != round_first_unknown))
 		{
@@ -415,11 +413,6 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 		f = f_nextIteration;
 		EMiteration++;
 		ll_lastIteration = ll_thisIteration;
-		
-		if(EMiteration == 2)
-		{
-			continueEM = false; // todo remove
-		}
 	}
 
 	// output file names

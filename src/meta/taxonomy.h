@@ -49,7 +49,6 @@ public:
 
 	std::map<std::string, std::string> getUpwardNodesByRanks(std::string nodeID) const
 	{
-		std::cerr << "Search for node " << nodeID << std::endl; // todo remove
 		std::map<std::string, std::string> forReturn;
 		std::vector<std::string> uN = getUpwardNodes(nodeID);
 		for(auto n : uN)
