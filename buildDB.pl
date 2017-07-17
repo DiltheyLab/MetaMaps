@@ -15,11 +15,12 @@ use taxTree;
 my $DB = 'refseq';
 my $FASTAs;
 my $taxonomyDir;
-
+my $maxSpecies;
 GetOptions (
 	'DB:s' => \$DB, 
 	'FASTAs:s' => \$FASTAs, 
 	'taxonomy:s' => \$taxonomyDir, 
+	'maxSpecies:s' => \$maxSpecies, 
 );
 
 # Get input arguments
@@ -109,11 +110,7 @@ for(my $fileI = 0; $fileI <= $#FASTAfiles; $fileI++)
 			
 			push(@contigs, [$fileI, $position_contig_start, $contigID]);
 			
-			unless($contigID =~ /kraken:taxid\|(x?\d+)/)
-			{
-				die "Expect taxon ID in contig identifier - file $fileN - line $.";
-			}			
-			my $taxonID = $1;
+			my $taxonID = extractTaxonID($contigID, $fileN, $.);
 			unless(exists $taxonomy_href->{$taxonID})
 			{
 				die "Taxon ID $taxonID - from file $fileN, line $. - not found in taxonomy -- consider updating your taxonomy directory.";
@@ -174,12 +171,19 @@ my $getContigSequence = sub {
 	return $contigSequence;
 };
 
+my @useTaxonIDs = keys %taxonID_2_contig;	
+if((defined $maxSpecies) and (scalar(@useTaxonIDs) > $maxSpecies))
+{
+	die unless($maxSpecies > 0);
+	@useTaxonIDs = @useTaxonIDs[0 .. ($maxSpecies-1)];
+}
+my %_useTaxonID = map {$_ => 1} @useTaxonIDs;
+
 my $outputTaxonsAndContigs = $DB . '/' . 'taxonInfo.txt';
 open(DB, '>', $outputTaxonsAndContigs) or die "Cannot open $outputTaxonsAndContigs - check whether I have write permissions";
-foreach my $taxonID (keys %taxonID_2_contig)
+foreach my $taxonID (@useTaxonIDs)
 {
 	my @contigs = @{$taxonID_2_contig{$taxonID}};
-	
 	print DB $taxonID, " ", join(';', map {die unless(defined $contig_2_length{$_}); $_ . '=' . $contig_2_length{$_}} @contigs), "\n";
 }
 close(DB);
@@ -189,12 +193,29 @@ open(DB, '>', $outputFN) or die "Cannot open $outputFN - check whether I have wr
 for(my $contigI = 0; $contigI <= $#contigs; $contigI++)
 {
 	my $contigInfo = $contigs[$contigI];
-	my $contigSequence = $getContigSequence->($contigInfo);
-	print DB $contigSequence;
+	my $contigID = $contigInfo->[2];
+	my $taxonID = extractTaxonID($contigID, '?', '?');
+	if($_useTaxonID{$taxonID})
+	{
+		my $contigSequence = $getContigSequence->($contigInfo);
+		print DB $contigSequence;
+	}
 }
 close(DB);
 
 print "\nProduced randomized-order database sequence file $outputFN and\n\ttaxon info file $outputTaxonsAndContigs\n\n";
+
+sub extractTaxonID
+{
+	my $contigID = shift;
+	my $fileN = shift;
+	my $lineN = shift;
+	unless($contigID =~ /kraken:taxid\|(x?\d+)/)
+	{
+		die "Expect taxon ID in contig identifier - file $fileN - line $lineN";
+	}			
+	return $1;	
+}
 
 sub print_help
 {

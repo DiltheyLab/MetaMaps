@@ -25,6 +25,7 @@ std::string extractTaxonId(std::string line);
 std::map<std::string, std::map<std::string, size_t>> loadRelevantTaxonInfo(std::string DBdir, const std::set<std::string>& taxonIDs);
 std::set<std::string> getTaxonIDsFromMappingsFile(std::string mappedFile);
 void callBackForAllReads(std::string mappedFile, std::function<void(const std::vector<std::string>&)>& callbackFunction);
+std::set<std::string> getRelevantLevelNames();
 
 class oneMappingLocation
 {
@@ -39,7 +40,7 @@ public:
 	double l;
 };
 
-void producePotFile(std::string outputFN, const taxonomy& T, std::map<std::string, double> frequencies, std::map<std::string, size_t> readCount, size_t nUnmapped, size_t nTooShort)
+void producePotFile(std::string outputFN, const taxonomy& T, std::map<std::string, double> frequencies, std::map<std::string, size_t> readCount, size_t nTotalReads, size_t nUnmapped, size_t nTooShort)
 {
 	std::set<std::string> combinedKeys;
 	for(auto f : frequencies)
@@ -51,6 +52,8 @@ void producePotFile(std::string outputFN, const taxonomy& T, std::map<std::strin
 		combinedKeys.insert(f.first);
 	}
 
+	std::set<std::string> targetLevels = getRelevantLevelNames();
+	
 	std::map<std::string, std::set<std::string>> combinedKeys_perLevel;
 
 	std::map<std::string, std::map<std::string, double>> f_per_level;
@@ -58,10 +61,11 @@ void producePotFile(std::string outputFN, const taxonomy& T, std::map<std::strin
 	{
 		std::string nodeID = freq_per_node.first;
 		assert(T.knowNode(nodeID));
-		std::map<std::string, std::string> upwardByLevel = T.getUpwardNodesByRanks(nodeID);
+		std::map<std::string, std::string> upwardByLevel = T.getUpwardNodesByRanks(nodeID, targetLevels);
 		upwardByLevel["EqualCoverageUnit"] = nodeID;
+		
 		for(auto uN : upwardByLevel)
-		{
+		{			
 			if(f_per_level[uN.first].count(uN.second) == 0)
 				f_per_level[uN.first][uN.second] = 0;
 
@@ -77,7 +81,7 @@ void producePotFile(std::string outputFN, const taxonomy& T, std::map<std::strin
 	{
 		std::string nodeID = count_per_node.first;
 		assert(T.knowNode(nodeID));
-		std::map<std::string, std::string> upwardByLevel = T.getUpwardNodesByRanks(nodeID);
+		std::map<std::string, std::string> upwardByLevel = T.getUpwardNodesByRanks(nodeID, targetLevels);
 		upwardByLevel["EqualCoverageUnit"] = nodeID;
 		for(auto uN : upwardByLevel)
 		{
@@ -89,27 +93,95 @@ void producePotFile(std::string outputFN, const taxonomy& T, std::map<std::strin
 		}
 	}
 
-
+	long long nMappable = nTotalReads - nTooShort;
+	assert(nMappable > 0);
+	long long nMapped = nMappable - nUnmapped;
+	assert(nMapped >= 0);
+	
 	std::ofstream strout_frequencies(outputFN);
 	assert(strout_frequencies.is_open());
 
-	strout_frequencies << "AnalysisLevel" << "\t" <<  "ID" << "\t" << "Name" << "\t" <<  "Absolute" << "\t" <<  "PotFrequency" << "\n";
+	strout_frequencies << "AnalysisLevel" << "\t" <<  "taxonID" << "\t" << "Name" << "\t" <<  "Absolute" <<  "\t" <<  "EMFrequency" << "\t" <<  "PotFrequency" << "\n";
 
+	double freq_unmapped = (double)nUnmapped/(double)nMappable;
+	assert(freq_unmapped >= 0);
+	assert(freq_unmapped <= 1);
+	std::cerr << "freq_unmapped: " << freq_unmapped << std::endl;
 	for(auto l : combinedKeys_perLevel)
 	{
 		std::string levelName = l.first;
 
+		size_t sum_reads_assigned_thisLevel = 0;
+		double sum_assigned_thisLevel = 0;
 		for(auto taxonID : l.second)
 		{
-			std::string taxonIDName = T.getNode(taxonID).name.scientific_name;
+			double f = (f_per_level[levelName].count(taxonID)) ? f_per_level[levelName][taxonID] : 0;
+			size_t rC = (rC_per_level[levelName].count(taxonID)) ? rC_per_level[levelName][taxonID] : 0;
+			
+			sum_assigned_thisLevel += f;
+			sum_reads_assigned_thisLevel += rC;
+		}
+		
+		std::cerr << "sum_assigned_thisLevel: " << sum_assigned_thisLevel << std::endl;
+		
+		
+		assert(sum_assigned_thisLevel >= 0);
+		assert(abs(1-sum_assigned_thisLevel) <= 1e-3);
+		if(sum_assigned_thisLevel > 1)
+			sum_assigned_thisLevel = 1;
+		
+		long long nReads_unassigned_level = nMapped - sum_reads_assigned_thisLevel;
+		assert(nReads_unassigned_level >= 0);
+		
+		double additional_freq_unassigned = (1 - freq_unmapped) * (1 - sum_assigned_thisLevel);
+		std::cerr << "additional_freq_unassigned: " << additional_freq_unassigned << std::endl;
+		assert(additional_freq_unassigned >= 0);
+		assert(additional_freq_unassigned <= 1);
+		
+		for(auto taxonID : l.second)
+		{
+			if(f_per_level[levelName].count(taxonID))
+			{
+				f_per_level[levelName].at(taxonID) /= sum_assigned_thisLevel;	
+			}
+		}
+		
+		double total_thisLevel_freq_unassigned = freq_unmapped + additional_freq_unassigned;
+		assert(total_thisLevel_freq_unassigned >= 0);
+		assert(total_thisLevel_freq_unassigned <= 1);
+		
+		double l_freq = 0;
+		double l_freq_2 = 0;
+		for(auto taxonID : l.second)
+		{
+			std::string taxonIDName = (taxonID != "Undefined") ? T.getNode(taxonID).name.scientific_name : taxonID;
 			double f = (f_per_level[levelName].count(taxonID)) ? f_per_level[levelName][taxonID] : 0;
 			size_t rC = (rC_per_level[levelName].count(taxonID)) ? rC_per_level[levelName][taxonID] : 0;
 
-			strout_frequencies << levelName << "\t" << taxonID << "\t" << taxonIDName << "\t" << rC << "\t" << f << "\n";
+			double taxonID_rescaled_f = (f * (1-total_thisLevel_freq_unassigned));
+			strout_frequencies <<
+				levelName << "\t" <<
+				((taxonID != "Undefined") ? taxonID : "0") << "\t" <<
+				taxonIDName << "\t" <<
+				rC << "\t" <<
+				f << "\t" <<
+				taxonID_rescaled_f << "\n";
+				
+			l_freq += taxonID_rescaled_f;
+			l_freq_2 += f;
 		}
-		strout_frequencies << levelName << "\t" << 0 << "\t" <<  "Unmapped" << "\t" << nUnmapped << "\t" << 0 << "\n";
-		strout_frequencies << levelName << "\t" << 0 << "\t" <<  "TooShort" << "\t" << nTooShort << "\t" << 0 << "\n";
-
+		
+		strout_frequencies << levelName << "\t" << 0 << "\t" <<  "Unclassified" << "\t" << nReads_unassigned_level << "\t" << 0 << "\t" << additional_freq_unassigned << "\n";
+		strout_frequencies << levelName << "\t" << 0 << "\t" <<  "Unmapped" << "\t" << nUnmapped << "\t" << 0 << "\t" << freq_unmapped << "\n";
+		strout_frequencies << levelName << "\t" << 0 << "\t" <<  "TooShort" << "\t" << nTooShort << "\t" << 0 << "\t" << 0 << "\n";
+		
+		std::cerr << "l_freq: " << l_freq << std::endl;
+		l_freq += (freq_unmapped+additional_freq_unassigned);
+		std::cerr << "l_freq: " << l_freq << std::endl;
+		std::cerr << "l_freq_2: " << l_freq_2 << std::endl;
+		
+		assert(abs(1 - l_freq) <= 1e-3);
+		assert(abs(1 - l_freq_2) <= 1e-3);
 	}
 
 	strout_frequencies.close();
@@ -284,6 +356,7 @@ void doEM(std::string DBdir, std::string mappedFile)
 	std::map<std::string, size_t> mappingStats = getMappingStats(mappedFile);
 	size_t nUnmapped = mappingStats.at("ReadsNotMapped");
 	size_t nTooShort = mappingStats.at("ReadsTooShort");
+	size_t nTotalReads = mappingStats.at("TotalReads");
 
 	// get genome info
 	std::map<std::string, std::map<std::string, size_t>> taxonInfo = loadRelevantTaxonInfo(DBdir, relevantTaxonIDs);
@@ -471,7 +544,7 @@ void doEM(std::string DBdir, std::string mappedFile)
 	callBackForAllReads(mappedFile, processOneRead_final);
 	strout_reads_identities.close();
 
-	producePotFile(output_pot_frequencies, T, f, reads_per_taxonID, nUnmapped, nTooShort);
+	producePotFile(output_pot_frequencies, T, f, reads_per_taxonID, nTotalReads, nUnmapped, nTooShort);
 
 	std::ofstream strout_coverage(output_contig_coverage);
 	strout_coverage << "taxonID" << "\t" << "equalCoverageUnitLabel" << "\t" << "contigID" << "\t" << "start" << "\t" << "stop" << "\t" << "nBases" << "\t" << "readCoverage" << "\n";
@@ -618,6 +691,11 @@ std::string extractTaxonId(std::string line)
 	assert(boost::regex_search(line, matchBrackets, matchTaxonID));
 	std::string taxonID = matchBrackets[1];
 	return taxonID;
+}
+
+std::set<std::string> getRelevantLevelNames()
+{
+	return std::set<std::string>({"species", "genus", "family", "order", "phylum", "superkingdom"});
 }
 
 }

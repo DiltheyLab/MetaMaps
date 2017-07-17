@@ -47,14 +47,21 @@ public:
 		return(T.count(nodeID) > 0);
 	}
 
-	std::map<std::string, std::string> getUpwardNodesByRanks(std::string nodeID) const
+	std::map<std::string, std::string> getUpwardNodesByRanks(std::string nodeID, std::set<std::string> targetRanks = std::set<std::string>() ) const
 	{
 		std::map<std::string, std::string> forReturn;
+		
 		std::vector<std::string> uN = getUpwardNodes(nodeID);
 		for(auto n : uN)
 		{
 			std::string rank = T.at(n).rank;
-					
+			
+			if(targetRanks.size())
+			{
+				if(!targetRanks.count(rank))
+					continue;
+			}
+			
 			if(rank != "no rank")
 			{
 				if(forReturn.count(rank))
@@ -65,6 +72,16 @@ public:
 				forReturn[rank] = n;
 			}
 		}
+		
+		
+		for(auto tL : targetRanks)
+		{
+			if(forReturn.count(tL) == 0)
+			{
+				forReturn[tL] = "Undefined";
+			}
+		}
+		
 		return forReturn;
 	}
 

@@ -9,6 +9,7 @@ use FindBin;
 use lib "$FindBin::Bin/perlLib";
 use List::MoreUtils qw/all/;
 use Cwd qw/abs_path getcwd/;
+$| = 1;
 
 my $DB = 'refseq';
 my $seqencesOutDirectory = '';
@@ -101,9 +102,12 @@ foreach my $subDir (@target_subdirs)
 	my $skipped_species = 0;
 	my $downloaded_assemblies = 0;
 	
+	my $speciesI = 0;
 	SPECIES: foreach my $speciesDir (@subDir_content)
 	{
 		next if(($speciesDir eq '.') or ($speciesDir eq '..'));
+		$speciesI++;
+		
 		my $speciesDir_local = $subDir_local. '/' . $speciesDir;
 		mkdir($speciesDir_local);
 		die "Directory $speciesDir_local not existing, but it should (I just tried to mkdir it - do I have write permissions?" unless(-d $speciesDir_local);	
@@ -119,8 +123,10 @@ foreach my $subDir (@target_subdirs)
 		$downloaded_species++;
 		my @speciesDir_latest_content = $ftp->ls();
 
+		my $fileI = 0;
 		foreach my $assembly_version (@speciesDir_latest_content)
 		{
+			$fileI++;
 			next if(($assembly_version eq '.') or ($assembly_version eq '..'));	
 
 			$ftp->cwd(join('/', $ftp_root_genomes,  $DB, $subDir, $speciesDir_with_latest)) or die "Cannot change working directory ", $ftp->message;		
@@ -142,6 +148,7 @@ foreach my $subDir (@target_subdirs)
 			
 			foreach my $file_to_transfer (@genomic_fna_files, @assembly_report_files)
 			{
+				print "\r\t $speciesI / ", scalar(@subDir_content), " $subDir ($speciesDir) -- version $fileI / ", scalar(@speciesDir_latest_content), ": GET $file_to_transfer                        ";
 				$ftp->get($file_to_transfer) or die "Cannot transfer file", $ftp->message;		
 			}		
 			
@@ -154,6 +161,7 @@ foreach my $subDir (@target_subdirs)
 		}
 	}
 	
+	print "\n";
 	print "Summary for $subDir:\n";
 	print "\tDownloaded species: $downloaded_species \n";
 	print "\tSkipped species (most likely because there is no 'latest_assembly_versions' link in species directory): $skipped_species \n";

@@ -443,7 +443,7 @@ protected:
 public:
 	identityManager(identityAndReadLengthHistogram& iH, treeAdjustedIdentities& tAI) : iH(iH), tAI(tAI)
 	{		
-		granularReadIdentities = false;
+		granularReadIdentities = true;
 	}
 
 	double getIdentityP(int identity, std::string taxonID, size_t readLength, bool directlyAttached)
@@ -649,6 +649,29 @@ public:
 
 	static std::map<int, double> getConvolutedHistogram(const identityAndReadLengthHistogram& iH, std::map<int, double> additionalHistogram)
 	{
+		bool paranoid = true;
+		if(paranoid)
+		{
+			{
+				double f = 0;
+				for(auto aH : additionalHistogram)
+				{
+					f += aH.second;
+				}
+				assert(abs(1 - f) <= 1e-3);
+			}
+			{
+				double f  = 0;
+				std::set<int> keys_iH = iH.getIdentityKeys();
+				for(auto k1 : keys_iH)
+				{
+					double p1 = iH.getIdentityP(k1);					
+					f += p1;
+				}
+				assert(abs(1 - f) <= 1e-3);				
+			}
+		}
+		
 		std::map<int, double> forReturn;
 		std::set<int> keys_iH = iH.getIdentityKeys();
 		for(auto k1 : keys_iH)
@@ -657,8 +680,9 @@ public:
 			for(auto k2P: additionalHistogram)
 			{
 				int k2 = k2P.first;
-				double p2 = k2P.first;
+				double p2 = k2P.second;
 
+				assert((p2 >= 0) && (p2 <= 1));
 				double newK = ((double)k1/100.0) * ((double)k2/100.0);
 				assert(newK >= 0);
 				assert(newK <= 1);
@@ -682,6 +706,10 @@ public:
 		for(auto fRI : forReturn)
 		{
 			fR_sum += fRI.second;
+		}
+		if(!(abs(1 - fR_sum) <= 1e-3))
+		{
+			std::cerr << "fR_sum: " << fR_sum << std::endl;
 		}
 		assert(abs(1 - fR_sum) <= 1e-3);
 		
