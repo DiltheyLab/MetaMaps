@@ -26,18 +26,22 @@ namespace meta
 
 void cleanF_U(std::pair<std::map<std::string, double>, std::map<std::string, double>>& f, const std::pair<std::map<std::string, size_t>, std::map<std::string, size_t>>& assignedReads, size_t distributedReads);
 
-
 void producePotFile_U(std::string outputFN, const taxonomy& T, std::pair<std::map<std::string, double>, std::map<std::string, double>> frequencies, std::pair<std::map<std::string, size_t>, std::map<std::string, size_t>> readCount, size_t mappableReads)
 {
+	double initial_f_sum = 0;
 	std::set<std::string> combinedKeys;
 	for(auto f : frequencies.first)
 	{
 		combinedKeys.insert(f.first);
+		initial_f_sum += f.second;
 	}
 	for(auto f : frequencies.second)
 	{
 		combinedKeys.insert(f.first);
+		initial_f_sum += f.second;		
 	}
+	assert(abs(1 - initial_f_sum) <= 1e-3);
+	
 	for(auto f : readCount.first)
 	{
 		combinedKeys.insert(f.first);
@@ -130,7 +134,11 @@ void producePotFile_U(std::string outputFN, const taxonomy& T, std::pair<std::ma
 		long long levelReadsUnclassified = mappableReads - levelReadSum;
 		assert(levelReadsUnclassified >= 0);
 		
-		assert((levelFreqSum >= 0) && (levelFreqSum <= 1));
+		
+		assert((levelFreqSum >= 0) && (levelFreqSum <= (1+1e-3)));
+		if(levelFreqSum > 1)
+			levelFreqSum = 1;
+		
 		double levelFreqUnclassified = 1 - levelFreqSum;
 		
 		strout_frequencies <<
@@ -568,8 +576,20 @@ void cleanF_U(std::pair<std::map<std::string, double>, std::map<std::string, dou
 	for(auto& fI : f.second)
 	{
 		fI.second /= f_sum;
+	}
+
+	double f_sum_2 = 0;
+	for(auto fI : f.first)
+	{
+		f_sum_2 += fI.second;
+	}
+	for(auto fI : f.second)
+	{
+		f_sum_2 += fI.second;
 	}	
+	assert(abs(1 - f_sum_2) <= 1e-3);
 }
+
 
 }
 #endif /* META_FU_H_ */

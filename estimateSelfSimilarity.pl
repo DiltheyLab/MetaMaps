@@ -12,6 +12,8 @@ use File::Find;
 use Math::GSL::Randist qw/gsl_ran_binomial_pdf/;
 use FindBin;
 use lib "$FindBin::Bin/perlLib";
+use Cwd qw/getcwd abs_path/;
+use File::Copy;
 
 $| = 1;
 
@@ -19,7 +21,7 @@ use taxTree;
 use Util;
 
 my @taxonomy_fields = qw/species genus family order phylum superkingdom/;
-my $metamap_bin = 'mashmap';
+my $metamap_bin = './mashmap';
 unless(-e $metamap_bin)
 {
 	die "Please execute me from the main MetaMap directory";
@@ -27,7 +29,7 @@ unless(-e $metamap_bin)
 
 my $action = '';   
 
-my $DB = 'databases/miniSeq';
+my $DB = '';
 my $mode;
 my $jobI;
 my $readSimSize = 2000;
@@ -38,12 +40,19 @@ my $readSimSizeStep = 1000;
 
 my $target_max_simulatedChunks = 2000;
 
+my $path_to_myself = $FindBin::Bin . '/estimateSelfSimilarity.pl';
+my $path_to_cwd = getcwd();
+
 GetOptions (
 	'DB:s' => \$DB, 
 	'mode:s' => \$mode, 
 	'jobI:s' => \$jobI, 
 );
 
+unless($DB and (-d $DB))
+{
+	die "Please specify valid DB directory via --DB";
+}
 my $taxonomyDir = $DB . '/taxonomy';
 
 my $file_ref = $DB . '/DB.fa';
@@ -53,11 +62,9 @@ my $outputDir = $DB . '/selfSimilarity';
 my $outputDir_computation = $outputDir . '/computation';
 my $outputDir_results = $outputDir . '/results';
 my $outputFn_jobs = $outputDir . '/jobs';
-my $outputFn_summary = $outputDir . '/summary.byNode';
-my $outputFn_results = $outputDir . '/results.byNode';
-my $outputFn_reads_results = $outputDir . '/results.reads.byNode';
+my $outputFn_qsub = $outputDir . '/jobs.qsub';
 my $outputFn_reads_results_many = $outputDir . '/results.reads.many.byNode';
-my $outputFn_summary_individual = $outputDir . '/summary.individual';
+my $finalResultsFile = $DB . '/selfSimilarities.txt';
 
 if(not $mode)
 {
@@ -153,6 +160,17 @@ elsif($mode eq 'prepareFromScratch')
 	close(JOBS);
 	
 	print "Generated file $outputFn_jobs\n";
+	
+open(QSUB, '>', $outputFn_qsub) or die "Cannot open $outputFn_qsub";
+print QSUB qq(#!/bin/bash
+#\$ -t 1-${total_computations}
+jobID=\$(expr \$SGE_TASK_ID - 1)
+cd $path_to_cwd
+perl $path_to_myself --mode doJobI --DB $DB --jobI \$jobID
+);
+close(QSUB);
+
+	print "\nIf you use an SGE environment, you can do 'qsub $outputFn_qsub' to submit inidividual computation jobs.\n\n";
 }
 elsif($mode eq 'doJobI')
 {
@@ -464,7 +482,6 @@ elsif($mode eq 'collect')
 
 	foreach my $readLength (keys %results_reads_many_per_node)
 	{
-	
 		foreach my $nodeID (keys %{$results_reads_many_per_node{$readLength}})
 		{
 			my $nodeRank = $taxonomy->{$nodeID}{rank};
@@ -498,9 +515,12 @@ elsif($mode eq 'collect')
 	
 	close(RESULTSREADSMANY);
 	
-	print "Produced results file:\n";
-	print " - $outputFn_results \n";
-	print " - $outputFn_reads_results \n";
+
+	copy($outputFn_reads_results_many, $finalResultsFile) or die "Cannot copy $outputFn_reads_results_many -> $finalResultsFile";
+
+	print "\n\nProduced results file:\n";
+	print " - $finalResultsFile \n\n";
+
 }
 
 

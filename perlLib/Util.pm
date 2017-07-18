@@ -1,6 +1,62 @@
 package Util;
 
 use strict;
+use File::Copy;
+use List::Util qw/all/;
+use Data::Dumper;
+
+use taxTree;
+
+sub copyMetaMapDB
+{
+	my $source = shift;
+	my $target = shift;
+	
+	my @files_required = ('DB.fa', 'taxonInfo.txt');
+	my @files_optional = ('selfSimilarities.txt');
+	
+	unless(-d $target)
+	{
+		mkdir($target) or die "Cannot mkdir $target";
+	}
+	
+	foreach my $f (@files_required)
+	{
+		my $fP = $source . '/' . $f;
+		my $tP = $target . '/' . $f;
+		unless(-e $fP)
+		{
+			die "Source DB directory $source doesn't contain file $f";
+		}
+		copy($fP, $tP) or die "Couldn't copy $fP -> $tP"; 
+	}	
+	
+	foreach my $f (@files_optional)
+	{
+		my $fP = $source . '/' . $f;
+		my $tP = $target . '/' . $f;
+		if(-e $fP)
+		{
+			copy($fP, $tP) or die "Couldn't copy $fP -> $tP"; 
+		}
+	}	 
+ 
+	my @existing_files_taxonomy = glob($source . '/taxonomy/*');
+	
+	my @required_files_taxonomy = taxTree::getTaxonomyFileNames();
+	
+	die Dumper("Taxonomy files missing?", \@existing_files_taxonomy, @required_files_taxonomy) unless(all {my $requiredFile = $_; my $isThere = (scalar(grep {my $existingFile = $_; my $pattern = '/' . $requiredFile . '$'; my $isMatch = ($existingFile =~ /$pattern/); print join("\t", "'" . $existingFile . "'", "'" . $pattern . "'", $isMatch), "\n" if(1==0); $isMatch} @existing_files_taxonomy) == 1); warn "File $requiredFile missing" unless($isThere); $isThere} @required_files_taxonomy);
+	
+	my $target_taxonomyDir = $target . '/taxonomy/';
+	unless(-d $target_taxonomyDir)
+	{
+		mkdir($target_taxonomyDir) or die "Cannot mkdir $target_taxonomyDir";
+	}
+	foreach my $f (@existing_files_taxonomy)
+	{
+		copy($f, $target_taxonomyDir) or die "Cannot copy $f into ${target}/taxonomy";
+	}
+}
 
 sub getGenomeLength
 {

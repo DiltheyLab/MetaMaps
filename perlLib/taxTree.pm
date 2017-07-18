@@ -570,4 +570,11 @@ sub getTaxonomyFileNames
 {
 	return qw/delnodes.dmp merged.dmp names.dmp nodes.dmp/;
 }
+
+
+sub getRelevantRanks
+{
+	return qw/species genus family order phylum superkingdom/;
+}
+	
 1;
