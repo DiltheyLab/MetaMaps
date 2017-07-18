@@ -90,6 +90,7 @@ sub readTaxonomy
 		}
 	}
 
+	taxonomy_checkConsistency(\%full_tree);
 	
 	return \%full_tree;
 	
@@ -201,11 +202,83 @@ sub get_leave_ids
 	return @forReturn;
 }
 
+sub taxonomy_checkConsistency
+{
+	my $taxonomy = shift;
+	my $root_nodes = 0;
+	foreach my $node (keys %$taxonomy)
+	{
+		my $parentID = $taxonomy->{$node}{parent};
+		die unless((defined $parentID) or ($node eq '1'));
+		if($parentID)
+		{
+			my $parent_node = $taxonomy->{$parentID};
+			die unless(scalar(grep {$_ eq $node} @{$parent_node->{children}}) == 1);
+		}
+		else
+		{
+			$root_nodes++;
+		}
+		
+		my @children = @{$taxonomy->{$node}{children}};
+		foreach my $childID (@children)
+		{
+			my $childNode = $taxonomy->{$childID};
+			die unless(defined $childNode);
+			die unless($childNode->{parent} eq $node);
+		}
+	}
+	
+	die unless($root_nodes == 1);
+}
+
+sub removeUnmappableParts
+{
+	my $taxonomy = shift;
+	my $taxonID_mappable_href = shift;
+	
+	my %keepNode;
+	
+	foreach my $mappableNode (keys %$taxonID_mappable_href)
+	{
+		if($taxonID_mappable_href->{$mappableNode} and exists $taxonomy->{$mappableNode})
+		{			
+			$keepNode{$mappableNode} = 1;
+			my $runningNode = $mappableNode;
+			while($taxonomy->{$runningNode}{parent})
+			{
+				$runningNode = $taxonomy->{$runningNode}{parent};
+				last if($keepNode{$runningNode});
+				$keepNode{$runningNode} = 1;
+			}
+		}
+	}
+
+	print "taxTree::removeUnmappableParts(..): Out of ", scalar(keys %$taxonomy), ", keep ", scalar(keys %keepNode), " nodes.\n";
+	
+	my @previousNodes = keys %$taxonomy;
+	
+	foreach my $nodeID (@previousNodes)
+	{
+		if($keepNode{$nodeID})
+		{
+			my @node_new_children = grep {$keepNode{$_}} @{$taxonomy->{$nodeID}{children}};
+			$taxonomy->{$nodeID}{children} = \@node_new_children;
+		}
+		else
+		{
+			delete $taxonomy->{$nodeID};
+		}
+	}
+	
+	taxonomy_checkConsistency($taxonomy);
+}
+
 sub descendants
 {
 	my $tree_href = shift;
 	my $nodeID = shift;
-	die unless($tree_href->{$nodeID});	
+	die "Unknown taxon ID $nodeID" unless($tree_href->{$nodeID});	
 	
 	my @forReturn;
 	my @left_to_visit = @{$tree_href->{$nodeID}{children}};

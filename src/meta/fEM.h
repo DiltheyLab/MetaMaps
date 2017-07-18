@@ -26,6 +26,7 @@ std::map<std::string, std::map<std::string, size_t>> loadRelevantTaxonInfo(std::
 std::set<std::string> getTaxonIDsFromMappingsFile(std::string mappedFile);
 void callBackForAllReads(std::string mappedFile, std::function<void(const std::vector<std::string>&)>& callbackFunction);
 std::set<std::string> getRelevantLevelNames();
+void cleanF(std::map<std::string, double>& f, const std::map<std::string, size_t>& reads_per_taxonID, size_t distributedReads);
 
 class oneMappingLocation
 {
@@ -544,6 +545,7 @@ void doEM(std::string DBdir, std::string mappedFile)
 	callBackForAllReads(mappedFile, processOneRead_final);
 	strout_reads_identities.close();
 
+	cleanF(f, reads_per_taxonID, mappingStats.at("ReadsMapped"));
 	producePotFile(output_pot_frequencies, T, f, reads_per_taxonID, nTotalReads, nUnmapped, nTooShort);
 
 	std::ofstream strout_coverage(output_contig_coverage);
@@ -571,10 +573,37 @@ void doEM(std::string DBdir, std::string mappedFile)
 			}
 		}
 	}
-
-
 }
 
+void cleanF(std::map<std::string, double>& f, const std::map<std::string, size_t>& reads_per_taxonID, size_t distributedReads)
+{
+	double minFreq = 0.9 * (1.0/(double)distributedReads);
+	std::set<std::string> taxonID_to_delete;
+	
+	for(auto fI : f)
+	{
+		if((fI.second < minFreq) && (reads_per_taxonID.count(fI.first) == 0))
+		{
+			taxonID_to_delete.insert(fI.first);
+		}
+	}
+	
+	for(auto taxonID : taxonID_to_delete)
+	{
+		f.erase(taxonID);
+	}
+	
+	double f_sum = 0;
+	for(auto fI : f)
+	{
+		f_sum += fI.second;
+	}
+	assert(f_sum > 0);
+	for(auto& fI : f)
+	{
+		fI.second /= f_sum;
+	}
+}
 void callBackForAllReads(std::string mappedFile, std::function<void(const std::vector<std::string>&)>& callbackFunction)
 {
 	std::ifstream mappingsStream (mappedFile);

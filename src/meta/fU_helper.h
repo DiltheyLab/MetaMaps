@@ -465,7 +465,7 @@ public:
 			assert(tAI.D.count(taxonID));
 			if(granularReadIdentities)
 			{
-				// todo perhaps reconsider
+				// todo do we really want to bin read lengths?
 				readLength = size_t(readLength/(double)100 + 0.5) * 100;
 
 				if(indirectMapping_cache_granularReads[taxonID][readLength].count(identity))
@@ -474,9 +474,11 @@ public:
 				}
 				else
 				{
+					// move below and uncomment if debug printing desired
+					// printIdentityHistogram(iH.getCompleteIdentityHistogram(), " original");
+					// printIdentityHistogram(histogramForNode, "node " + taxonID + ", read length " + std::to_string(readLength) );
+
 					std::map<int, double> histogramForNode = getShiftedIdentityHistogramForNode_oneReadLength(taxonID, readLength);
-					
-					printIdentityHistogram(histogramForNode, "node " + taxonID + ", read length " + std::to_string(readLength) );
 					
 					double forReturn =(histogramForNode.count(identity)) ? histogramForNode.at(identity) : 0;
 					indirectMapping_cache_granularReads.at(taxonID).at(readLength)[identity] = forReturn;

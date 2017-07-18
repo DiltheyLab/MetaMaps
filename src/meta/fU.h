@@ -24,6 +24,8 @@
 namespace meta
 {
 
+void cleanF_U(std::pair<std::map<std::string, double>, std::map<std::string, double>>& f, const std::pair<std::map<std::string, size_t>, std::map<std::string, size_t>>& assignedReads, size_t distributedReads);
+
 
 void producePotFile_U(std::string outputFN, const taxonomy& T, std::pair<std::map<std::string, double>, std::map<std::string, double>> frequencies, std::pair<std::map<std::string, size_t>, std::map<std::string, size_t>> readCount, size_t mappableReads)
 {
@@ -483,6 +485,8 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 
 	callBackForAllReads(mappedFile, processOneRead_final);
 
+	strout_reads_identities.close();
+	
 	for(auto oneUnmappedReadLength : unmappedReadsLengths)
 	{
 		std::map<std::string, double> unmapped_p;
@@ -503,9 +507,68 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 		assignedReads.second[best_unmapped_P_which]++;
 	}
 
+	cleanF_U(f, assignedReads, mappingStats.at("ReadsMapped"));
+
 	producePotFile_U(output_pot_frequencies, T, f, assignedReads, nReadsMappable);
 
-	strout_reads_identities.close();
+}
+
+void cleanF_U(std::pair<std::map<std::string, double>, std::map<std::string, double>>& f, const std::pair<std::map<std::string, size_t>, std::map<std::string, size_t>>& assignedReads, size_t distributedReads)
+{
+	double minFreq = 0.9 * (1.0/(double)distributedReads);
+	std::set<std::string> taxonID_to_delete;
+	
+	std::map<std::string, double> f_combined;
+	
+	for(auto fI : f.first)
+	{
+		if(f_combined.count(fI.first) == 0)
+		{
+			f_combined[fI.first] = 0;
+		}
+		f_combined.at(fI.first) += fI.second;
+	}
+	for(auto fI : f.second)
+	{
+		if(f_combined.count(fI.first) == 0)
+		{
+			f_combined[fI.first] = 0;
+		}
+		f_combined.at(fI.first) += fI.second;
+	}	
+	
+	for(auto fI : f_combined)
+	{
+		if((fI.second < minFreq) && (assignedReads.first.count(fI.first) == 0) && (assignedReads.second.count(fI.first) == 0))
+		{
+			taxonID_to_delete.insert(fI.first);
+		}
+	}
+	
+	for(auto taxonID : taxonID_to_delete)
+	{
+		f.first.erase(taxonID);
+		f.second.erase(taxonID);
+	}
+	
+	double f_sum = 0;
+	for(auto fI : f.first)
+	{
+		f_sum += fI.second;
+	}
+	for(auto fI : f.second)
+	{
+		f_sum += fI.second;
+	}	
+	assert(f_sum > 0);
+	for(auto& fI : f.first)
+	{
+		fI.second /= f_sum;
+	}
+	for(auto& fI : f.second)
+	{
+		fI.second /= f_sum;
+	}	
 }
 
 }

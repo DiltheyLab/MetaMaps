@@ -16,11 +16,13 @@ my $DB = 'refseq';
 my $FASTAs;
 my $taxonomyDir;
 my $maxSpecies;
+my $Utest;
 GetOptions (
 	'DB:s' => \$DB, 
 	'FASTAs:s' => \$FASTAs, 
 	'taxonomy:s' => \$taxonomyDir, 
 	'maxSpecies:s' => \$maxSpecies, 
+	'Utest:s' => \$Utest, 
 );
 
 # Get input arguments
@@ -29,7 +31,6 @@ unless($DB and $FASTAs and $taxonomyDir)
 {
 	print_help();
 }
-
 
 die "Please specify a taxonomy directory (parameter --taxonomy)" unless(-d $taxonomyDir);
 die "Taxonomy directory (--taxonomy) does not contain expected files for taxonomy in NCBI format (names.dmp, nodes.dmp..)." unless(all {-e $_} (map {$taxonomyDir . '/' . $_} taxTree::getTaxonomyFileNames()));
@@ -177,6 +178,39 @@ if((defined $maxSpecies) and (scalar(@useTaxonIDs) > $maxSpecies))
 	die unless($maxSpecies > 0);
 	@useTaxonIDs = @useTaxonIDs[0 .. ($maxSpecies-1)];
 }
+if($Utest)
+{
+	my $count_ancestors_with_genomes = sub {
+		my $nodeID = shift;
+		
+		die unless(defined $taxonomy_href->{$nodeID}{children});
+		
+		my @children_nodes = $taxonomy_href->{$nodeID}{children};
+		
+		my @children_nodes_mappable = grep {
+			my $child_node_ID = $_;
+			
+			my @descendants_of_child = taxTree::descendants($taxonomy_href, $child_node_ID);
+			my @child_and_descendants = ($child_node_ID, @descendants_of_child);
+			
+			my @descendants_mappable = grep {exists $taxonID_2_contig{$_}} @child_and_descendants;
+			
+			(scalar(@descendants_mappable) > 0);
+		} @children_nodes;
+		
+		return scalar(@children_nodes);
+	};
+	
+	foreach my $level (qw/species genus family/)
+	{
+		my @nodes_thisLevel = grep {$taxonomy_href->{$_}{rank} eq $level} keys %$taxonomy_href;
+		my @nodes_thisLevel_atLeast3 = grep {$count_ancestors_with_genomes->($_) >= 3} @nodes_thisLevel;
+		print "Mappable nodes $level: ", scalar(@nodes_thisLevel_atLeast3), "\n";
+	}
+}
+
+exit;
+
 my %_useTaxonID = map {$_ => 1} @useTaxonIDs;
 
 my $outputTaxonsAndContigs = $DB . '/' . 'taxonInfo.txt';
