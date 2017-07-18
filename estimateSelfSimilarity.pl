@@ -16,6 +16,7 @@ use lib "$FindBin::Bin/perlLib";
 $| = 1;
 
 use taxTree;
+use Util;
 
 my @taxonomy_fields = qw/species genus family order phylum superkingdom/;
 my $metamap_bin = 'mashmap';
@@ -26,7 +27,7 @@ unless(-e $metamap_bin)
 
 my $action = '';   
 
-my $DB = 'databases/miniSeq_100';
+my $DB = 'databases/miniSeq';
 my $mode;
 my $jobI;
 my $readSimSize = 2000;
@@ -60,13 +61,467 @@ my $outputFn_summary_individual = $outputDir . '/summary.individual';
 
 if(not $mode)
 {
+	die "Please specify --mode; e.g.: prepareFromScratch";
+}
+elsif($mode eq 'prepareFromScratch')
+{
 	(mkdir($outputDir) or die "Cannot mkdir $outputDir") unless(-d $outputDir);
 	(mkdir($outputDir_computation) or die "Cannot mkdir $outputDir") unless(-d $outputDir_computation);
 	(mkdir($outputDir_results) or die "Cannot mkdir $outputDir") unless(-d $outputDir_results);
 
+	print "Prepare self-similarity computation from scratch - output directory $outputDir\n";
+	
 	# read taxonID -> contigs
 	my %taxonID_2_contigs;
 	my %contigLength;
+	read_taxonIDs_and_contigs($DB, \%taxonID_2_contigs, \%contigLength);
+	
+	# read taxonomy
+	my $taxonomy = taxTree::readTaxonomy($taxonomyDir);
+
+	# strip down to mappable components
+	taxTree::removeUnmappableParts($taxonomy, \%taxonID_2_contigs);
+	
+	# get leaves that we want to estimate potentially new node distances for
+	my @nodesForAttachment = taxTree::getNodesForPotentialAttachmentOfNovelSpecies($taxonomy);
+	
+	# sanity check that really all leaf nodes are mappable
+	my @nodesForAttachment_leaves = map {taxTree::descendants_leaves($taxonomy, $_)} @nodesForAttachment;
+	die unless(all {exists $taxonID_2_contigs{$_}} @nodesForAttachment_leaves);
+	print "Have nodes ", scalar(@nodesForAttachment), " that hypothetical new species could be attached to.\n";
+	
+	# open jobs file
+	open(JOBS, '>', $outputFn_jobs) or die "Canot open $outputFn_jobs";
+	
+	# derive subcomputations for each node
+	my $total_computations = 0;
+	my $computations_max_per_node = 0;
+	my $computations_max_per_node_which;
+	foreach my $nodeID (@nodesForAttachment)
+	{
+		my @thisNode_self_simililarity_subcomputations = taxTree::getSubComputationsForAttachment($taxonomy, $nodeID, \%taxonID_2_contigs);
+		die Dumper("Fewer subcomputations than expected", scalar(@thisNode_self_simililarity_subcomputations), scalar(@{$taxonomy->{$nodeID}{children}})) unless(scalar(@thisNode_self_simililarity_subcomputations) >= scalar(@{$taxonomy->{$nodeID}{children}}));
+		
+		my $computations_thisNode = scalar(@thisNode_self_simililarity_subcomputations);
+		
+		$total_computations += $computations_thisNode;
+		if($computations_thisNode > $computations_max_per_node)
+		{
+			$computations_max_per_node = $computations_thisNode;
+			$computations_max_per_node_which = $nodeID;
+		}
+		
+		# print "Node $nodeID, $computations_thisNode computations.\n";
+		
+		foreach my $node_computation (@thisNode_self_simililarity_subcomputations)
+		{
+			my $targetLeafID = $node_computation->[1];
+			my $targetLeaf_genomeSize = Util::getGenomeLength($targetLeafID, \%taxonID_2_contigs, \%contigLength);
+			my @targetLeaf_compareAgainst = @{$node_computation->[2]};
+			my @targetLeaf_contigs = keys %{$taxonID_2_contigs{$targetLeafID}};
+			
+			my $targetLeaf_compareAgainst_combinedSize = 0;
+			my @compareAgainst_contigs;
+			my %ranks_compareAgainst;
+			foreach my $taxonID (@targetLeaf_compareAgainst)
+			{
+				$targetLeaf_compareAgainst_combinedSize += Util::getGenomeLength($taxonID, \%taxonID_2_contigs, \%contigLength);
+				push(@compareAgainst_contigs, keys %{$taxonID_2_contigs{$taxonID}});
+				$ranks_compareAgainst{$taxonomy->{$taxonID}{rank}}++;
+			}
+			
+			print JOBS join("\t",
+				$nodeID,							# the node we're attaching new species todo
+				$taxonomy->{$nodeID}{rank},		
+				$node_computation->[0],						# the node's immediate child we're taking the to-map-genome from
+				$taxonomy->{$node_computation->[0]}{rank},
+				$targetLeafID,									# the node which we're now mapping against the genomes of the other children
+				$taxonomy->{$targetLeafID}{rank},
+				$targetLeaf_genomeSize,						
+				scalar(@targetLeaf_compareAgainst),
+				join(";", @targetLeaf_compareAgainst),
+				$targetLeaf_compareAgainst_combinedSize,
+				join(";", @targetLeaf_contigs),
+				join(";", @compareAgainst_contigs),
+				join(';', sort keys %ranks_compareAgainst)
+			), "\n";		
+		}
+	}
+	
+	print "Need to carry out $total_computations computations in total; max $computations_max_per_node per node ($computations_max_per_node_which, " . taxTree::taxon_id_get_name($computations_max_per_node_which, $taxonomy), ").\n";
+	
+	close(JOBS);
+	
+	print "Generated file $outputFn_jobs\n";
+}
+elsif($mode eq 'doJobI')
+{
+	die "Please specify --jobI" unless(defined $jobI);
+	
+	my ($A_taxonID, $B_taxonIDs, $contigs_A, $contigs_B);
+	open(JOBS, '<', $outputFn_jobs) or die "Cannot open $outputFn_jobs";
+	my $lineI = -1;
+	while(<JOBS>)
+	{
+		my $line = $_;
+		$lineI++;
+		if($lineI == $jobI)
+		{
+			chomp($line);
+			my @fields = split(/\t/, $line);
+			die unless($#fields == 12);
+			$A_taxonID = $fields[4];
+			$B_taxonIDs = $fields[8];			
+			$contigs_A = $fields[10];
+			$contigs_B = $fields[11];
+		}
+	}
+	close(JOBS);
+	die "Can't find job data for $jobI" unless(defined $contigs_A);
+
+	print "Job $jobI";
+	print "\tMapping from: $A_taxonID\n";
+	print "\tMapping to  : $B_taxonIDs\n";
+	
+	my %contigs_A = map {$_ => 1} split(/;/, $contigs_A); die unless(scalar(keys %contigs_A));
+	my %contigs_B = map {$_ => 1} split(/;/, $contigs_B); die unless(scalar(keys %contigs_B));
+	
+	my $dir_computation = $outputDir_computation . '/' . $jobI;
+	mkdir($dir_computation);
+
+	my $file_A = $dir_computation . '/A';
+	my $file_A_reads_many = $dir_computation . '/A.reads.many';
+	my $file_B = $dir_computation . '/B';
+	my $outputFn_MetaMap = $dir_computation . '.MetaMap.many';
+	
+	open(A, '>', $file_A) or die;
+	open(B, '>', $file_B) or die;
+	open(REF, '<', $file_ref) or die "Cannot open $file_ref";
+	
+	my $in_A = 0;
+	my $in_B = 0;
+	while(<REF>)
+	{
+		my $line = $_;
+		chomp($line);
+		if(substr($line, 0, 1) eq '>')
+		{
+			$in_A = 0;	
+			$in_B = 0;
+			my $contigID = substr($line, 1);
+			if($contigs_A{$contigID})
+			{
+				$in_A = 1;
+				$contigs_A{$contigID}--;
+			}
+			if($contigs_B{$contigID})
+			{
+				$in_B = 1;
+				$contigs_B{$contigID}--;
+			}
+			die if($in_A and $in_B);
+		}
+
+		if($in_A)
+		{
+			print A $line, "\n";
+		}
+
+		if($in_B)
+		{
+			print B $line, "\n";
+		}
+	}
+	close(REF);
+	close(A);
+	close(B);
+
+	foreach my $contigID (keys %contigs_A)
+	{
+		die "Missed contig $contigID" if($contigs_A{$contigID});
+	}
+
+	foreach my $contigID (keys %contigs_B)
+	{
+		die "Missed contig $contigID" if($contigs_B{$contigID});
+	}
+
+	my $results_fn_reads_many = get_results_file_for_jobI($jobI);
+	
+	# make sure results file is writable and empty
+	open(F, '>', $results_fn_reads_many) or die "Cannot open $results_fn_reads_many";
+	close(F);
+
+	for(my $chunkLength = $readSimSizeFrom; $chunkLength <= $readSimSizeTo; $chunkLength += $readSimSizeStep)
+	{
+		print "\tSimulate chunk length $chunkLength\n";
+		open(READS, '>', $file_A_reads_many) or die "Cannot open $file_A_reads_many";
+		my $A_contigs_href = Util::readFASTA($file_A);
+		
+		my $read_start_positions  = 0;
+		foreach my $contigID (keys %$A_contigs_href)
+		{
+			my $contigSequence = $A_contigs_href->{$contigID};
+			die unless(defined $contigSequence);
+			for(my $posI = 0; $posI < length($contigSequence); $posI += $readSimDelta)
+			{
+				my $lastPos = $posI + $chunkLength - 1;
+				if($lastPos < length($contigSequence))
+				{
+					$read_start_positions++;
+				}
+			}  
+		}	
+		
+		my $start_rate = 1;
+		if($read_start_positions > $target_max_simulatedChunks)
+		{
+			$start_rate = $target_max_simulatedChunks / $read_start_positions;
+			print "\t\t\t(Read lengths; $chunkLength) Adjusted start rate to $start_rate (eligible start positions: $read_start_positions, want $target_max_simulatedChunks)\n";
+		}
+		die unless(($start_rate >= 0) and ($start_rate <= 1));
+		
+		my $n_reads = 0;
+		foreach my $contigID (keys %$A_contigs_href)
+		{
+			my $contigSequence = $A_contigs_href->{$contigID};
+			POS: for(my $posI = 0; $posI < length($contigSequence); $posI += $readSimDelta)
+			{
+				my $lastPos = $posI + $chunkLength - 1;
+				if($lastPos < length($contigSequence))
+				{
+				
+					if($start_rate != 1)
+					{
+						next POS if(rand(1) > $start_rate);
+					}
+					
+					$n_reads++;
+					my $readID = 'read' . $n_reads;
+					my $S = substr($contigSequence, $posI, $chunkLength);
+					die unless(length($S) == $chunkLength);
+					print READS '>', $readID, "\n";
+					print READS $S, "\n";
+				}
+			}  
+		}
+		close(READS);
+		
+		print "\t\tReads file $file_A_reads_many with $n_reads reads";
+				
+		my $MetaMap_cmd = qq($metamap_bin mapDirectly -r $file_B -q $file_A_reads_many -m $readSimSizeFrom -o $outputFn_MetaMap --pi 80);
+		print "\t\tExecuted command $MetaMap_cmd\n";		
+		system($MetaMap_cmd) and die "MetaMap command $MetaMap_cmd failed";
+		
+		my $n_read_alignments = 0;
+		my %read_alignment_histogram;
+		my $currentReadID = '';
+		my @currentReadLines;
+		my $processAlignments_oneRead = sub {
+			my $bestIdentity;
+			foreach my $line (@currentReadLines)
+			{
+				my @fields = split(/ /, $line);
+				die Dumper($fields[0], $currentReadID) unless($fields[0] eq $currentReadID);
+				
+				my $readID = $fields[0];
+				my $identity = $fields[9];
+				die unless(($identity >= 0) and ($identity <= 100));
+				if((not defined $bestIdentity) or ($bestIdentity < $identity))
+				{
+					$bestIdentity = $identity;
+				}
+			}
+			$bestIdentity = int($bestIdentity + 0.5);
+			$read_alignment_histogram{$bestIdentity}++;
+			$n_read_alignments++;
+		};	
+		
+		open(MetaMapOUTPUT, '<', $outputFn_MetaMap) or die "Cannot open $outputFn_MetaMap";
+		while(<MetaMapOUTPUT>)
+		{
+			chomp;
+			next unless($_);
+			die "Weird input" unless($_ =~ /^(.+?) /);
+			my $readID = $1;
+			if($currentReadID ne $readID)
+			{
+				if(@currentReadLines)
+				{
+					$processAlignments_oneRead->();
+				}
+				$currentReadID = $readID;
+				@currentReadLines = ();
+			}
+			push(@currentReadLines, $_);
+			# last if ($processed_reads > 10); 
+		}
+		if(@currentReadLines)
+		{
+			$processAlignments_oneRead->();
+		}	
+		
+		close(MetaMapOUTPUT);
+
+		my $n_missing_reads = $n_reads - $n_read_alignments;
+		die unless($n_missing_reads >= 0);
+		$read_alignment_histogram{0} += $n_missing_reads;
+		
+		open(RESULTSMetaMap, '>>', $results_fn_reads_many) or die "Cannot open $results_fn_reads_many";
+		foreach my $k (sort {$a <=> $b} keys %read_alignment_histogram)
+		{
+			print RESULTSMetaMap join("\t", $chunkLength, $k, $read_alignment_histogram{$k}), "\n";
+		}
+		close(RESULTSMetaMap);
+	}
+	
+	print "--------\nJob $jobI done. Produced $results_fn_reads_many.\n";
+		
+	unlink($file_A);
+	unlink($file_A_reads_many);
+	unlink($file_B);
+	unlink($outputFn_MetaMap);
+	system('rm ' . $dir_computation . '/*') and die "Cannot delete $dir_computation (I)";	
+	system('rm -r ' . $dir_computation) and die "Cannot delete $dir_computation (II)";	
+}
+elsif($mode eq 'collect')
+{
+	print "Collect results from folder $outputDir_results\n";
+	
+	my %taxonID_2_contigs;
+	my %contigLength;
+	read_taxonIDs_and_contigs($DB, \%taxonID_2_contigs, \%contigLength);
+	
+	# read taxonomy
+	my $taxonomy = taxTree::readTaxonomy($taxonomyDir);
+
+	# strip down to mappable components
+	taxTree::removeUnmappableParts($taxonomy, \%taxonID_2_contigs);
+	
+	my %results_reads_many_per_node;
+	my $total_jobs = 0;
+	my $total_jobs_reads_many_ok = 0;	
+	open(JOBS, '<', $outputFn_jobs) or die "Canot open $outputFn_jobs";
+	my $lineI = -1;
+	while(<JOBS>)
+	{
+		my $line = $_;
+		chomp($line);
+		my @fields = split(/\t/, $line);
+		my $nodeID = $fields[0];
+		
+		$lineI++;
+		my $jobI = $lineI; 
+		
+		my $results_reads_many_fn = get_results_file_for_jobI($jobI);
+		$total_jobs++;
+		
+		if(-e $results_reads_many_fn)
+		{
+			my $S = 0;
+			my %S_by_readLength;
+			my %h;
+			open(R, '<', $results_reads_many_fn) or die;
+			while(<R>)
+			{
+				my $l = $_;
+				chomp($l);
+				next unless($l);
+				my @fields = split(/\t/, $l);
+				die Dumper("Weird field count in line $. of file $results_reads_many_fn", \@fields) unless(scalar(@fields) == 3);
+				$h{$fields[0]}{$fields[1]} = $fields[2];
+				$S += $fields[2];
+				$S_by_readLength{$fields[0]} += $fields[2];
+			}
+			close(R);
+			if($S == 0)
+			{
+				# warn "Problem with $results_reads_fn";
+			}
+			else
+			{
+				foreach my $readLength (keys %h)
+				{
+					next if(not $S_by_readLength{$readLength});
+					foreach my $k (keys %{$h{$readLength}})
+					{
+						$h{$readLength}{$k} /= $S_by_readLength{$readLength};
+					}
+					push(@{$results_reads_many_per_node{$readLength}{$nodeID}}, $h{$readLength});
+				}
+
+				$total_jobs_reads_many_ok++;
+			}
+		}
+						
+	}
+	close(JOBS);
+	
+	print "\nTotal jobs: $total_jobs\n";
+	print "\tof which with results: $total_jobs_reads_many_ok \n";
+
+	open(RESULTSREADSMANY, '>', $outputFn_reads_results_many) or die "Cannot open $outputFn_reads_results_many";
+
+	foreach my $readLength (keys %results_reads_many_per_node)
+	{
+	
+		foreach my $nodeID (keys %{$results_reads_many_per_node{$readLength}})
+		{
+			my $nodeRank = $taxonomy->{$nodeID}{rank};
+			my $nodeName = join('; ', @{$taxonomy->{$nodeID}{names}});
+
+			my @descendants = taxTree::descendants($taxonomy, $nodeID);
+			my @descendants_with_genomes = grep {exists $taxonID_2_contigs{$_}} @descendants;
+			my %combinedHistogram;
+			my $S = 0;		 
+			foreach my $histogram (@{$results_reads_many_per_node{$readLength}{$nodeID}})
+			{
+				foreach my $k (keys %$histogram)
+				{	
+					$combinedHistogram{$k} += $histogram->{$k};
+					$S += $histogram->{$k};
+				}
+			}
+			
+			my $firstKey = 1;				
+			foreach my $k (keys %combinedHistogram)
+			{
+				$combinedHistogram{$k} /= $S;
+				my $string_source_genomes = ($firstKey) ? join(';', @descendants_with_genomes) : '';
+				my $string_rank = ($firstKey) ? $nodeRank : '';
+				my $string_name = ($firstKey) ? $nodeName : '';
+				$firstKey = 0;
+				print RESULTSREADSMANY join("\t", $nodeID, $readLength, $k, $combinedHistogram{$k}, $string_source_genomes, $string_rank, $string_name), "\n";
+			}
+		}	
+	}
+	
+	close(RESULTSREADSMANY);
+	
+	print "Produced results file:\n";
+	print " - $outputFn_results \n";
+	print " - $outputFn_reads_results \n";
+}
+
+
+else
+{
+	die "Unknown mode";
+}
+
+
+sub get_results_file_for_jobI
+{
+	my $jobI = shift;
+	return  $outputDir_results . '/' . $jobI . '.results.reads.many';;
+}
+
+sub read_taxonIDs_and_contigs
+{
+	my $DB = shift;
+	my $taxonID_2_contigs_href = shift;
+	my $contigLength_href = shift;
+	
 	my $file_taxonGenomes = $DB . '/taxonInfo.txt';
 	
 	open(GENOMEINFO, '<', $file_taxonGenomes) or die "Cannot open $file_taxonGenomes";
@@ -79,64 +534,19 @@ if(not $mode)
 		die unless(scalar(@line_fields) == 2);
 		my $taxonID = $line_fields[0];
 		my $contigs = $line_fields[1];
-		die if(exists $taxonID_2_contigs{$taxonID});
+		die if(exists $taxonID_2_contigs_href->{$taxonID});
 
 		my @components = split(/;/, $contigs);
 		foreach my $component (@components)
 		{
 			my @p = split(/=/, $component);
 			die unless(scalar(@p) == 2);
-			die if(exists $taxonID_2_contigs{$taxonID}{$p[0]});
-			$taxonID_2_contigs{$taxonID}{$p[0]} = $p[1];
-			$contigLength{$p[0]} = $p[1];
+			die if(exists $taxonID_2_contigs_href->{$taxonID}{$p[0]});
+			$taxonID_2_contigs_href->{$taxonID}{$p[0]} = $p[1];
+			$contigLength_href->{$p[0]} = $p[1];
 		}
 	}
 	close(GENOMEINFO);
-
-	# read taxonomy
-	my $taxonomy = taxTree::readTaxonomy($taxonomyDir);
-
-	# strip down to mappable components
-	taxTree::removeUnmappableParts($taxonomy, \%taxonID_2_contigs);
-	
-	# get leaves that we want to estimate potentially new node distances for
-	my @nodesForAttachment = getNodeForPotentialAttachment($taxonomy);
-}
-
-
-sub getNodeForPotentialAttachment
-{
-	my $taxonomy_href = shift;
-	my @nodeIDs = keys %$taxonomy_href;
-	my @nodes_direct_attachment = grep {my $rank = $taxonomy_href->{$_}{rank}; (($rank eq 'species') or ($rank eq 'genus') or ($rank eq 'family'))} @nodeIDs;
-	my @full_potential_node_list = map {taxTree::descendants($taxonomy_href, $_)} @nodes_direct_attachment;
-	@full_potential_node_list = grep {scalar(@{$taxonomy_href->{$_}{children}}) > 1} @full_potential_node_list;
-	my %_u = map {$_ => 1} @full_potential_node_list;
-	
-	my @forReturn = keys %_u;
-	
-	my %rankStats;
-	my $nodes_multi_rank_children = 0;
-	foreach my $nodeID (@forReturn)
-	{
-		$rankStats{$taxonomy_href->{$nodeID}{rank}}++;
-		
-		my %ranks_children = map {$taxonomy_href->{$_}{rank} => 1} @{$taxonomy_href->{$nodeID}{children}};
-		if(scalar(keys %ranks_children) > 1)
-		{
-			$nodes_multi_rank_children++;
-		}
-	}
-	
-	print "Total nodes considered for attachment (>1 child; in rank <= (species, genus or family); from taxonomy): ", scalar(@forReturn), "\n";
-	print "\tOf these, $nodes_multi_rank_children have multi-rank child sets.\n";
-	print "\tNode rank stats:\n";
-	foreach my $rank (keys %rankStats)
-	{
-		print "\t\t", $rank, ": ", $rankStats{$rank}, "\n";
-	}
-	
-	return @forReturn;
 }
 
 __END__
@@ -713,11 +1123,11 @@ elsif($mode eq 'doJob')
 		
 		print "Reads file $file_A_reads";
 		
-		my $outputFn_mashmap = $dir_computation . '.mashmap';
-		# my $mashmap_cmd = qq($metamap_bin -s $file_B -q $file_A_reads -m $readSimSize -o $outputFn_mashmap); # todo reinstate
-		my $mashmap_cmd = qq($metamap_bin -s $file_B -q $file_A_reads -m 2000 -o $outputFn_mashmap);
-		system($mashmap_cmd) and die "Mashmap command $mashmap_cmd failed";
-		print "Executed command $mashmap_cmd \n";
+		my $outputFn_MetaMap = $dir_computation . '.MetaMap';
+		# my $MetaMap_cmd = qq($metamap_bin -s $file_B -q $file_A_reads -m $readSimSize -o $outputFn_MetaMap); # todo reinstate
+		my $MetaMap_cmd = qq($metamap_bin -s $file_B -q $file_A_reads -m 2000 -o $outputFn_MetaMap);
+		system($MetaMap_cmd) and die "MetaMap command $MetaMap_cmd failed";
+		print "Executed command $MetaMap_cmd \n";
 		
 		my $n_read_alignments = 0;
 		my %read_alignment_histogram;
@@ -743,8 +1153,8 @@ elsif($mode eq 'doJob')
 			$n_read_alignments++;
 		};	
 		
-		open(MASHMAPOUTPUT, '<', $outputFn_mashmap) or die "Cannot open $outputFn_mashmap";
-		while(<MASHMAPOUTPUT>)
+		open(MetaMapOUTPUT, '<', $outputFn_MetaMap) or die "Cannot open $outputFn_MetaMap";
+		while(<MetaMapOUTPUT>)
 		{
 			chomp;
 			next unless($_);
@@ -767,7 +1177,7 @@ elsif($mode eq 'doJob')
 			$processAlignments_oneRead->();
 		}	
 		
-		close(MASHMAPOUTPUT);
+		close(MetaMapOUTPUT);
 
 		my $n_missing_reads = $n_reads - $n_read_alignments;
 		die unless($n_missing_reads >= 0);
@@ -775,12 +1185,12 @@ elsif($mode eq 'doJob')
 		
 		my $results_fn_reads = $outputDir_results . '/' . $jobI . '.results.reads';
 		
-		open(RESULTSMASHMAP, '>', $results_fn_reads) or die "Cannot open $results_fn_reads";
+		open(RESULTSMetaMap, '>', $results_fn_reads) or die "Cannot open $results_fn_reads";
 		foreach my $k (sort {$a <=> $b} keys %read_alignment_histogram)
 		{
-			print RESULTSMASHMAP join("\t", $k, $read_alignment_histogram{$k}), "\n";
+			print RESULTSMetaMap join("\t", $k, $read_alignment_histogram{$k}), "\n";
 		}
-		close(RESULTSMASHMAP);
+		close(RESULTSMetaMap);
 		
 		print "Produced $results_fn_reads\n";
 	}
@@ -848,10 +1258,10 @@ elsif($mode eq 'doJob')
 			
 			print "Reads file $file_A_reads_many";
 			
-			my $outputFn_mashmap = $dir_computation . '.mashmap.many';
-			my $mashmap_cmd = qq($metamap_bin -s $file_B -q $file_A_reads_many -m $chunkLength -o $outputFn_mashmap);
-			system($mashmap_cmd) and die "Mashmap command $mashmap_cmd failed";
-			print "Executed command $mashmap_cmd \n";
+			my $outputFn_MetaMap = $dir_computation . '.MetaMap.many';
+			my $MetaMap_cmd = qq($metamap_bin -s $file_B -q $file_A_reads_many -m $chunkLength -o $outputFn_MetaMap);
+			system($MetaMap_cmd) and die "MetaMap command $MetaMap_cmd failed";
+			print "Executed command $MetaMap_cmd \n";
 			
 			my $n_read_alignments = 0;
 			my %read_alignment_histogram;
@@ -877,8 +1287,8 @@ elsif($mode eq 'doJob')
 				$n_read_alignments++;
 			};	
 			
-			open(MASHMAPOUTPUT, '<', $outputFn_mashmap) or die "Cannot open $outputFn_mashmap";
-			while(<MASHMAPOUTPUT>)
+			open(MetaMapOUTPUT, '<', $outputFn_MetaMap) or die "Cannot open $outputFn_MetaMap";
+			while(<MetaMapOUTPUT>)
 			{
 				chomp;
 				next unless($_);
@@ -901,18 +1311,18 @@ elsif($mode eq 'doJob')
 				$processAlignments_oneRead->();
 			}	
 			
-			close(MASHMAPOUTPUT);
+			close(MetaMapOUTPUT);
 
 			my $n_missing_reads = $n_reads - $n_read_alignments;
 			die unless($n_missing_reads >= 0);
 			$read_alignment_histogram{0} += $n_missing_reads;
 			
-			open(RESULTSMASHMAP, '>>', $results_fn_reads_many) or die "Cannot open $results_fn_reads_many";
+			open(RESULTSMetaMap, '>>', $results_fn_reads_many) or die "Cannot open $results_fn_reads_many";
 			foreach my $k (sort {$a <=> $b} keys %read_alignment_histogram)
 			{
-				print RESULTSMASHMAP join("\t", $chunkLength, $k, $read_alignment_histogram{$k}), "\n";
+				print RESULTSMetaMap join("\t", $chunkLength, $k, $read_alignment_histogram{$k}), "\n";
 			}
-			close(RESULTSMASHMAP);
+			close(RESULTSMetaMap);
 		}
 		
 		print "Produced $results_fn_reads_many\n";
@@ -927,78 +1337,5 @@ elsif($mode eq 'doJob')
 else
 {
 	die "Unknown mode: $mode";
-}
-
-sub taxonID_get_genome_length
-{
-	my $taxonID = shift;
-	my $taxonID_2_contigs_href = shift;
-	my $l = 0;
-	die unless(exists $taxonID_2_contigs_href->{$taxonID});
-	foreach my $contigID (keys %{$taxonID_2_contigs_href->{$taxonID}})
-	{
-		my $contigLength = $taxonID_2_contigs_href->{$taxonID}{$contigID};
-		die unless(defined $contigLength);
-		$l += $contigLength;
-	}
-	return $l;
-}
-
-sub mean
-{
-	my $s = 0;
-	die unless(scalar(@_));
-	foreach my $v (@_)
-	{
-		$s += $v;
-	}
-	return ($s / scalar(@_));
-}
-
-sub sd
-{
-	die unless(scalar(@_));
-	my $m = mean(@_);
-	my $sd_sum = 0;
-	foreach my $e (@_)
-	{
-		$sd_sum += ($m - $e)**2;
-	}
-	my $sd = sqrt($sd_sum);
-	return $sd;
-}
-
-sub readFASTA
-{
-	my $file = shift;	
-	my $cut_sequence_ID_after_whitespace = shift;
-	
-	my %R;
-	
-	open(F, '<', $file) or die "Cannot open $file";
-	my $currentSequence;
-	while(<F>)
-	{		
-		my $line = $_;
-		chomp($line);
-		$line =~ s/[\n\r]//g;
-		if(substr($line, 0, 1) eq '>')
-		{
-			if($cut_sequence_ID_after_whitespace)
-			{
-				$line =~ s/\s+.+//;
-			}
-			$currentSequence = substr($line, 1);
-			$R{$currentSequence} = '';
-		}
-		else
-		{
-			die "Weird input in $file" unless (defined $currentSequence);
-			$R{$currentSequence} .= uc($line);
-		}
-	}	
-	close(F);
-		
-	return \%R;
 }
 

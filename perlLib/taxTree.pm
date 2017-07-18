@@ -2,7 +2,7 @@ package taxTree;
 
 use strict;
 use Data::Dumper;
-
+use List::Util qw/all/;
 
 sub readTaxonomy
 {
@@ -481,6 +481,89 @@ sub findCurrentNodeID
 			die "Cannot transate ID $originalID (running $runningID)";
 		}
 	}
+}
+
+sub getNodesForPotentialAttachmentOfNovelSpecies
+{
+	my $taxonomy_href = shift;
+	my @nodeIDs = keys %$taxonomy_href;
+	my @nodes_direct_attachment = grep {my $rank = $taxonomy_href->{$_}{rank}; (($rank eq 'species') or ($rank eq 'genus') or ($rank eq 'family'))} @nodeIDs;
+	my @full_potential_node_list = map {taxTree::descendants($taxonomy_href, $_)} @nodes_direct_attachment;
+	@full_potential_node_list = grep {scalar(@{$taxonomy_href->{$_}{children}}) > 1} @full_potential_node_list;
+	my %_u = map {$_ => 1} @full_potential_node_list;
+	
+	my @forReturn = keys %_u;
+	
+	my %rankStats;
+	my $nodes_multi_rank_children = 0;
+	foreach my $nodeID (@forReturn)
+	{
+		$rankStats{$taxonomy_href->{$nodeID}{rank}}++;
+		
+		my %ranks_children = map {$taxonomy_href->{$_}{rank} => 1} @{$taxonomy_href->{$nodeID}{children}};
+		if(scalar(keys %ranks_children) > 1)
+		{
+			$nodes_multi_rank_children++;
+		}
+	}
+	
+	print "Total nodes considered for attachment (>1 child; in rank <= (species, genus or family); from taxonomy): ", scalar(@forReturn), "\n";
+	print "\tOf these, $nodes_multi_rank_children have multi-rank child sets.\n";
+	print "\tNode rank stats:\n";
+	foreach my $rank (keys %rankStats)
+	{
+		print "\t\t", $rank, ": ", $rankStats{$rank}, "\n";
+	}
+	
+	return @forReturn;
+}
+
+sub getSubComputationsForAttachment
+{
+	my $taxonomy_href = shift;
+	my $nodeID = shift;
+	my $mappable_href = shift;
+	die unless(defined $mappable_href);
+	
+	my @node_children = @{$taxonomy_href->{$nodeID}{children}};
+	die unless(scalar(@node_children) > 0);
+	
+	my %mappable_descendants_per_childNode;
+	foreach my $childNodeID (@node_children)
+	{
+		my @nodes_to_consider = ($childNodeID, descendants($taxonomy_href, $childNodeID));
+		my @nodes_mappable = grep {exists $mappable_href->{$_}} @nodes_to_consider;
+		die Dumper("Node $childNodeID doesn't seem to have mappable children (coming from $nodeID)", \@node_children, \@nodes_to_consider, \@nodes_mappable) unless(scalar(@nodes_mappable) > 0);
+		$mappable_descendants_per_childNode{$childNodeID} = \@nodes_mappable;
+	}
+
+	my @forReturn;
+	foreach my $childNodeID (@node_children)
+	{
+		my @mappable_descendants = @{$mappable_descendants_per_childNode{$childNodeID}};
+		my @otherChildren_mappable_descendants;
+		foreach my $childNodeID2 (@node_children)
+		{
+			next if($childNodeID eq $childNodeID2);
+			push(@otherChildren_mappable_descendants, @{$mappable_descendants_per_childNode{$childNodeID2}});
+		}
+		die unless(scalar(@otherChildren_mappable_descendants));
+		
+		foreach my $mappable_descendant (@mappable_descendants)
+		{
+			push(@forReturn, [$childNodeID, $mappable_descendant, \@otherChildren_mappable_descendants]);
+			
+			# sanity check I`
+			die unless(exists $mappable_href->{$mappable_descendant});
+		}
+			
+		# sanity check II
+		die unless(all { exists $mappable_href->{$_} } @otherChildren_mappable_descendants);		
+	}
+	
+	return @forReturn;
+	
+	
 }
 
 sub getTaxonomyFileNames
