@@ -67,12 +67,17 @@ public:
 		}
 		else
 		{
+			std::cerr << "Requested idty " << idty << "\n";
+			std::cerr << "minimumIdentity " << minimumIdentity << "\n";
+			std::cerr << "maximumIdentity " << maximumIdentity << "\n";
+			std:cerr << std::endl;
+			
 			throw std::runtime_error("Invalid code branch.");
 			return 0;
 		}
 	}
 
-	void readFromEMOutput(std::string fn, size_t minimumReadsPerContig)
+	void readFromEMOutput(std::string fn, std::pair<int, int> idty_minmax, size_t minimumReadsPerContig)
 	{
 		std::ifstream f (fn);
 		assert(f.is_open());
@@ -90,8 +95,8 @@ public:
 		assert(header_fields.at(3) == "Identity");
 		assert(header_fields.at(4) == "Length");
 		
-		int allContigs_minimum_identity = -1;
-		int allContigs_maximum_identity = -1;
+		int allMappings_minimum_identity = idty_minmax.first;
+		int allMappings_maximum_identity = idty_minmax.second;
 		
 		while(f.good())
 		{
@@ -112,15 +117,6 @@ public:
 
 			identitiesPerUnit[contigID].push_back(identity);
 			lengthPerUnit[contigID].push_back(length);
-			
-			if((allContigs_maximum_identity == -1) || (allContigs_maximum_identity < iI))
-			{
-				allContigs_maximum_identity = iI;
-			}
-			if((allContigs_minimum_identity == -1) || (allContigs_minimum_identity > iI))
-			{
-				allContigs_minimum_identity = iI;
-			}	
 		}
 
 		double highestMedian;
@@ -179,12 +175,12 @@ public:
 		assert(minimumIdentity_defined != -1);
 		assert(minimumIdentity_defined < maximumIdentity_defined); // could also be <= in theory
 		
-		assert(allContigs_minimum_identity != 1);
-		assert(allContigs_maximum_identity != 1);
-		assert(allContigs_minimum_identity < allContigs_maximum_identity); // could also be <= in theory
+		assert(allMappings_minimum_identity != 1);
+		assert(allMappings_maximum_identity != 1);
+		assert(allMappings_minimum_identity < allMappings_maximum_identity); // could also be <= in theory
 		
-		assert(allContigs_minimum_identity <= minimumIdentity_defined);
-		assert(allContigs_maximum_identity >= maximumIdentity_defined);
+		assert(allMappings_minimum_identity <= minimumIdentity_defined);
+		assert(allMappings_maximum_identity >= maximumIdentity_defined);
 		
 		identityHistogram.clear();
 		double iH_sum_1 = 0;
@@ -197,34 +193,83 @@ public:
 
 		// make sure that the non-defined identities are bigger than 
 		
+		bool warnedAboutSparsity = false;
 		double added_p_for_undefined = 0;
-		for(int i = allContigs_minimum_identity; i <= allContigs_maximum_identity; i++)
+		std::map<int, double> add_internal_histogram_values;
+		for(int i = allMappings_minimum_identity; i <= allMappings_maximum_identity; i++)
 		{	
 			if(identityHistogram.count(i) == 0)
 			{
-				assert((i < minimumIdentity_defined) || (i > maximumIdentity_defined));
-				if(i < minimumIdentity_defined)
+				if((i < minimumIdentity_defined) || (i > maximumIdentity_defined))
 				{
-					int diff_from_defined = minimumIdentity_defined - i;
-					assert(diff_from_defined > 0);
-					double p_last_defined = identityHistogram.at(minimumIdentity_defined);
-					double new_p = pow(0.5, diff_from_defined) * p_last_defined;
-					identityHistogram[i] = new_p;
-					added_p_for_undefined += new_p;
+					if(i < minimumIdentity_defined)
+					{
+						int diff_from_defined = minimumIdentity_defined - i;
+						assert(diff_from_defined > 0);
+						double p_last_defined = identityHistogram.at(minimumIdentity_defined);
+						double new_p = pow(0.5, diff_from_defined) * p_last_defined;
+						identityHistogram[i] = new_p;
+						added_p_for_undefined += new_p;
+					}
+					else
+					{
+						int diff_from_defined = i - maximumIdentity_defined;
+						assert(diff_from_defined > 0);
+						double p_last_defined = identityHistogram.at(maximumIdentity_defined);
+						double new_p = pow(0.5, diff_from_defined) * p_last_defined;
+						identityHistogram[i] = new_p;
+						added_p_for_undefined += new_p;
+					}
 				}
 				else
 				{
-					int diff_from_defined = i - allContigs_maximum_identity;
-					assert(diff_from_defined > 0);
-					double p_last_defined = identityHistogram.at(maximumIdentity_defined);
-					double new_p = pow(0.5, diff_from_defined) * p_last_defined;
-					identityHistogram[i] = new_p;
-					added_p_for_undefined += new_p;
+					if(! warnedAboutSparsity)
+					{
+						std::cerr << "\n\tWARNING: fitted read identities are apparently sparse - for example, " << i << " is undefined; min from data: " << minimumIdentity_defined << "; max from data: " << maximumIdentity_defined << ".\n";
+						std::cerr << "\tWill proceed without further warnings, but results from the 'U' step should be interpreted with caution.\n\n" << std::flush;
+						warnedAboutSparsity = true;
+					}
+					
+					int downwardsDefined_i = i;
+					do {
+						downwardsDefined_i--;
+						assert(downwardsDefined_i >= minimumIdentity_defined);
+					} while (identityHistogram.count(downwardsDefined_i) == 0);	
+					
+					int upwardsDefined_i = i;
+					do {
+						upwardsDefined_i++;
+						assert(upwardsDefined_i <= maximumIdentity_defined);
+					} while (identityHistogram.count(upwardsDefined_i) == 0);
+	
+					assert(downwardsDefined_i < upwardsDefined_i);
+					assert(identityHistogram.count(downwardsDefined_i));
+					assert(identityHistogram.count(upwardsDefined_i));
+					
+					int diff_from_left = i - downwardsDefined_i;
+					assert(diff_from_left > 0);
+					
+					int diff_from_right = upwardsDefined_i - i;
+					assert(diff_from_right > 0);
+					
+					double new_from_left = pow(0.5, diff_from_left) * identityHistogram.at(downwardsDefined_i);;
+					double new_from_right = pow(0.5, diff_from_right) * identityHistogram.at(upwardsDefined_i);;
+					
+					double new_p = (new_from_left > new_from_right) ? new_from_left : new_from_right;
+					
+					assert(add_internal_histogram_values.count(i) == 0);
+					add_internal_histogram_values[i] = new_p;
 				}
 			}
 		}
+		for(auto addhI : add_internal_histogram_values)
+		{
+			assert(identityHistogram.count(addhI.first) == 0);
+			identityHistogram[addhI.first] = addhI.second;
+			added_p_for_undefined += addhI.second;			
+		}	
 		
-		std::cout << "\tAdded probability mass of " << added_p_for_undefined << " (pre-normalization) to account for observed identities outside of the range defined by the selected contig." << std::endl;
+		std::cout << "\tAdded probability mass of " << added_p_for_undefined << " (pre-normalization) to account for observed identities outside of the range defined by the selected contig.\n" << std::endl;
 
 		double iH_sum_2 = 0;
 		for(auto i_and_p : identityHistogram)
@@ -243,8 +288,8 @@ public:
 		}
 		assert(abs(1 - iH_sum_3) <= 1e-3);		
 		
-		minimumIdentity = allContigs_minimum_identity;
-		maximumIdentity = allContigs_maximum_identity;
+		minimumIdentity = allMappings_minimum_identity;
+		maximumIdentity = allMappings_maximum_identity;
 		
 		// read lengths
 

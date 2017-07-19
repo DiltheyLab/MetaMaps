@@ -10,7 +10,9 @@ use lib "$FindBin::Bin/perlLib";
 use List::Util qw/shuffle/;
 use List::MoreUtils qw/all/;
 use Cwd qw/abs_path getcwd/;
+
 use taxTree;
+use Util;
 
 my $DB = 'refseq';
 my $FASTAs;
@@ -111,7 +113,7 @@ for(my $fileI = 0; $fileI <= $#FASTAfiles; $fileI++)
 			
 			push(@contigs, [$fileI, $position_contig_start, $contigID]);
 			
-			my $taxonID = extractTaxonID($contigID, $fileN, $.);
+			my $taxonID = Util::extractTaxonID($contigID, $fileN, $.);
 			unless(exists $taxonomy_href->{$taxonID})
 			{
 				die "Taxon ID $taxonID - from file $fileN, line $. - not found in taxonomy -- consider updating your taxonomy directory.";
@@ -207,9 +209,10 @@ if($Utest)
 		my @nodes_thisLevel_atLeast3 = grep {$count_ancestors_with_genomes->($_) >= 3} @nodes_thisLevel;
 		print "Mappable nodes $level: ", scalar(@nodes_thisLevel_atLeast3), "\n";
 	}
+	
+	exit;
 }
 
-exit;
 
 my %_useTaxonID = map {$_ => 1} @useTaxonIDs;
 
@@ -228,7 +231,7 @@ for(my $contigI = 0; $contigI <= $#contigs; $contigI++)
 {
 	my $contigInfo = $contigs[$contigI];
 	my $contigID = $contigInfo->[2];
-	my $taxonID = extractTaxonID($contigID, '?', '?');
+	my $taxonID = Util::extractTaxonID($contigID, '?', '?');
 	if($_useTaxonID{$taxonID})
 	{
 		my $contigSequence = $getContigSequence->($contigInfo);
@@ -237,19 +240,7 @@ for(my $contigI = 0; $contigI <= $#contigs; $contigI++)
 }
 close(DB);
 
-print "\nProduced randomized-order database sequence file $outputFN and\n\ttaxon info file $outputTaxonsAndContigs\n\n";
-
-sub extractTaxonID
-{
-	my $contigID = shift;
-	my $fileN = shift;
-	my $lineN = shift;
-	unless($contigID =~ /kraken:taxid\|(x?\d+)/)
-	{
-		die "Expect taxon ID in contig identifier - file $fileN - line $lineN";
-	}			
-	return $1;	
-}
+print "\nProduced randomized-order database sequence file $outputFN and\n\ttaxon info file $outputTaxonsAndContigs (" . scalar(@useTaxonIDs) . " taxa).\n\n";
 
 sub print_help
 {

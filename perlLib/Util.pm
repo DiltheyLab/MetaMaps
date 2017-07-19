@@ -7,6 +7,19 @@ use Data::Dumper;
 
 use taxTree;
 
+sub extractTaxonID
+{
+	my $contigID = shift;
+	my $fileN = shift;
+	my $lineN = shift;
+	unless($contigID =~ /kraken:taxid\|(x?\d+)/)
+	{
+		die "Expect taxon ID in contig identifier - file $fileN - line $lineN";
+	}			
+	return $1;	
+}
+
+
 sub copyMetaMapDB
 {
 	my $source = shift;
@@ -40,22 +53,30 @@ sub copyMetaMapDB
 			copy($fP, $tP) or die "Couldn't copy $fP -> $tP"; 
 		}
 	}	 
- 
-	my @existing_files_taxonomy = glob($source . '/taxonomy/*');
+	
+	copyMetaMapTaxonomy($source . '/taxonomy/', $target . '/taxonomy/');
+}
+
+sub copyMetaMapTaxonomy
+{
+	my $source = shift;
+	my $target = shift;
+	
+	my @existing_files_taxonomy = glob($source . '/*');
 	
 	my @required_files_taxonomy = taxTree::getTaxonomyFileNames();
 	
 	die Dumper("Taxonomy files missing?", \@existing_files_taxonomy, @required_files_taxonomy) unless(all {my $requiredFile = $_; my $isThere = (scalar(grep {my $existingFile = $_; my $pattern = '/' . $requiredFile . '$'; my $isMatch = ($existingFile =~ /$pattern/); print join("\t", "'" . $existingFile . "'", "'" . $pattern . "'", $isMatch), "\n" if(1==0); $isMatch} @existing_files_taxonomy) == 1); warn "File $requiredFile missing" unless($isThere); $isThere} @required_files_taxonomy);
 	
-	my $target_taxonomyDir = $target . '/taxonomy/';
-	unless(-d $target_taxonomyDir)
+	$target .= '/';
+	unless(-d $target)
 	{
-		mkdir($target_taxonomyDir) or die "Cannot mkdir $target_taxonomyDir";
+		mkdir($target) or die "Cannot mkdir $target";
 	}
 	foreach my $f (@existing_files_taxonomy)
 	{
-		copy($f, $target_taxonomyDir) or die "Cannot copy $f into ${target}/taxonomy";
-	}
+		copy($f, $target) or die "Cannot copy $f into ${target}";
+	}	
 }
 
 sub getGenomeLength

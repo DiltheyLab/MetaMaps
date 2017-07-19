@@ -107,7 +107,7 @@ void producePotFile(std::string outputFN, const taxonomy& T, std::map<std::strin
 	double freq_unmapped = (double)nUnmapped/(double)nMappable;
 	assert(freq_unmapped >= 0);
 	assert(freq_unmapped <= 1);
-	std::cerr << "freq_unmapped: " << freq_unmapped << std::endl;
+
 	for(auto l : combinedKeys_perLevel)
 	{
 		std::string levelName = l.first;
@@ -121,10 +121,7 @@ void producePotFile(std::string outputFN, const taxonomy& T, std::map<std::strin
 			
 			sum_assigned_thisLevel += f;
 			sum_reads_assigned_thisLevel += rC;
-		}
-		
-		std::cerr << "sum_assigned_thisLevel: " << sum_assigned_thisLevel << std::endl;
-		
+		}		
 		
 		assert(sum_assigned_thisLevel >= 0);
 		assert(abs(1-sum_assigned_thisLevel) <= 1e-3);
@@ -135,7 +132,7 @@ void producePotFile(std::string outputFN, const taxonomy& T, std::map<std::strin
 		assert(nReads_unassigned_level >= 0);
 		
 		double additional_freq_unassigned = (1 - freq_unmapped) * (1 - sum_assigned_thisLevel);
-		std::cerr << "additional_freq_unassigned: " << additional_freq_unassigned << std::endl;
+		
 		assert(additional_freq_unassigned >= 0);
 		assert(additional_freq_unassigned <= 1);
 		
@@ -176,10 +173,7 @@ void producePotFile(std::string outputFN, const taxonomy& T, std::map<std::strin
 		strout_frequencies << levelName << "\t" << 0 << "\t" <<  "Unmapped" << "\t" << nUnmapped << "\t" << 0 << "\t" << freq_unmapped << "\n";
 		strout_frequencies << levelName << "\t" << 0 << "\t" <<  "TooShort" << "\t" << nTooShort << "\t" << 0 << "\t" << 0 << "\n";
 		
-		std::cerr << "l_freq: " << l_freq << std::endl;
 		l_freq += (freq_unmapped+additional_freq_unassigned);
-		std::cerr << "l_freq: " << l_freq << std::endl;
-		std::cerr << "l_freq_2: " << l_freq_2 << std::endl;
 		
 		assert(abs(1 - l_freq) <= 1e-3);
 		assert(abs(1 - l_freq_2) <= 1e-3);

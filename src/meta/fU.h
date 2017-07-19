@@ -265,6 +265,41 @@ std::vector<oneMappingLocation_U> getMappingLocations_U(identityManager& iM, con
 	return mappingLocations;
 }
 
+std::pair<int, int> getMinMaxIdentities(std::string mappedFile)
+{
+	int minIdentity = -1;
+	int maxIdentity = -1;
+	
+	size_t processedRead = 0;		
+	std::function<void(const std::vector<std::string>&)> processOneRead = [&](const std::vector<std::string>& readLines) -> void
+	{
+		for(const auto& line : readLines)
+		{
+			std::vector<std::string> line_fields = split(line, " ");		
+			double identity = std::stod(line_fields.at(12))/100.0;
+			assert(identity >= 0);
+			assert(identity <= 1);
+			int identityInt = int((identity * 100) + 0.5);
+			assert(identityInt >= 0);
+			assert(identityInt <= 100);
+			
+			if((minIdentity == -1) || (identityInt < minIdentity))
+			{
+				minIdentity = identityInt;
+			}
+			if((maxIdentity == -1) || (identityInt > maxIdentity))
+			{
+				maxIdentity = identityInt;
+			}	
+		}		
+	};
+	callBackForAllReads(mappedFile, processOneRead);	
+	
+	assert(maxIdentity > 1);
+	
+	return std::make_pair(minIdentity, maxIdentity);
+}
+
 void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestContig)
 {
 	unsigned int round_first_unknown = 0;
@@ -273,14 +308,16 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 
 	std::set<std::string> taxonIDsInMappings = getTaxonIDsFromMappingsFile(mappedFile);
 
-	std::string fn_fittedLengthAndIdentities= mappedFile + ".EM.lengthAndIdentitiesPerMappingUnit";
+	std::string fn_fittedLengthAndIdentities = mappedFile + ".EM.lengthAndIdentitiesPerMappingUnit";
 	if(! fileExists(fn_fittedLengthAndIdentities))
 	{
 		std::cerr << "\n\nERROR: File " << fn_fittedLengthAndIdentities << " not existing.\n\nThis file is generated automatically by the EM step. Run the EM step first.\n\n";
 	}
+	
+	std::pair<int, int> identity_minmax_inAlignments = getMinMaxIdentities(mappedFile);
 
 	identityAndReadLengthHistogram iAndL;
-	iAndL.readFromEMOutput(fn_fittedLengthAndIdentities, minimumReadsPerBestContig);
+	iAndL.readFromEMOutput(fn_fittedLengthAndIdentities, identity_minmax_inAlignments, minimumReadsPerBestContig);
 
 	std::string fn_tree_selfSimilarities = DBdir + "/selfSimilarities.txt";
 	treeAdjustedIdentities tAI;

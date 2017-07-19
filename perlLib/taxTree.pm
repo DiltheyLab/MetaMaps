@@ -3,6 +3,7 @@ package taxTree;
 use strict;
 use Data::Dumper;
 use List::Util qw/all/;
+use Storable qw/dclone/;
 
 sub readTaxonomy
 {
@@ -134,6 +135,34 @@ sub readTaxonomy
 	exit;
 	
 	return ($nodeid_2_names_href, $tree_href);
+}
+
+sub cloneTaxonomy_removeNodes
+{
+	my $tree_href = shift;
+	my $removeNodes_href = shift;
+	
+	die unless(all {exists $tree_href->{$_}} keys %$removeNodes_href);
+	
+	my $reducedTree = dclone $tree_href;
+	
+	foreach my $removeNode (keys %$removeNodes_href)
+	{
+		delete $reducedTree->{$removeNode};
+	}
+	
+	foreach my $remainingNodeID (keys %$reducedTree)
+	{
+		my $remainingNode = $reducedTree->{$remainingNodeID};
+		die "Parent node should have been deleted" if(exists $removeNodes_href->{$remainingNode->{parent}});
+		@{$remainingNode->{children}} = grep {not exists $removeNodes_href->{$_}} @{$remainingNode->{children}};
+	}
+	
+	taxonomy_checkConsistency($reducedTree);
+		
+	die unless(all {not exists $reducedTree->{$_}} keys %$removeNodes_href);
+
+	return $reducedTree;
 }
 
 sub expected_distance_newNode
@@ -355,6 +384,25 @@ sub get_ancestors
 	}
 	return @forReturn;
 }
+
+sub get_ancestors_by_rank
+{
+	my $tree_href = shift;
+	my $node = shift;
+	my @ancestor_nodeIDs = get_ancestors($tree_href, $node);
+	my %byRank;
+	foreach my $ancestorID (@ancestor_nodeIDs)
+	{
+		my $rank = $tree_href->{$ancestorID}{rank};
+		die unless(defined $rank);
+		next if($rank eq 'no rank');
+		die if(defined $byRank{$rank});
+		$byRank{$rank} = $ancestorID;
+	}
+	return \%byRank;
+}
+
+
 
 sub get_root_node_id
 {
