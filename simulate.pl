@@ -11,6 +11,9 @@ use lib "$FindBin::Bin/perlLib";
 use Cwd qw/getcwd abs_path/;
 use File::Copy;
 
+# TODO
+# REMOVE ONE SPECIES REMOVALL!!!
+
 srand(12345);
 $| = 1;
 
@@ -170,8 +173,9 @@ sub addInferenceRoundsWithReducedDBs
 
 	my @targetTaxons_shuffled = shuffle keys %{$simulation_href->{targetTaxons}};
 	die unless(scalar(@targetTaxons_shuffled) > 1);
-	
+
 	my $removal_origin = $targetTaxons_shuffled[0];
+	$removal_origin = 1496303; # todo remove
 	
 	my $ancestors_href = taxTree::get_ancestors_by_rank($taxonomy_href, $removal_origin);
 	$ancestors_href->{self} = $removal_origin;
@@ -507,6 +511,23 @@ sub produceReducedDB
 	# copy taxonomy
 	Util::copyMetaMapTaxonomy($baseDB . '/taxonomy', $targetDir . '/taxonomy');
 	
+	# copy reduced taxon info
+	open(TAXONIN, '<', $baseDB . '/taxonInfo.txt') or die;
+	open(TAXONOUT, '>', $targetDir . '/taxonInfo.txt') or die;
+	while(<TAXONIN>)
+	{
+		my $line = $_;
+		chomp($line);
+		next unless($line);
+		my @f = split(/ /, $line);
+		die unless(scalar(@f) == 2);
+		if(exists $reducedTaxonomy->{$f[0]})
+		{
+			print TAXONOUT $line, "\n";
+		}
+	}
+	close(TAXONIN);
+	close(TAXONOUT);
 	# create reduced FASTA
 	my $baseDB_fa = $baseDB . '/DB.fa';
 	my $reducedDB_fa = $targetDir . '/DB.fa';
@@ -537,7 +558,7 @@ sub produceReducedDB
 		close(DBIN);
 	}
 	
-	die "Need self-similarity!";
+	# die "Need self-similarity!";
 	
 	print "\t\tCreated reduced DB ", $targetDir, " with ", scalar(keys %$reducedTaxonomy), " nodes instead of ", scalar(keys %$taxonomy_base), " nodes\n";
 

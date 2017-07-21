@@ -20,6 +20,17 @@ sub extractTaxonID
 }
 
 
+sub get_index_hash
+{
+	my $input_aref = shift;
+	my @forReturn;
+	for(my $i = 0; $i <= $#{$input_aref}; $i++)
+	{
+		push(@forReturn, $input_aref->[$i], $i);
+	}
+	return @forReturn;
+}
+	
 sub copyMetaMapDB
 {
 	my $source = shift;
