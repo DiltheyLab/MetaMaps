@@ -356,8 +356,9 @@ sub setup_directory_and_simulate_reads
 	fill_contigID_taxonID($simulation_href->{DB_simulation}, $taxonomy_simulation, $contigID_2_taxonID_href, $taxonID_2_contigIDs_href, $contig_2_length_href);
 	
 	my $outputFile_combinedReads = $simulation_href->{outputDirectory} . '/reads.fastq';
+	my $outputFile_rawReads_truth = $simulation_href->{outputDirectory} . '/truth_reads.txt';
 	my $outputFile_rawReadCounts = $simulation_href->{outputDirectory} . '/rawreadcounts.txt';
-	my $outputFile_truthOverCompleteTaxonomy = $simulation_href->{outputDirectory} . '/truth_completeTaxonomy.txt';
+	my $outputFile_truthOverCompleteTaxonomy = $simulation_href->{outputDirectory} . '/truth_frequencies_completeTaxonomy.txt';
 	
 	my %contigs_and_relative_coverage;
 	
@@ -416,6 +417,7 @@ sub setup_directory_and_simulate_reads
 	
 	my $totalReads_allTaxa = 0;
 	my %reads_taxon;
+	my %readID_2_taxon;
 	for(my $taxonI = 0; $taxonI <= $#targetTaxonIDs; $taxonI++)
 	{
 		my $taxonID = $targetTaxonIDs[$taxonI];
@@ -447,10 +449,15 @@ sub setup_directory_and_simulate_reads
 		die "No reads files in $outputDir_reads ?" unless(scalar(@files_reads));
 
 		my $doAppend = ($taxonI > 0);
-		my $reads_taxon = combineFASTQ(\@files_reads, $outputFile_combinedReads, $taxonI, $doAppend);
+		my $readIDs_aref = [];
+		my $reads_taxon = combineFASTQ(\@files_reads, $outputFile_combinedReads, $taxonI, $doAppend, $readIDs_aref);
 		$reads_taxon{$taxonID} = $reads_taxon;
 		$totalReads_allTaxa += $reads_taxon;
-		
+		foreach my $readID (@$readIDs_aref)
+		{
+			die if(defined $readID_2_taxon{$readID});
+			$readID_2_taxon{$readID} = $taxonID;
+		}
 		system($cmd_rm_outputDir_reads) and die "Couldn't execute: $cmd_rm_outputDir_reads";
 		
 		unlink($fn_genome) or die "Cannot delete $fn_genome";
@@ -478,6 +485,13 @@ sub setup_directory_and_simulate_reads
 		print READCOUNTS $taxonID, "\t", $reads_taxon{$taxonID}, "\n";
 	}		
 	close(READCOUNTS);
+	
+	open(READSTRUTH, '>', $outputFile_rawReads_truth) or die "Cannot open $outputFile_rawReads_truth";
+	foreach my $readID (keys %readID_2_taxon)
+	{
+		print READSTRUTH join("\t", $readID, $readID_2_taxon{$readID}), "\n";
+	}
+	close(READSTRUTH);
 	
 	truthFileFromReadCounts($outputFile_truthOverCompleteTaxonomy, \%reads_taxon, $taxonomy_simulation);
 	
@@ -646,6 +660,7 @@ sub combineFASTQ
 	my $out_fn = shift;
 	my $readID_prefix = shift;
 	my $append = shift;
+	my $readIDs_aref = shift;
 	
 	my $totalReads = 0;
 	if($append)
@@ -675,6 +690,11 @@ sub combineFASTQ
 			substr($line, 0, 1) = ('@' . $readID_prefix);
 			
 			print OUT $line, "\n", $line_seq, $line_plus, $line_qual;
+			
+			if(defined($readIDs_aref))
+			{
+				push(@$readIDs_aref, substr($line, 1));
+			}
 		}
 		close(F);
 	}

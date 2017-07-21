@@ -285,12 +285,12 @@ elsif($mode eq 'prepareFromTemplate')
 		}
 	}
 	
+	die "Not ready -- find out which template to use";
+	
 	print "\nTotal computations: $total_computations / of which we have results for: $total_computations_haveResult\n";
 }
 elsif($mode eq 'doJobIFromTemplate')
 {
-
-	
 	die "Please specify --jobI" unless(defined $jobI);
 	die "Please specify --jobITemplate" unless(defined $jobITemplate);
 	
@@ -325,9 +325,35 @@ elsif($mode eq 'doJobIFromTemplate')
 	die unless($_tmp_A eq $contigs_A);
 	die unless($_tmp_B eq $contigs_B);
 	
-	# which reads do we need to remap?
-	my $original_n_unmapped = 0; die;
+
+	# get reads, and read info
+	my $dir_computation = $outputDir_computation . '/' . $jobI;
+	mkdir($dir_computation);
+	
+	my $file_A = $dir_computation . '/A';
+	my $file_B = $dir_computation . '/B';
+		
+	construct_A_B_files($file_ref, $file_A, $file_B, \@contigIDs_A, \@contigIDs_B);
+	
+	my %n_reads_per_chunkLength;
+	my %readID_2_info;
+	my @chunk_positions = getChunkPositions($file_A, \@contigIDs_A, $v_for_srand);
+	foreach my $oneChunk (@chunk_positions)
+	{
+		my $chunkLength = $oneChunk->[0];
+		my $readI_within_chunkLength_1based = $oneChunk->[1];
+		my $contigID = $oneChunk->[2];
+		my $posI = $oneChunk->[3];
+		my $readID = $oneChunk->[4];	
+		
+		$n_reads_per_chunkLength{$chunkLength}++;
+		die if(defined $readID_2_info{$readID});
+		$readID_2_info{$readID} = $oneChunk;
+	}
+	
+	# find reads that need to be remapped, and fill histogram with non-remapped reads
 	my %reads_for_remapping;
+	my $identities_by_length_href = {};
 	{
 		my $fn_mappings_details = $jobITemplate.'.readResults';
 		open(F, '<', $fn_mappings_details) or die "Cannot open $fn_mappings_details";
@@ -344,23 +370,21 @@ elsif($mode eq 'doJobIFromTemplate')
 			my $contigID = $template_B_i_to_contigID{$contigI};
 			die unless(defined $contigID);
 			
+			die unless(defined $readID_2_info{$readID});
 			if(exists $contigIDs_B_to_i{$contigID})
 			{
-				die; # do something // add to histogram?
+				my $chunkLength = $readID_2_info{$readID}[0];
+				$identities_by_length_href->{$chunkLength}{$bestIdentity}++;
 			}
 			else
 			{
-				# remap
 				$reads_for_remapping{$readID} = 1;
 			}
 			
 		}
 		close(F);
 	}
-	
-	
-	srand($v_for_srand);
-	
+		
 	my $sub_call_each_simulatedRead = sub { 
 		my ($readID, $contigID, $posI, $chunkLength) = @_;
 		if($readPositions_aref)
@@ -374,36 +398,35 @@ elsif($mode eq 'doJobIFromTemplate')
 			die unless($contigI == $contigII);
 			die unless($readPositions_aref->[$readI][0] == $contigI);
 			die unless($readPositions_aref->[$readI][1] == $posI);
-			
 		}
 	};
-		
-	
-	my $sub_call_each_simulatedRead = sub { 
-		my ($readID, $contigID, $posI, $chunkLength) = @_;
-		my $contigI = $contigIDs_A_to_i{$contigID};
-		die unless(defined $contigI);
-		print READINFO $contigI, "\t", $posI, "\n";
-	};
+
 				
-	my $sub_call_each_readResult = sub {
-		my ($readID, $bestContig, $bestIdentity) = @_;
-		my $bestContig_index = $contigIDs_B_to_i{$bestContig};
-		die unless(defined $bestContig_index);
-		print READDETAILRESULTS join("\t", $readID, $bestContig_index, $bestIdentity), "\n";	
+	my $sub_call_each_readResult = sub {	
 	};
 	
-	my $identities_by_length_href = {};
 	map_reads_keepTrack_similarity(
 		$file_A,
 		$file_B,
 		$dir_computation,
+		$v_for_srand,
 		\@contigIDs_A,
-		undef,
+		\%reads_for_remapping,
 		$sub_call_each_simulatedRead,
 		$sub_call_each_readResult,
 		$identities_by_length_href
 	);
+	
+	foreach my $chunkLength (%n_reads_per_chunkLength)
+	{
+		die unless(defined $identities_by_length_href->{$chunkLength});
+		my $n_trackedReads = sum values %{$identities_by_length_href->{$chunkLength}};
+		my $n_missingReads = $n_reads_per_chunkLength{$chunkLength} - $n_trackedReads;
+		die unless($n_missingReads >= 0);
+		$identities_by_length_href->{$chunkLength}{0} += $n_missingReads;
+	}
+	
+	my $results_fn_reads_many = get_results_file_for_jobI($jobI);
 	
 	open(RESULTS, '>', $results_fn_reads_many) or die "Cannot open $results_fn_reads_many";
 	foreach my $chunkLength (sort keys %$identities_by_length_href)
@@ -414,11 +437,7 @@ elsif($mode eq 'doJobIFromTemplate')
 		}	
 	}
 	close(RESULTS);
-	
-	
-	
 }
-
 elsif($mode eq 'doJobI')
 {
 	die "Please specify --jobI" unless(defined $jobI);
@@ -643,6 +662,7 @@ sub map_reads_keepTrack_similarity
 	my $file_A = shift;
 	my $file_B = shift;
 	my $tmpDir = shift;
+	my $v_for_srand = shift;
 	my $contigs_A_order = shift;
 	my $limitToReadsIDs = shift;
 	my $call_eachSimulatedRead = shift;
@@ -650,81 +670,57 @@ sub map_reads_keepTrack_similarity
 	
 	my $readCounts_toPopulate_href = shift;
 	
+	die unless(defined $v_for_srand);
+	die unless(defined $readCounts_toPopulate_href);
+	
 	my $A_contigs_href = Util::readFASTA($file_A);
 	
 	my $file_A_reads_many = $tmpDir . '/A.reads.many';
 	my $outputFn_MetaMap = $tmpDir . '.MetaMap.many';	
+
 	
-	my $totalReadI = 0;
-	for(my $chunkLength = $readSimSizeFrom; $chunkLength <= $readSimSizeTo; $chunkLength += $readSimSizeStep)
+	my @chunk_positions = getChunkPositions($file_A, $contigs_A_order, $v_for_srand);
+	my %chunk_positions_by_chunk_length;
+	foreach my $oneChunk (@chunk_positions)
 	{
-		print "\tSimulate chunk length $chunkLength\n";
-				
+		push(@{$chunk_positions_by_chunk_length{$oneChunk->[0]}}, $oneChunk);
+	}
+	
+	foreach my $chunkLength (sort keys %chunk_positions_by_chunk_length)
+	{
 		open(READS, '>', $file_A_reads_many) or die "Cannot open $file_A_reads_many";
-		
-		my $read_start_positions  = 0;
-		die unless(scalar(keys %$A_contigs_href) == scalar(@$contigs_A_order));
-		foreach my $contigID (@$contigs_A_order)
+	
+		my $reads_for_mapping = 0;
+		foreach my $oneChunk (@{$chunk_positions_by_chunk_length{$chunkLength}})
 		{
-			my $contigSequence = $A_contigs_href->{$contigID};
-			die unless(defined $contigSequence);
-			for(my $posI = 0; $posI < length($contigSequence); $posI += $readSimDelta)
+			die unless($oneChunk->[0] == $chunkLength);
+			my $readI_within_chunkLength_1based = $oneChunk->[1];
+			my $contigID = $oneChunk->[2];
+			my $posI = $oneChunk->[3];
+			my $readID = $oneChunk->[4];
+			
+			if(defined $limitToReadsIDs)
 			{
-				my $lastPos = $posI + $chunkLength - 1;
-				if($lastPos < length($contigSequence))
-				{
-					$read_start_positions++;
-				}
-			}  
-		}	
-		
-		my $start_rate = 1;
-		if($read_start_positions > $target_max_simulatedChunks)
-		{
-			$start_rate = $target_max_simulatedChunks / $read_start_positions;
-			print "\t\t\t(Read lengths; $chunkLength) Adjusted start rate to $start_rate (eligible start positions: $read_start_positions, want $target_max_simulatedChunks)\n";
-		}
-		die unless(($start_rate >= 0) and ($start_rate <= 1));
-		
-		my $n_reads = 0;
-		for(my $contigI = 0; $contigI <= $#{$contigs_A_order}; $contigI++)
-		{
-			my $contigID = $contigs_A_order->[$contigI];
-			my $contigSequence = $A_contigs_href->{$contigID};
-			POS: for(my $posI = 0; $posI < length($contigSequence); $posI += $readSimDelta)
+				next unless($limitToReadsIDs->{$readID});
+			}			
+			
+			if(defined $call_eachSimulatedRead)
 			{
-				my $lastPos = $posI + $chunkLength - 1;
-				if($lastPos < length($contigSequence))
-				{
-					if($start_rate != 1)
-					{
-						next POS if(rand(1) > $start_rate);
-					}
-					
-					$n_reads++;
-					$totalReadI++;
-					my $readID = 'read' . $totalReadI;
-					
-					if(defined $limitToReadsIDs)
-					{
-						next unless($limitToReadsIDs->{$readID});
-					}
-					
-					my $S = substr($contigSequence, $posI, $chunkLength);
-					die unless(length($S) == $chunkLength);
-					print READS '>', $readID, "\n";
-					print READS $S, "\n";
-					
-					if(defined $call_eachSimulatedRead)
-					{
-						$call_eachSimulatedRead->($readID, $contigID, $posI, $chunkLength);
-					}
-				}
-			}  
+				$call_eachSimulatedRead->($readID, $contigID, $posI, $chunkLength);
+			}		
+
+			die unless(defined $A_contigs_href->{$contigID});			
+			my $S = substr($A_contigs_href->{$contigID}, $posI, $chunkLength);
+			die unless(length($S) == $chunkLength);
+			print READS '>', $readID, "\n";
+			print READS $S, "\n";
+			
+			$reads_for_mapping++;
 		}
+		
 		close(READS);
 		
-		print "\t\tReads file $file_A_reads_many with $n_reads reads";
+		print "\t\tReads file $file_A_reads_many with ", scalar(@{$chunk_positions_by_chunk_length{$chunkLength}}), " reads";
 				
 		my $MetaMap_cmd = qq($metamap_bin mapDirectly -r $file_B -q $file_A_reads_many -m $chunkLength -o $outputFn_MetaMap --pi 80);
 		print "\t\tExecuted command $MetaMap_cmd\n";		
@@ -768,7 +764,6 @@ sub map_reads_keepTrack_similarity
 			{
 				$call_eachReadResult->($readID, $bestIdentity_which, $bestIdentity);
 			}
-			
 		};	
 		
 		open(MetaMapOUTPUT, '<', $outputFn_MetaMap) or die "Cannot open $outputFn_MetaMap";
@@ -788,7 +783,6 @@ sub map_reads_keepTrack_similarity
 				@currentReadLines = ();
 			}
 			push(@currentReadLines, $_);
-			# last if ($processed_reads > 10); 
 		}
 		if(@currentReadLines)
 		{
@@ -797,13 +791,82 @@ sub map_reads_keepTrack_similarity
 		
 		close(MetaMapOUTPUT);
 
-		my $n_missing_reads = $n_reads - $n_read_alignments;
+		my $n_missing_reads = $reads_for_mapping - $n_read_alignments;
 		die unless($n_missing_reads >= 0);
-		$readCounts_toPopulate_href->{$chunkLength}{0} += $n_missing_reads;
+		$readCounts_toPopulate_href->{$chunkLength}{0} += $n_missing_reads;		
 	}
 
 	system('rm ' . $tmpDir . '/*') and die "Cannot delete $tmpDir (I)";	
 	system('rm -r ' . $tmpDir) and die "Cannot delete $tmpDir (II)"
+}
+
+sub getChunkPositions
+{
+	my $file_A = shift;
+	my $contigs_A_order = shift;	
+	my $srand_value = shift;
+	
+	my $A_contigs_href = readFASTA($file_A);
+	
+	srand($srand_value);
+	
+	my @forReturn;
+	
+	my $totalReadI = 0;
+	for(my $chunkLength = $readSimSizeFrom; $chunkLength <= $readSimSizeTo; $chunkLength += $readSimSizeStep)
+	{
+		print "\tSimulate chunk length $chunkLength\n";
+						
+		my $read_start_positions  = 0;
+		die unless(scalar(keys %$A_contigs_href) == scalar(@$contigs_A_order));
+		foreach my $contigID (@$contigs_A_order)
+		{
+			my $contigSequence = $A_contigs_href->{$contigID};
+			die unless(defined $contigSequence);
+			for(my $posI = 0; $posI < length($contigSequence); $posI += $readSimDelta)
+			{
+				my $lastPos = $posI + $chunkLength - 1;
+				if($lastPos < length($contigSequence))
+				{
+					$read_start_positions++;
+				}
+			}  
+		}	
+		
+		my $start_rate = 1;
+		if($read_start_positions > $target_max_simulatedChunks)
+		{
+			$start_rate = $target_max_simulatedChunks / $read_start_positions;
+			print "\t\t\t(Read lengths; $chunkLength) Adjusted start rate to $start_rate (eligible start positions: $read_start_positions, want $target_max_simulatedChunks)\n";
+		}
+		die unless(($start_rate >= 0) and ($start_rate <= 1));
+		
+		my $readI_with_chunkLength = 0;
+		for(my $contigI = 0; $contigI <= $#{$contigs_A_order}; $contigI++)
+		{
+			my $contigID = $contigs_A_order->[$contigI];
+			my $contigSequence = $A_contigs_href->{$contigID};
+			POS: for(my $posI = 0; $posI < length($contigSequence); $posI += $readSimDelta)
+			{
+				my $lastPos = $posI + $chunkLength - 1;
+				if($lastPos < length($contigSequence))
+				{
+					if($start_rate != 1)
+					{
+						next POS if(rand(1) > $start_rate);
+					}
+					
+					$readI_with_chunkLength++;
+					$totalReadI++;
+					my $readID = 'read' . $totalReadI;
+
+					push(@forReturn, [$chunkLength, $readI_with_chunkLength, $contigID, $posI, $readID]);
+				}
+			}  
+		}
+	}
+	
+	return @forReturn;
 }
 
 sub get_results_file_for_jobI
