@@ -30,7 +30,7 @@ unless(-e $metamap_bin)
 my $action = '';   
 
 my $DB = '';
-my $templateDB = '';
+my $templateDB;
 my $mode;
 my $jobI;
 my $jobITemplate;
@@ -66,9 +66,14 @@ my $outputDir = $DB . '/selfSimilarity';
 my $outputDir_computation = $outputDir . '/computation';
 my $outputDir_results = $outputDir . '/results';
 my $outputFn_jobs = $outputDir . '/jobs';
+my $outputFn_jobs_fromTemplate = $outputDir . '/jobs.fromTemplate';
 my $outputFn_qsub = $outputDir . '/jobs.qsub';
 my $outputFn_reads_results_many = $outputDir . '/results.reads.many.byNode';
 my $finalResultsFile = $DB . '/selfSimilarities.txt';
+
+my $outputDir_templateDB = ($templateDB // '') . '/selfSimilarity';
+my $outputDir_results_templateDB = $outputDir_templateDB . '/results';
+my $outputFn_jobs_inTemplateDir = $outputDir_templateDB . '/jobs';
 
 if(not $mode)
 {
@@ -108,7 +113,7 @@ elsif($mode eq 'prepareFromScratch')
 	my $total_computations = 0;
 	my $computations_max_per_node = 0;
 	my $computations_max_per_node_which;
-	foreach my $nodeID (@nodesForAttachment)
+	foreach my $nodeID (sort @nodesForAttachment)
 	{
 		my @thisNode_self_simililarity_subcomputations = taxTree::getSubComputationsForAttachment($taxonomy, $nodeID, \%taxonID_2_contigs);
 		die Dumper("Fewer subcomputations than expected", scalar(@thisNode_self_simililarity_subcomputations), scalar(@{$taxonomy->{$nodeID}{children}})) unless(scalar(@thisNode_self_simililarity_subcomputations) >= scalar(@{$taxonomy->{$nodeID}{children}}));
@@ -182,6 +187,10 @@ elsif($mode eq 'prepareFromTemplate')
 	die "Please specify --templateDB" unless(defined $templateDB);
 	die "Template DB $templateDB does not have self-similarity results" unless(-e $templateDB . '/selfSimilarities.txt');
 	
+	(mkdir($outputDir) or die "Cannot mkdir $outputDir") unless(-d $outputDir);
+	(mkdir($outputDir_computation) or die "Cannot mkdir $outputDir") unless(-d $outputDir_computation);
+	(mkdir($outputDir_results) or die "Cannot mkdir $outputDir") unless(-d $outputDir_results);
+	
 	# read existing computation details
 	
 	my $get_computation_key = sub {
@@ -193,6 +202,7 @@ elsif($mode eq 'prepareFromTemplate')
 	die "Template DB $templateDB does not have self-similarity jobs file" unless(-e $fn_template_jobs);
 	my %templateDB_existingComputation_toJobID;
 	my %templateDB_attachableNodes;
+	my %templateDB_A_to_B;
 	{
 		open(JOBS, '<', $fn_template_jobs) or die "Cannot open $outputFn_jobs";
 		my $jobI = -1;
@@ -212,7 +222,10 @@ elsif($mode eq 'prepareFromTemplate')
 			my $computation_key = $get_computation_key->($contigs_A, $contigs_B);
 			die if(exists $templateDB_existingComputation_toJobID{$computation_key});
 			$templateDB_existingComputation_toJobID{$computation_key} = $jobI;
-			$templateDB_attachableNodes{$nodeID} = 1
+			$templateDB_attachableNodes{$nodeID} = 1;
+			
+			my %contigs_B_href = map {$_ => 1} split(/;/, $contigs_B);
+			push(@{$templateDB_A_to_B{$contigs_A}}, [\%contigs_B_href, $jobI]);
 		}
 		close(JOBS);	
 	}
@@ -247,12 +260,17 @@ elsif($mode eq 'prepareFromTemplate')
 	my @nodesForAttachment_leaves = map {taxTree::descendants_leaves($reduced_taxonomy, $_)} @nodesForAttachment;
 	die unless(all {exists $reduced_taxonID_2_contigs{$_}} @nodesForAttachment_leaves);
 	
-	print "Have nodes ", scalar(@nodesForAttachment), " that hypothetical new species could be attached to.\n";
+	print "\nHave nodes ", scalar(@nodesForAttachment), " that hypothetical new species could be attached to.\n";
 	
 	# derive subcomputations for each node
+	# open jobs file
+	open(JOBS, '>', $outputFn_jobs_fromTemplate) or die "Canot open $outputFn_jobs_fromTemplate";
+		
+	my @missingData_computations;
 	my $total_computations = 0;
 	my $total_computations_haveResult = 0;
-	foreach my $nodeID (@nodesForAttachment)
+	my $jobI = -1;	
+	foreach my $nodeID (sort @nodesForAttachment)
 	{
 		die unless($templateDB_attachableNodes{$nodeID});
 		my @thisNode_self_simililarity_subcomputations = taxTree::getSubComputationsForAttachment($reduced_taxonomy, $nodeID, \%reduced_taxonID_2_contigs);
@@ -260,10 +278,12 @@ elsif($mode eq 'prepareFromTemplate')
 		
 		foreach my $node_computation (@thisNode_self_simililarity_subcomputations)
 		{
+			$jobI++;
+
 			my $targetLeafID = $node_computation->[1];
 			my $targetLeaf_genomeSize = Util::getGenomeLength($targetLeafID, \%reduced_taxonID_2_contigs, \%reduced_contigLength);
-			my @targetLeaf_compareAgainst = @{$node_computation->[2]};
-			my @targetLeaf_contigs = keys %{$reduced_taxonID_2_contigs{$targetLeafID}};
+			my @targetLeaf_compareAgainst = sort @{$node_computation->[2]};
+			my @targetLeaf_contigs = sort keys %{$reduced_taxonID_2_contigs{$targetLeafID}};
 			
 			my $targetLeaf_compareAgainst_combinedSize = 0;
 			my @compareAgainst_contigs;
@@ -275,174 +295,94 @@ elsif($mode eq 'prepareFromTemplate')
 				$ranks_compareAgainst{$reduced_taxonomy->{$taxonID}{rank}}++;
 			}
 			
-			my $computation_key = $get_computation_key->(join(';', @targetLeaf_contigs), join(';', @compareAgainst_contigs));
+			@compareAgainst_contigs = sort @compareAgainst_contigs;
+			
+			my $contigs_A = join(';', @targetLeaf_contigs);
+			my $computation_key = $get_computation_key->($contigs_A, join(';', @compareAgainst_contigs));
 			$total_computations++;
+			
+			print JOBS join("\t",
+				$nodeID,							# the node we're attaching new species todo
+				$reduced_taxonomy->{$nodeID}{rank},		
+				$node_computation->[0],						# the node's immediate child we're taking the to-map-genome from
+				$reduced_taxonomy->{$node_computation->[0]}{rank},
+				$targetLeafID,									# the node which we're now mapping against the genomes of the other children
+				$reduced_taxonomy->{$targetLeafID}{rank},
+				$targetLeaf_genomeSize,						
+				scalar(@targetLeaf_compareAgainst),
+				join(";", @targetLeaf_compareAgainst),
+				$targetLeaf_compareAgainst_combinedSize,
+				join(";", @targetLeaf_contigs),
+				join(";", @compareAgainst_contigs),
+				join(';', sort keys %ranks_compareAgainst)
+			), "\n";			
 			
 			if(exists $templateDB_existingComputation_toJobID{$computation_key})
 			{
 				$total_computations_haveResult++;
-			}
-		}
-	}
-	
-	die "Not ready -- find out which template to use";
-	
-	print "\nTotal computations: $total_computations / of which we have results for: $total_computations_haveResult\n";
-}
-elsif($mode eq 'doJobIFromTemplate')
-{
-	die "Please specify --jobI" unless(defined $jobI);
-	die "Please specify --jobITemplate" unless(defined $jobITemplate);
-	
-	my ($A_taxonID, $B_taxonIDs, $contigs_A, $contigs_B) = get_job_info($outputFn_jobs);
-	my ($template_A_taxonID, $template_B_taxonIDs, $template_contigs_A, $template_contigs_B) = get_job_info($jobITemplate);
-
-	my @template_contigIDs_A = split(/;/, $template_contigs_A);
-	my @template_contigIDs_B = split(/;/, $template_contigs_B);
-	my %template_contigIDs_A_to_i = Util::get_index_hash(\@template_contigIDs_A);
-	my %template_contigIDs_B_to_i = Util::get_index_hash(\@template_contigIDs_B);
-	my %template_A_i_to_contigID = reverse %template_contigIDs_A_to_i;
-	my %template_B_i_to_contigID = reverse %template_contigIDs_B_to_i;
-	
-	unless($contigs_A eq $template_contigs_A)
-	{
-		die "File $jobITemplate is not a valid template for job $jobI -- expect contigs_A = $contigs_A, but got $template_contigs_A";
-	}
-	
-	my @contigIDs_A = split(/;/, $contigs_A);
-	my @contigIDs_B = split(/;/, $contigs_B);
-	my %contigs_A = map {$_ => 1} @contigIDs_A; die unless(scalar(keys %contigs_A));
-	my %contigs_B = map {$_ => 1} @contigIDs_B; die unless(scalar(keys %contigs_B));
-	my %contigIDs_A_to_i = Util::get_index_hash(\@contigIDs_A);
-	my %contigIDs_B_to_i = Util::get_index_hash(\@contigIDs_B);
-	
-	foreach my $contigID (@contigIDs_B)
-	{
-		die "Invalid template $jobITemplate for job $jobI - mapping target (B) $contigID is not in list of template mapping targets" unless(exists $template_B_i_to_contigID{$contigID});
-	}
-	
-	my ($_tmp_A, $_tmp_B, $v_for_srand, $readPositions_aref) = check_readsInfo_compatible_and_get_contigsA_contigsB_srand_readPositions($jobITemplate.'.readInfo');
-	die unless($_tmp_A eq $contigs_A);
-	die unless($_tmp_B eq $contigs_B);
-	
-
-	# get reads, and read info
-	my $dir_computation = $outputDir_computation . '/' . $jobI;
-	mkdir($dir_computation);
-	
-	my $file_A = $dir_computation . '/A';
-	my $file_B = $dir_computation . '/B';
-		
-	construct_A_B_files($file_ref, $file_A, $file_B, \@contigIDs_A, \@contigIDs_B);
-	
-	my %n_reads_per_chunkLength;
-	my %readID_2_info;
-	my @chunk_positions = getChunkPositions($file_A, \@contigIDs_A, $v_for_srand);
-	foreach my $oneChunk (@chunk_positions)
-	{
-		my $chunkLength = $oneChunk->[0];
-		my $readI_within_chunkLength_1based = $oneChunk->[1];
-		my $contigID = $oneChunk->[2];
-		my $posI = $oneChunk->[3];
-		my $readID = $oneChunk->[4];	
-		
-		$n_reads_per_chunkLength{$chunkLength}++;
-		die if(defined $readID_2_info{$readID});
-		$readID_2_info{$readID} = $oneChunk;
-	}
-	
-	# find reads that need to be remapped, and fill histogram with non-remapped reads
-	my %reads_for_remapping;
-	my $identities_by_length_href = {};
-	{
-		my $fn_mappings_details = $jobITemplate.'.readResults';
-		open(F, '<', $fn_mappings_details) or die "Cannot open $fn_mappings_details";
-		while(<F>)
-		{
-			chomp;
-			next unless($_);
-			my @f = split(/\t/, $_);
-			die unless(scalar(@f) == 3);
-			my $readID = $f[0];
-			my $contigI = $f[1];
-			my $bestIdentity = $f[2];
-			
-			my $contigID = $template_B_i_to_contigID{$contigI};
-			die unless(defined $contigID);
-			
-			die unless(defined $readID_2_info{$readID});
-			if(exists $contigIDs_B_to_i{$contigID})
-			{
-				my $chunkLength = $readID_2_info{$readID}[0];
-				$identities_by_length_href->{$chunkLength}{$bestIdentity}++;
+				my $template_jobI = $templateDB_existingComputation_toJobID{$computation_key};
+				my $existing_results_file = get_results_file_for_jobI_fromTemplateDB($template_jobI);
+				my $new_results_file = get_results_file_for_jobI($jobI);
+				# print "Have 1:1 template for $computation_key - copy $existing_results_file --> $new_results_file \n";
+				copy($existing_results_file, $new_results_file);
 			}
 			else
 			{
-				$reads_for_remapping{$readID} = 1;
-			}
-			
-		}
-		close(F);
-	}
-		
-	my $sub_call_each_simulatedRead = sub { 
-		my ($readID, $contigID, $posI, $chunkLength) = @_;
-		if($readPositions_aref)
-		{
-			die unless($readID =~ /read(\d+)/);
-			my $readI = $readID - 1;
-			die unless($readI >= 0);
-			die unless($readI < scalar(@$readPositions_aref));
-			my $contigI = $contigIDs_A_to_i{$contigID};
-			my $contigII = $template_A_i_to_contigID{$contigID};
-			die unless($contigI == $contigII);
-			die unless($readPositions_aref->[$readI][0] == $contigI);
-			die unless($readPositions_aref->[$readI][1] == $posI);
-		}
-	};
-
+				die unless(exists $templateDB_A_to_B{$contigs_A});
+				my %alternativeI_to_distance;
+				for(my $alternativeI = 0; $alternativeI <= $#{$templateDB_A_to_B{$contigs_A}}; $alternativeI++)
+				{
+					my $alternative = $templateDB_A_to_B{$contigs_A}[$alternativeI][0];
+					next unless(all {exists $alternative->{$_}} @compareAgainst_contigs);
+					my $d = scalar(keys %$alternative) - scalar(@compareAgainst_contigs);
+					$alternativeI_to_distance{$alternativeI} = $d; 
+				}
 				
-	my $sub_call_each_readResult = sub {	
-	};
+				die unless(keys %alternativeI_to_distance);
+				my @sorted_alternative_Is = sort {$alternativeI_to_distance{$a} <=> $alternativeI_to_distance{$a}} keys %alternativeI_to_distance;
+				if(scalar(@sorted_alternative_Is) > 1)
+				{
+					die unless($alternativeI_to_distance{$sorted_alternative_Is[0]} <= $alternativeI_to_distance{$sorted_alternative_Is[1]});
+				}
+				my $best_template_idx = $sorted_alternative_Is[0];
+				my $best_template_jobI = $templateDB_A_to_B{$contigs_A}[$best_template_idx][1];
+				
+				# print "Don't have 1:1 template for $computation_key \n";
+				# print "\tClosest existing computation: $best_template_jobI with distance $alternativeI_to_distance{$sorted_alternative_Is[0]}\n";
+				# print "\t\t", join(' ', @compareAgainst_contigs), "\n";
+				# print "\t\t", join(' ', keys %{$templateDB_A_to_B{$contigs_A}->[$best_template_idx][0]}), "\n\n";
+				
+				# print "\t--mode doJobIFromTemplate --jobI $jobI --jobITemplate $best_template_jobI --DB $DB --templateDB $templateDB \n";
+				
+				push(@missingData_computations, [$jobI, $best_template_jobI]);
+			}	
+		}
+	}
+	close(JOBS);
 	
-	map_reads_keepTrack_similarity(
-		$file_A,
-		$file_B,
-		$dir_computation,
-		$v_for_srand,
-		\@contigIDs_A,
-		\%reads_for_remapping,
-		$sub_call_each_simulatedRead,
-		$sub_call_each_readResult,
-		$identities_by_length_href
-	);
+	print "\nTotal required computations: $total_computations / of which we have results for from template: $total_computations_haveResult\n";
 	
-	foreach my $chunkLength (%n_reads_per_chunkLength)
+	print "\n";
+	foreach my $computation (@missingData_computations)
 	{
-		die unless(defined $identities_by_length_href->{$chunkLength});
-		my $n_trackedReads = sum values %{$identities_by_length_href->{$chunkLength}};
-		my $n_missingReads = $n_reads_per_chunkLength{$chunkLength} - $n_trackedReads;
-		die unless($n_missingReads >= 0);
-		$identities_by_length_href->{$chunkLength}{0} += $n_missingReads;
+		my $jobI = $computation->[0];
+		my $best_template_jobI = $computation->[1];
+		# print "Do \t--mode doJobIFromTemplate --jobI $jobI --jobITemplate $best_template_jobI --DB $DB --templateDB $templateDB \n";	
+		doJobIFromTemplate($jobI, $best_template_jobI);
 	}
 	
-	my $results_fn_reads_many = get_results_file_for_jobI($jobI);
 	
-	open(RESULTS, '>', $results_fn_reads_many) or die "Cannot open $results_fn_reads_many";
-	foreach my $chunkLength (sort keys %$identities_by_length_href)
-	{
-		foreach my $k (sort {$a <=> $b} keys %{$identities_by_length_href->{$chunkLength}})
-		{
-			print RESULTS join("\t", $chunkLength, $k, $identities_by_length_href->{$chunkLength}{$k}), "\n";
-		}	
-	}
-	close(RESULTS);
+	doCollect();
+}
+elsif($mode eq 'doJobIFromTemplate')
+{
+	doJobIFromTemplate($jobI, $jobITemplate); 
 }
 elsif($mode eq 'doJobI')
 {
 	die "Please specify --jobI" unless(defined $jobI);
 	
-	my ($A_taxonID, $B_taxonIDs, $contigs_A, $contigs_B) = get_job_info($outputFn_jobs);
+	my ($A_taxonID, $B_taxonIDs, $contigs_A, $contigs_B) = get_job_info($outputFn_jobs, $jobI);
 
 	print "Job $jobI";
 	print "\tMapping from: $A_taxonID\n";
@@ -481,6 +421,7 @@ elsif($mode eq 'doJobI')
 	print READINFO join("\t", $readSimSizeFrom, $readSimSizeTo, $readSimSizeStep), "\n";
 	print READINFO $readSimDelta, "\n";
 	print READINFO $seed_rand, "\n";
+	
 	open(READDETAILRESULTS, '>', $readResults_fn_reads_many) or die "Cannot open $readResults_fn_reads_many";
 
 	my $sub_call_each_simulatedRead = sub { 
@@ -502,6 +443,7 @@ elsif($mode eq 'doJobI')
 		$file_A,
 		$file_B,
 		$dir_computation,
+		$seed_rand,
 		\@contigIDs_A,
 		undef,
 		$sub_call_each_simulatedRead,
@@ -510,7 +452,8 @@ elsif($mode eq 'doJobI')
 	);
 	
 	open(RESULTS, '>', $results_fn_reads_many) or die "Cannot open $results_fn_reads_many";
-	foreach my $chunkLength (sort keys %$identities_by_length_href)
+	print RESULTS $contigs_A, "\t", $contigs_B, "\n";	
+	foreach my $chunkLength (sort {$a <=> $b} keys %$identities_by_length_href)
 	{
 		foreach my $k (sort {$a <=> $b} keys %{$identities_by_length_href->{$chunkLength}})
 		{
@@ -525,137 +468,12 @@ elsif($mode eq 'doJobI')
 }
 elsif($mode eq 'collect')
 {
-	print "Collect results from folder $outputDir_results\n";
-	
-	my %taxonID_2_contigs;
-	my %contigLength;
-	read_taxonIDs_and_contigs($DB, \%taxonID_2_contigs, \%contigLength);
-	
-	# read taxonomy
-	my $taxonomy = taxTree::readTaxonomy($taxonomyDir);
-
-	# strip down to mappable components
-	taxTree::removeUnmappableParts($taxonomy, \%taxonID_2_contigs);
-	
-	my %results_reads_many_per_node;
-	my $total_jobs = 0;
-	my $total_jobs_reads_many_ok = 0;	
-	open(JOBS, '<', $outputFn_jobs) or die "Canot open $outputFn_jobs";
-	my $lineI = -1;
-	while(<JOBS>)
-	{
-		my $line = $_;
-		chomp($line);
-		my @fields = split(/\t/, $line);
-		my $nodeID = $fields[0];
-		my $contigs_A = $fields[10];
-		my $contigs_B = $fields[11];		
-		
-		$lineI++;
-		my $jobI = $lineI; 
-		
-		my $results_reads_many_fn = get_results_file_for_jobI($jobI);
-		$total_jobs++;
-		
-		if(-e $results_reads_many_fn)
-		{
-			my $S = 0;
-			my %S_by_readLength;
-			my %h;
-			open(R, '<', $results_reads_many_fn) or die;
-			my $firstLine = <R>;
-			chomp($firstLine);
-			my @firstLine_fields = split(/\t/, $firstLine);
-			die unless(scalar(@firstLine_fields) == 2);
-			die unless($firstLine_fields[0] eq $contigs_A);
-			die unless($firstLine_fields[1] eq $contigs_B);
-			while(<R>)
-			{
-				my $l = $_;
-				chomp($l);
-				next unless($l);
-				my @fields = split(/\t/, $l);
-				die Dumper("Weird field count in line $. of file $results_reads_many_fn", \@fields) unless(scalar(@fields) == 3);
-				$h{$fields[0]}{$fields[1]} = $fields[2];
-				$S += $fields[2];
-				$S_by_readLength{$fields[0]} += $fields[2];
-			}
-			close(R);
-			if($S == 0)
-			{
-				# warn "Problem with $results_reads_fn";
-			}
-			else
-			{
-				foreach my $readLength (keys %h)
-				{
-					next if(not $S_by_readLength{$readLength});
-					foreach my $k (keys %{$h{$readLength}})
-					{
-						$h{$readLength}{$k} /= $S_by_readLength{$readLength};
-					}
-					push(@{$results_reads_many_per_node{$readLength}{$nodeID}}, $h{$readLength});
-				}
-
-				$total_jobs_reads_many_ok++;
-			}
-		}
-						
-	}
-	close(JOBS);
-	
-	print "\nTotal jobs: $total_jobs\n";
-	print "\tof which with results: $total_jobs_reads_many_ok \n";
-
-	open(RESULTSREADSMANY, '>', $outputFn_reads_results_many) or die "Cannot open $outputFn_reads_results_many";
-
-	foreach my $readLength (keys %results_reads_many_per_node)
-	{
-		foreach my $nodeID (keys %{$results_reads_many_per_node{$readLength}})
-		{
-			my $nodeRank = $taxonomy->{$nodeID}{rank};
-			my $nodeName = join('; ', @{$taxonomy->{$nodeID}{names}});
-
-			my @descendants = taxTree::descendants($taxonomy, $nodeID);
-			my @descendants_with_genomes = grep {exists $taxonID_2_contigs{$_}} @descendants;
-			my %combinedHistogram;
-			my $S = 0;		 
-			foreach my $histogram (@{$results_reads_many_per_node{$readLength}{$nodeID}})
-			{
-				foreach my $k (keys %$histogram)
-				{	
-					$combinedHistogram{$k} += $histogram->{$k};
-					$S += $histogram->{$k};
-				}
-			}
-			
-			my $firstKey = 1;				
-			foreach my $k (keys %combinedHistogram)
-			{
-				$combinedHistogram{$k} /= $S;
-				my $string_source_genomes = ($firstKey) ? join(';', @descendants_with_genomes) : '';
-				my $string_rank = ($firstKey) ? $nodeRank : '';
-				my $string_name = ($firstKey) ? $nodeName : '';
-				$firstKey = 0;
-				print RESULTSREADSMANY join("\t", $nodeID, $readLength, $k, $combinedHistogram{$k}, $string_source_genomes, $string_rank, $string_name), "\n";
-			}
-		}	
-	}
-	
-	close(RESULTSREADSMANY);
-	
-
-	copy($outputFn_reads_results_many, $finalResultsFile) or die "Cannot copy $outputFn_reads_results_many -> $finalResultsFile";
-
-	print "\n\nProduced results file:\n";
-	print " - $finalResultsFile \n\n";
-
+	doCollect();
 }
 else
 {
 	die "Unknown mode";
 }
-
 
 sub map_reads_keepTrack_similarity
 {
@@ -667,7 +485,6 @@ sub map_reads_keepTrack_similarity
 	my $limitToReadsIDs = shift;
 	my $call_eachSimulatedRead = shift;
 	my $call_eachReadResult = shift;
-	
 	my $readCounts_toPopulate_href = shift;
 	
 	die unless(defined $v_for_srand);
@@ -677,125 +494,138 @@ sub map_reads_keepTrack_similarity
 	
 	my $file_A_reads_many = $tmpDir . '/A.reads.many';
 	my $outputFn_MetaMap = $tmpDir . '.MetaMap.many';	
-
+	
+	open(READS, '>', $file_A_reads_many) or die "Cannot open $file_A_reads_many";
 	
 	my @chunk_positions = getChunkPositions($file_A, $contigs_A_order, $v_for_srand);
-	my %chunk_positions_by_chunk_length;
+	my %readID_2_chunkLength;
+	my %generated_reads_chunkLength;
 	foreach my $oneChunk (@chunk_positions)
 	{
-		push(@{$chunk_positions_by_chunk_length{$oneChunk->[0]}}, $oneChunk);
+		my $chunkLength = $oneChunk->[0];
+		my $readI_within_chunkLength_1based = $oneChunk->[1];
+		my $contigID = $oneChunk->[2];
+		my $posI = $oneChunk->[3];
+		my $readID = $oneChunk->[4];
+		
+		if(defined $limitToReadsIDs)
+		{
+			next unless($limitToReadsIDs->{$readID});
+		}			
+		
+		if(defined $call_eachSimulatedRead)
+		{
+			$call_eachSimulatedRead->($readID, $contigID, $posI, $chunkLength);
+		}		
+
+		die unless(defined $A_contigs_href->{$contigID});			
+		my $S = substr($A_contigs_href->{$contigID}, $posI, $chunkLength);
+		die unless(length($S) == $chunkLength);
+		print READS '>', $readID, "\n";
+		print READS $S, "\n";
+		
+		$generated_reads_chunkLength{$chunkLength}++;	
+		$readID_2_chunkLength{$readID} = $chunkLength;
 	}
+	close(READS);
+		
+	print "\t\tReads file $file_A_reads_many with ", sum(values %generated_reads_chunkLength), " reads";
+
+	# important - without this we get a different sort order!
+
+	my $MetaMap_cmd = qq($metamap_bin mapDirectly -r $file_B -q $file_A_reads_many -m 2000 -o $outputFn_MetaMap --pi 80);
+	print "\t\tExecuted command $MetaMap_cmd\n";		
+	system($MetaMap_cmd) and die "MetaMap command $MetaMap_cmd failed";
 	
-	foreach my $chunkLength (sort keys %chunk_positions_by_chunk_length)
+	my %readCounts_toPopulate_local;
+	my $currentReadID = '';
+	my @currentReadLines;
+	my $processAlignments_oneRead = sub {
+		my $bestIdentity;
+		my $bestIdentity_which;
+		my $readID;
+		foreach my $line (@currentReadLines)
+		{
+			my @fields = split(/ /, $line);
+			die Dumper($fields[0], $currentReadID) unless($fields[0] eq $currentReadID);
+			
+			if(not defined $readID)
+			{
+				$readID = $fields[0];
+			}
+			else
+			{
+				die unless($readID eq $fields[0]);
+			}
+			my $targetContig = $fields[5];
+			my $identity = $fields[9];
+			die unless(($identity >= 0) and ($identity <= 100));
+			if((not defined $bestIdentity) or ($bestIdentity < $identity))
+			{
+				$bestIdentity = $identity;
+				$bestIdentity_which = $targetContig;
+			}
+		}
+		$bestIdentity = int($bestIdentity + 0.5);
+		
+		die unless(defined $readID_2_chunkLength{$readID});
+		
+		my $chunkLength = $readID_2_chunkLength{$readID};
+		$readCounts_toPopulate_local{$chunkLength}{$bestIdentity}++;
+			
+		if($call_eachReadResult)
+		{
+			$call_eachReadResult->($readID, $bestIdentity_which, $bestIdentity);
+		}
+	};	
+		
+	open(MetaMapOUTPUT, '<', $outputFn_MetaMap) or die "Cannot open $outputFn_MetaMap";
+	while(<MetaMapOUTPUT>)
 	{
-		open(READS, '>', $file_A_reads_many) or die "Cannot open $file_A_reads_many";
-	
-		my $reads_for_mapping = 0;
-		foreach my $oneChunk (@{$chunk_positions_by_chunk_length{$chunkLength}})
+		chomp;
+		next unless($_);
+		die "Weird input" unless($_ =~ /^(.+?) /);
+		my $readID = $1;
+		if($currentReadID ne $readID)
 		{
-			die unless($oneChunk->[0] == $chunkLength);
-			my $readI_within_chunkLength_1based = $oneChunk->[1];
-			my $contigID = $oneChunk->[2];
-			my $posI = $oneChunk->[3];
-			my $readID = $oneChunk->[4];
-			
-			if(defined $limitToReadsIDs)
+			if(@currentReadLines)
 			{
-				next unless($limitToReadsIDs->{$readID});
-			}			
-			
-			if(defined $call_eachSimulatedRead)
-			{
-				$call_eachSimulatedRead->($readID, $contigID, $posI, $chunkLength);
-			}		
-
-			die unless(defined $A_contigs_href->{$contigID});			
-			my $S = substr($A_contigs_href->{$contigID}, $posI, $chunkLength);
-			die unless(length($S) == $chunkLength);
-			print READS '>', $readID, "\n";
-			print READS $S, "\n";
-			
-			$reads_for_mapping++;
+				$processAlignments_oneRead->();
+			}
+			$currentReadID = $readID;
+			@currentReadLines = ();
 		}
-		
-		close(READS);
-		
-		print "\t\tReads file $file_A_reads_many with ", scalar(@{$chunk_positions_by_chunk_length{$chunkLength}}), " reads";
-				
-		my $MetaMap_cmd = qq($metamap_bin mapDirectly -r $file_B -q $file_A_reads_many -m $chunkLength -o $outputFn_MetaMap --pi 80);
-		print "\t\tExecuted command $MetaMap_cmd\n";		
-		system($MetaMap_cmd) and die "MetaMap command $MetaMap_cmd failed";
-		
-		my $n_read_alignments = 0;
-		my %read_alignment_histogram;
-		my $currentReadID = '';
-		my @currentReadLines;
-		my $processAlignments_oneRead = sub {
-			my $bestIdentity;
-			my $bestIdentity_which;
-			my $readID;
-			foreach my $line (@currentReadLines)
-			{
-				my @fields = split(/ /, $line);
-				die Dumper($fields[0], $currentReadID) unless($fields[0] eq $currentReadID);
-				
-				if(not defined $readID)
-				{
-					$readID = $fields[0];
-				}
-				else
-				{
-					die unless($readID eq $fields[0]);
-				}
-				my $targetContig = $fields[5];
-				my $identity = $fields[9];
-				die unless(($identity >= 0) and ($identity <= 100));
-				if((not defined $bestIdentity) or ($bestIdentity < $identity))
-				{
-					$bestIdentity = $identity;
-					$bestIdentity_which = $targetContig;
-				}
-			}
-			$bestIdentity = int($bestIdentity + 0.5);
-			$readCounts_toPopulate_href->{$chunkLength}{$bestIdentity}++;
-			$n_read_alignments++;
-			
-			if($call_eachReadResult)
-			{
-				$call_eachReadResult->($readID, $bestIdentity_which, $bestIdentity);
-			}
-		};	
-		
-		open(MetaMapOUTPUT, '<', $outputFn_MetaMap) or die "Cannot open $outputFn_MetaMap";
-		while(<MetaMapOUTPUT>)
-		{
-			chomp;
-			next unless($_);
-			die "Weird input" unless($_ =~ /^(.+?) /);
-			my $readID = $1;
-			if($currentReadID ne $readID)
-			{
-				if(@currentReadLines)
-				{
-					$processAlignments_oneRead->();
-				}
-				$currentReadID = $readID;
-				@currentReadLines = ();
-			}
-			push(@currentReadLines, $_);
-		}
-		if(@currentReadLines)
-		{
-			$processAlignments_oneRead->();
-		}	
-		
-		close(MetaMapOUTPUT);
-
-		my $n_missing_reads = $reads_for_mapping - $n_read_alignments;
-		die unless($n_missing_reads >= 0);
-		$readCounts_toPopulate_href->{$chunkLength}{0} += $n_missing_reads;		
+		push(@currentReadLines, $_);
 	}
+	if(@currentReadLines)
+	{
+		$processAlignments_oneRead->();
+	}	
+	
+	close(MetaMapOUTPUT);
 
+	foreach my $chunkLength (keys %generated_reads_chunkLength)
+	{
+		my $reads_for_mapping = $generated_reads_chunkLength{$chunkLength};
+		my $n_read_alignments = 0;
+		if(exists $readCounts_toPopulate_local{$chunkLength})
+		{
+			$n_read_alignments = sum values %{$readCounts_toPopulate_local{$chunkLength}};
+		}	
+		my $n_missing_reads = $reads_for_mapping - $n_read_alignments;
+		die Dumper("Problem missing reads", $reads_for_mapping, $n_read_alignments) unless($n_missing_reads >= 0);
+		$readCounts_toPopulate_local{$chunkLength}{0} += $n_missing_reads;				
+	}
+	
+	foreach my $chunkLength (keys %readCounts_toPopulate_local)
+	{
+		foreach my $idty (keys %{$readCounts_toPopulate_local{$chunkLength}})
+		{
+			my $count = $readCounts_toPopulate_local{$chunkLength}{$idty};
+			$readCounts_toPopulate_href->{$chunkLength}{$idty} += $count;
+		}
+	}
+	
 	system('rm ' . $tmpDir . '/*') and die "Cannot delete $tmpDir (I)";	
 	system('rm -r ' . $tmpDir) and die "Cannot delete $tmpDir (II)"
 }
@@ -806,17 +636,15 @@ sub getChunkPositions
 	my $contigs_A_order = shift;	
 	my $srand_value = shift;
 	
-	my $A_contigs_href = readFASTA($file_A);
-	
+	my $A_contigs_href = Util::readFASTA($file_A);
+		
 	srand($srand_value);
 	
 	my @forReturn;
 	
 	my $totalReadI = 0;
 	for(my $chunkLength = $readSimSizeFrom; $chunkLength <= $readSimSizeTo; $chunkLength += $readSimSizeStep)
-	{
-		print "\tSimulate chunk length $chunkLength\n";
-						
+	{						
 		my $read_start_positions  = 0;
 		die unless(scalar(keys %$A_contigs_href) == scalar(@$contigs_A_order));
 		foreach my $contigID (@$contigs_A_order)
@@ -837,7 +665,7 @@ sub getChunkPositions
 		if($read_start_positions > $target_max_simulatedChunks)
 		{
 			$start_rate = $target_max_simulatedChunks / $read_start_positions;
-			print "\t\t\t(Read lengths; $chunkLength) Adjusted start rate to $start_rate (eligible start positions: $read_start_positions, want $target_max_simulatedChunks)\n";
+			# print "\t\t\t(Read lengths; $chunkLength) Adjusted start rate to $start_rate (eligible start positions: $read_start_positions, want $target_max_simulatedChunks)\n";
 		}
 		die unless(($start_rate >= 0) and ($start_rate <= 1));
 		
@@ -869,10 +697,197 @@ sub getChunkPositions
 	return @forReturn;
 }
 
+sub doJobIFromTemplate
+{
+	my $jobI = shift;
+	my $jobITemplate = shift;
+	
+	print "Carying out job $jobI (DB $DB) based on template $jobITemplate ($templateDB)\n";
+	
+	die "Please specify --jobI" unless(defined $jobI);
+	die "Please specify --jobITemplate" unless(defined $jobITemplate);
+	
+	my ($A_taxonID, $B_taxonIDs, $contigs_A, $contigs_B) = get_job_info($outputFn_jobs_fromTemplate, $jobI);
+	my ($template_A_taxonID, $template_B_taxonIDs, $template_contigs_A, $template_contigs_B) = get_job_info($outputFn_jobs_inTemplateDir, $jobITemplate);
+
+	my @template_contigIDs_A = split(/;/, $template_contigs_A);
+	my @template_contigIDs_B = split(/;/, $template_contigs_B);
+	my %template_contigIDs_A_to_i = Util::get_index_hash(\@template_contigIDs_A);
+	my %template_contigIDs_B_to_i = Util::get_index_hash(\@template_contigIDs_B);
+	my %template_A_i_to_contigID = reverse %template_contigIDs_A_to_i;
+	my %template_B_i_to_contigID = reverse %template_contigIDs_B_to_i;
+	
+	unless($contigs_A eq $template_contigs_A)
+	{
+		die "File $jobITemplate is not a valid template for job $jobI -- expect contigs_A = $contigs_A, but got $template_contigs_A";
+	}
+	
+	my @contigIDs_A = split(/;/, $contigs_A);
+	my @contigIDs_B = split(/;/, $contigs_B);
+	my %contigs_A = map {$_ => 1} @contigIDs_A; die unless(scalar(keys %contigs_A));
+	my %contigs_B = map {$_ => 1} @contigIDs_B; die unless(scalar(keys %contigs_B));
+	my %contigIDs_A_to_i = Util::get_index_hash(\@contigIDs_A);
+	my %contigIDs_B_to_i = Util::get_index_hash(\@contigIDs_B);
+	
+	foreach my $contigID (@contigIDs_B)
+	{
+		die Dumper("Invalid template $jobITemplate for job $jobI - mapping target (B) $contigID is not in list of template mapping targets", \@template_contigIDs_B)  unless(exists $template_contigIDs_B_to_i{$contigID});
+	}
+	
+	my ($_tmp_A, $_tmp_B, $v_for_srand, $readPositions_aref) = check_readsInfo_compatible_and_get_contigsA_contigsB_srand_readPositions(get_readInfo_file_for_jobI_fromTemplateDB($jobITemplate));
+	die Dumper("A contig discrepancy", $_tmp_A, $contigs_A) unless($_tmp_A eq $contigs_A);
+	die Dumper("B contig discrepancy", $_tmp_B, $template_contigs_B) unless($_tmp_B eq $template_contigs_B);
+	
+
+	# get reads, and read info
+	my $dir_computation = $outputDir_computation . '/' . $jobI;
+	mkdir($dir_computation);
+	
+	my $file_A = $dir_computation . '/A';
+	my $file_B = $dir_computation . '/B';
+		
+	construct_A_B_files($file_ref, $file_A, $file_B, \@contigIDs_A, \@contigIDs_B);
+	
+	my %n_reads_per_chunkLength;
+	my %readID_2_info;
+	my @chunk_positions = getChunkPositions($file_A, \@contigIDs_A, $v_for_srand);
+	
+	# todo remove
+	# my @chunk_positions_2 = getChunkPositions($file_A, \@contigIDs_A, $v_for_srand);
+	
+	my $readI = -1;
+	foreach my $oneChunk (@chunk_positions)
+	{
+		my $chunkLength = $oneChunk->[0];
+		my $readI_within_chunkLength_1based = $oneChunk->[1];
+		my $contigID = $oneChunk->[2];
+		my $posI = $oneChunk->[3];
+		my $readID = $oneChunk->[4];	
+		
+		$n_reads_per_chunkLength{$chunkLength}++;
+		die if(defined $readID_2_info{$readID});
+		$readID_2_info{$readID} = $oneChunk;
+		
+		$readI++;
+			
+		# todo remove
+		# my $contigID_supposed = $template_A_i_to_contigID{$readPositions_aref->[$readI][0]};
+		# print Dumper([$contigID, [$posI, $chunk_positions_2[$readI][3]]], [$readPositions_aref->[$readI][0], $contigID_supposed, $readPositions_aref->[$readI][1]], $contigs_A, $template_contigs_A), "\n";
+		
+		if(defined $readPositions_aref)
+		{
+			die unless($posI == $readPositions_aref->[$readI][1]);
+		}
+	}
+	
+	
+	# find reads that need to be remapped, and fill histogram with non-remapped reads
+	my %reads_for_remapping;
+	my $identities_by_length_href = {};
+	{
+		my $fn_mappings_details = get_readResults_file_for_jobI_fromTemplateDB($jobITemplate);
+		open(F, '<', $fn_mappings_details) or die "Cannot open $fn_mappings_details";
+		while(<F>)
+		{
+			chomp;
+			next unless($_);
+			my @f = split(/\t/, $_);
+			die Dumper("Weird line in $fn_mappings_details", $_) unless(scalar(@f) == 3);
+			my $readID = $f[0];
+			my $contigI = $f[1];
+			my $bestIdentity = $f[2];
+			
+			my $contigID = $template_B_i_to_contigID{$contigI};
+			die Dumper("Unknown contigI $contigI", $fn_mappings_details, $., $_) unless(defined $contigID);
+			
+			die unless(defined $readID_2_info{$readID});
+			if(exists $contigIDs_B_to_i{$contigID})
+			{
+				my $chunkLength = $readID_2_info{$readID}[0];
+				$identities_by_length_href->{$chunkLength}{$bestIdentity}++;
+			}
+			else
+			{
+				$reads_for_remapping{$readID} = 1;
+			}
+			
+		}
+		close(F);
+	}
+		
+	my $sub_call_each_simulatedRead = sub { 
+		my ($readID, $contigID, $posI, $chunkLength) = @_;
+		if($readPositions_aref)
+		{
+			die unless($readID =~ /read(\d+)/);
+			my $readI = $1 - 1;
+			die "Weird readI $readI $readID" unless($readI >= 0);
+			die "Weird readI $readI $readID " . scalar(@$readPositions_aref) unless($readI < scalar(@$readPositions_aref));
+			my $contigI = $contigIDs_A_to_i{$contigID};
+			my $contigII = $template_contigIDs_A_to_i{$contigID};
+			
+			die unless($contigI == $contigII);
+			die unless($readPositions_aref->[$readI][0] == $contigI);
+			die Dumper("Mismatch in generated reads", [$readID, $contigID, $contigI, $posI, $chunkLength], $readPositions_aref->[$readI], $v_for_srand) unless($readPositions_aref->[$readI][1] == $posI);
+		}
+	};
+
+				
+	my $sub_call_each_readResult = sub {	
+	};
+	
+	print "\tNow remapping ", scalar(keys %reads_for_remapping), " / ", scalar(@chunk_positions), " genome chunks.\n";
+	
+	map_reads_keepTrack_similarity(
+		$file_A,
+		$file_B,
+		$dir_computation,
+		$v_for_srand,
+		\@contigIDs_A,
+		\%reads_for_remapping,
+		$sub_call_each_simulatedRead,
+		$sub_call_each_readResult,
+		$identities_by_length_href
+	);
+	
+	foreach my $chunkLength (keys %n_reads_per_chunkLength)
+	{
+		my $n_trackedReads = 0;
+		if(defined $identities_by_length_href->{$chunkLength})
+		{
+			$n_trackedReads = sum values %{$identities_by_length_href->{$chunkLength}};
+		}
+		my $n_missingReads = $n_reads_per_chunkLength{$chunkLength} - $n_trackedReads;
+		die unless($n_missingReads >= 0);
+		$identities_by_length_href->{$chunkLength}{0} += $n_missingReads;
+	}
+	
+	my $results_fn_reads_many = get_results_file_for_jobI($jobI);
+	
+	open(RESULTS, '>', $results_fn_reads_many) or die "Cannot open $results_fn_reads_many";
+	print RESULTS $contigs_A, "\t", $contigs_B, "\n";		
+	foreach my $chunkLength (sort {$a <=> $b} keys %$identities_by_length_href)
+	{
+		foreach my $k (sort {$a <=> $b} keys %{$identities_by_length_href->{$chunkLength}})
+		{
+			print RESULTS join("\t", $chunkLength, $k, $identities_by_length_href->{$chunkLength}{$k}), "\n";
+		}	
+	}
+	close(RESULTS);	
+	
+	print "\tDone. Produced file ", $results_fn_reads_many, "\n";
+}
+
 sub get_results_file_for_jobI
 {
 	my $jobI = shift;
 	return  $outputDir_results . '/' . $jobI . '.results.reads.many';;
+}
+
+sub get_results_file_for_jobI_fromTemplateDB
+{
+	my $jobI = shift;
+	return  $outputDir_results_templateDB . '/' . $jobI . '.results.reads.many';;
 }
 
 sub get_readInfo_file_for_jobI
@@ -881,11 +896,25 @@ sub get_readInfo_file_for_jobI
 	return  $outputDir_results . '/' . $jobI . '.results.reads.many.readInfo';
 }
 
+sub get_readInfo_file_for_jobI_fromTemplateDB
+{
+	my $jobI = shift;
+	return  $outputDir_results_templateDB . '/' . $jobI . '.results.reads.many.readInfo';
+}
+
+
 sub get_readResults_file_for_jobI
 {
 	my $jobI = shift;
 	return  $outputDir_results . '/' . $jobI . '.results.reads.many.readResults';
 }
+
+sub get_readResults_file_for_jobI_fromTemplateDB
+{
+	my $jobI = shift;
+	return  $outputDir_results_templateDB . '/' . $jobI . '.results.reads.many.readResults';
+}
+
 
 sub read_taxonIDs_and_contigs
 {
@@ -924,6 +953,7 @@ sub read_taxonIDs_and_contigs
 sub get_job_info
 {
 	my $fn = shift;
+	my $jobI = shift;
 	
 	my ($A_taxonID, $B_taxonIDs, $contigs_A, $contigs_B);
 	open(JOBS, '<', $fn) or die "Cannot open $fn";
@@ -1046,6 +1076,134 @@ sub construct_A_B_files
 	{
 		die "Missed contig $contigID" if($contigs_B{$contigID});
 	}	
+}
+
+sub doCollect
+{
+	print "Collect results from folder $outputDir_results\n";
+	
+	my %taxonID_2_contigs;
+	my %contigLength;
+	read_taxonIDs_and_contigs($DB, \%taxonID_2_contigs, \%contigLength);
+	
+	# read taxonomy
+	my $taxonomy = taxTree::readTaxonomy($taxonomyDir);
+
+	# strip down to mappable components
+	taxTree::removeUnmappableParts($taxonomy, \%taxonID_2_contigs);
+	
+	my %results_reads_many_per_node;
+	my $total_jobs = 0;
+	my $total_jobs_reads_many_ok = 0;	
+	open(JOBS, '<', $outputFn_jobs) or die "Canot open $outputFn_jobs";
+	my $lineI = -1;
+	while(<JOBS>)
+	{
+		my $line = $_;
+		chomp($line);
+		my @fields = split(/\t/, $line);
+		my $nodeID = $fields[0];
+		my $contigs_A = $fields[10];
+		my $contigs_B = $fields[11];		
+		
+		$lineI++;
+		my $jobI = $lineI; 
+		
+		my $results_reads_many_fn = get_results_file_for_jobI($jobI);
+		$total_jobs++; 
+		
+		if(-e $results_reads_many_fn)
+		{
+			my $S = 0;
+			my %S_by_readLength;
+			my %h;
+			open(R, '<', $results_reads_many_fn) or die;
+			my $firstLine = <R>;
+			chomp($firstLine);
+			my @firstLine_fields = split(/\t/, $firstLine);
+			die Dumper("Weird first line", $results_reads_many_fn, \@firstLine_fields) unless(scalar(@firstLine_fields) == 2);
+			die unless($firstLine_fields[0] eq $contigs_A);
+			die unless($firstLine_fields[1] eq $contigs_B);
+			while(<R>)
+			{
+				my $l = $_;
+				chomp($l);
+				next unless($l);
+				my @fields = split(/\t/, $l);
+				die Dumper("Weird field count in line $. of file $results_reads_many_fn", \@fields) unless(scalar(@fields) == 3);
+				$h{$fields[0]}{$fields[1]} = $fields[2];
+				$S += $fields[2];
+				$S_by_readLength{$fields[0]} += $fields[2];
+			}
+			close(R);
+			if($S == 0)
+			{
+				# warn "Problem with $results_reads_fn";
+			}
+			else
+			{
+				foreach my $readLength (keys %h)
+				{
+					next if(not $S_by_readLength{$readLength});
+					foreach my $k (keys %{$h{$readLength}})
+					{
+						$h{$readLength}{$k} /= $S_by_readLength{$readLength};
+					}
+					push(@{$results_reads_many_per_node{$readLength}{$nodeID}}, $h{$readLength});
+				}
+
+				$total_jobs_reads_many_ok++;
+			}
+		}
+						
+	}
+	close(JOBS);
+	
+	print "\nTotal jobs: $total_jobs\n";
+	print "\tof which with results: $total_jobs_reads_many_ok \n";
+
+	open(RESULTSREADSMANY, '>', $outputFn_reads_results_many) or die "Cannot open $outputFn_reads_results_many";
+
+	foreach my $readLength (keys %results_reads_many_per_node)
+	{
+		foreach my $nodeID (keys %{$results_reads_many_per_node{$readLength}})
+		{
+			my $nodeRank = $taxonomy->{$nodeID}{rank};
+			my $nodeName = join('; ', @{$taxonomy->{$nodeID}{names}});
+
+			my @descendants = taxTree::descendants($taxonomy, $nodeID);
+			my @descendants_with_genomes = grep {exists $taxonID_2_contigs{$_}} @descendants;
+			my %combinedHistogram;
+			my $S = 0;		 
+			foreach my $histogram (@{$results_reads_many_per_node{$readLength}{$nodeID}})
+			{
+				foreach my $k (keys %$histogram)
+				{	
+					$combinedHistogram{$k} += $histogram->{$k};
+					$S += $histogram->{$k};
+				}
+			}
+			
+			my $firstKey = 1;				
+			foreach my $k (keys %combinedHistogram)
+			{
+				$combinedHistogram{$k} /= $S;
+				my $string_source_genomes = ($firstKey) ? join(';', @descendants_with_genomes) : '';
+				my $string_rank = ($firstKey) ? $nodeRank : '';
+				my $string_name = ($firstKey) ? $nodeName : '';
+				$firstKey = 0;
+				print RESULTSREADSMANY join("\t", $nodeID, $readLength, $k, $combinedHistogram{$k}, $string_source_genomes, $string_rank, $string_name), "\n";
+			}
+		}	
+	}
+	
+	close(RESULTSREADSMANY);
+	
+
+	copy($outputFn_reads_results_many, $finalResultsFile) or die "Cannot copy $outputFn_reads_results_many -> $finalResultsFile";
+
+	print "\n\nProduced results file:\n";
+	print " - $finalResultsFile \n\n";
 }
 __END__
 
