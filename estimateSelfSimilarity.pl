@@ -21,11 +21,7 @@ use taxTree;
 use Util;
 
 my @taxonomy_fields = qw/species genus family order phylum superkingdom/;
-my $metamap_bin = './mashmap';
-unless(-e $metamap_bin)
-{
-	die "Please execute me from the main MetaMap directory";
-}
+my $metamap_bin = Util::get_metaMap_bin_and_enforce_mainDir();
 
 my $action = '';   
 

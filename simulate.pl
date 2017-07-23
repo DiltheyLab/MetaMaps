@@ -24,6 +24,9 @@ use Util;
 use SimulationsKraken;
 use SimulationsMetaPalette;
 
+Util::get_metaMap_bin_and_enforce_mainDir();
+die unless(-e 'estimateSelfSimilarity.pl');
+
 #my $create_simulations = 2;
 #my $perSimulation_totalKnownGenomes = 5;
 my $globalOutputDir = 'new_simulations/';
@@ -135,7 +138,7 @@ if($action eq 'prepare')
 	my $existingSelfSimilarities = $DB . '/selfSimilarities.txt';
 	
 	die unless(-e $DB_fa);
-	# die unless(-e $existingSelfSimilarities); # todo
+	die unless(-e $existingSelfSimilarities);
 	
 	my $MetaMap_taxonomy = {};
 	my %contigID_2_taxonID;
@@ -578,7 +581,12 @@ sub produceReducedDB
 		close(DBIN);
 	}
 	
-	# die "Need self-similarity!";
+	die unless(-e 'estimateSelfSimilarity.pl');
+	my $cmd_self_similarity = qq(perl estimateSelfSimilarity.pl --DB $targetDir --template $baseDB --mode prepareFromTemplate);
+	die "Check command:\n$cmd_self_similarity\n\n";
+	
+	system($cmd_self_similarity) and die "Command $cmd_self_similarity failed";
+
 	
 	print "\t\tCreated reduced DB ", $targetDir, " with ", scalar(keys %$reducedTaxonomy), " nodes instead of ", scalar(keys %$taxonomy_base), " nodes\n";
 

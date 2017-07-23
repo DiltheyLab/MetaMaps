@@ -7,6 +7,16 @@ use Data::Dumper;
 
 use taxTree;
 
+sub get_metaMap_bin_and_enforce_mainDir
+{
+	my $metamap_bin = './mashmap';
+	unless(-e $metamap_bin)
+	{
+		die "Please execute me from the main MetaMap directory";
+	}
+	return $metamap_bin;
+}
+
 sub extractContigLengths
 {
 	my $fn = shift;
