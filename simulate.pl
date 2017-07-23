@@ -13,7 +13,9 @@ use File::Copy;
 
 # TODO
 # REMOVE ONE SPECIES REMOVALL!!!
+# (currently we're always removing the same base node)
 
+# todo real random seed?
 srand(12345);
 $| = 1;
 
@@ -559,6 +561,10 @@ sub produceReducedDB
 				{
 					$relevant = 1;
 					print DBOUT $_;
+				}
+				else
+				{
+					$relevant = 0;
 				}
 			}
 			else

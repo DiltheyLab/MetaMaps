@@ -104,7 +104,7 @@ elsif($mode eq 'prepareFromScratch')
 	# sanity check that really all leaf nodes are mappable
 	my @nodesForAttachment_leaves = map {taxTree::descendants_leaves($taxonomy, $_)} @nodesForAttachment;
 	die unless(all {exists $taxonID_2_contigs{$_}} @nodesForAttachment_leaves);
-	print "Have nodes ", scalar(@nodesForAttachment), " that hypothetical new species could be attached to.\n";
+	print "Have ", scalar(@nodesForAttachment), " nodes that hypothetical new species could be attached to.\n";
 	
 	# open jobs file
 	open(JOBS, '>', $outputFn_jobs) or die "Canot open $outputFn_jobs";
@@ -323,7 +323,7 @@ elsif($mode eq 'prepareFromTemplate')
 				my $template_jobI = $templateDB_existingComputation_toJobID{$computation_key};
 				my $existing_results_file = get_results_file_for_jobI_fromTemplateDB($template_jobI);
 				my $new_results_file = get_results_file_for_jobI($jobI);
-				# print "Have 1:1 template for $computation_key - copy $existing_results_file --> $new_results_file \n";
+				print "Have 1:1 template for $computation_key - copy $existing_results_file --> $new_results_file \n";
 				copy($existing_results_file, $new_results_file);
 			}
 			else
@@ -390,7 +390,6 @@ elsif($mode eq 'doJobI')
 	my @contigIDs_A = split(/;/, $contigs_A);
 	my @contigIDs_B = split(/;/, $contigs_B);
 
-	
 	my %contigIDs_A_to_i = Util::get_index_hash(\@contigIDs_A);
 	my %contigIDs_B_to_i = Util::get_index_hash(\@contigIDs_B);
 	
@@ -619,8 +618,9 @@ sub map_reads_keepTrack_similarity
 		}
 	}
 	
-	system('rm ' . $tmpDir . '/*') and die "Cannot delete $tmpDir (I)";	
-	system('rm -r ' . $tmpDir) and die "Cannot delete $tmpDir (II)"
+	# todo
+	# system('rm ' . $tmpDir . '/*') and die "Cannot delete $tmpDir (I)";	
+	# system('rm -r ' . $tmpDir) and die "Cannot delete $tmpDir (II)"
 }
 
 sub getChunkPositions
@@ -1021,9 +1021,17 @@ sub construct_A_B_files
 	my %contigs_A = map {$_ => 1} @$contigs_A_aref; die unless(scalar(keys %contigs_A));
 	my %contigs_B = map {$_ => 1} @$contigs_B_aref; die unless(scalar(keys %contigs_B));	
 	
+	# todo 
+	print "Extracting:\n";
+	print "\tA: ", join(' ', @$contigs_A_aref), "\n";
+	print "\tB: ", join(' ', @$contigs_B_aref), "\n";
+	
 	open(A, '>', $file_A) or die;
 	open(B, '>', $file_B) or die;
 	open(REF, '<', $file_ref) or die "Cannot open $file_ref";
+	
+	my $length_A = 0;
+	my $length_B = 0;
 	
 	my $in_A = 0;
 	my $in_B = 0;
@@ -1036,12 +1044,12 @@ sub construct_A_B_files
 			$in_A = 0;	
 			$in_B = 0;
 			my $contigID = substr($line, 1);
-			if($contigs_A{$contigID})
+			if(exists $contigs_A{$contigID})
 			{
 				$in_A = 1;
 				$contigs_A{$contigID}--;
 			}
-			if($contigs_B{$contigID})
+			if(exists $contigs_B{$contigID})
 			{
 				$in_B = 1;
 				$contigs_B{$contigID}--;
@@ -1052,25 +1060,34 @@ sub construct_A_B_files
 		if($in_A)
 		{
 			print A $line, "\n";
+			$length_A += length($line);
 		}
 
 		if($in_B)
 		{
 			print B $line, "\n";
+			$length_B += length($line);
 		}
 	}
 	close(REF);
 	close(A);
 	close(B);
 
+	# todo
+	print "Have extracted:\n";
+	print "\tA: ", $length_A, "\n";
+	print "\tB: ", $length_B, "\n";
+	
+	exit;
+	
 	foreach my $contigID (keys %contigs_A)
 	{
-		die "Missed contig $contigID" if($contigs_A{$contigID});
+		die "Missed contig $contigID" unless($contigs_A{$contigID} == 0);
 	}
 
 	foreach my $contigID (keys %contigs_B)
 	{
-		die "Missed contig $contigID" if($contigs_B{$contigID});
+		die "Missed contig $contigID" unless($contigs_B{$contigID} == 0);
 	}	
 }
 
@@ -1163,9 +1180,9 @@ sub doCollect
 
 	open(RESULTSREADSMANY, '>', $outputFn_reads_results_many) or die "Cannot open $outputFn_reads_results_many";
 
-	foreach my $readLength (keys %results_reads_many_per_node)
+	foreach my $readLength (sort {$a <=> $b} keys %results_reads_many_per_node)
 	{
-		foreach my $nodeID (keys %{$results_reads_many_per_node{$readLength}})
+		foreach my $nodeID (sort keys %{$results_reads_many_per_node{$readLength}})
 		{
 			my $nodeRank = $taxonomy->{$nodeID}{rank};
 			my $nodeName = join('; ', @{$taxonomy->{$nodeID}{names}});
@@ -1173,7 +1190,7 @@ sub doCollect
 			my @descendants = taxTree::descendants($taxonomy, $nodeID);
 			my @descendants_with_genomes = grep {exists $taxonID_2_contigs{$_}} @descendants;
 			my %combinedHistogram;
-			my $S = 0;		 
+			my $S = 0;		  
 			foreach my $histogram (@{$results_reads_many_per_node{$readLength}{$nodeID}})
 			{
 				foreach my $k (keys %$histogram)
@@ -1184,7 +1201,7 @@ sub doCollect
 			}
 			
 			my $firstKey = 1;				
-			foreach my $k (keys %combinedHistogram)
+			foreach my $k (sort {$a <=> $b} keys %combinedHistogram)
 			{
 				$combinedHistogram{$k} /= $S;
 				my $string_source_genomes = ($firstKey) ? join(';', @descendants_with_genomes) : '';
