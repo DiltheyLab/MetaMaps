@@ -92,6 +92,11 @@ elsif($mode eq 'prepareFromScratch')
 	my %contigLength;
 	read_taxonIDs_and_contigs($DB, \%taxonID_2_contigs, \%contigLength);
 	
+	# sanity check: get contig lengths from actual DB
+	my $actualContigLengths_href = Util::extractContigLengths($file_ref);
+	die Dumper("Discrepancy number of contig ID keys", scalar(keys %$actualContigLengths_href), scalar(keys %contigLength)) unless(scalar(keys %$actualContigLengths_href) == scalar(keys %contigLength));
+	die unless(all {$contigLength{$_} == $actualContigLengths_href->{$_}} keys %contigLength);
+
 	# read taxonomy
 	my $taxonomy = taxTree::readTaxonomy($taxonomyDir);
 
@@ -618,9 +623,9 @@ sub map_reads_keepTrack_similarity
 		}
 	}
 	
-	# todo
-	# system('rm ' . $tmpDir . '/*') and die "Cannot delete $tmpDir (I)";	
-	# system('rm -r ' . $tmpDir) and die "Cannot delete $tmpDir (II)"
+	
+	system('rm ' . $tmpDir . '/*') and die "Cannot delete $tmpDir (I)";	
+	system('rm -r ' . $tmpDir) and die "Cannot delete $tmpDir (II)"
 }
 
 sub getChunkPositions
@@ -1022,9 +1027,9 @@ sub construct_A_B_files
 	my %contigs_B = map {$_ => 1} @$contigs_B_aref; die unless(scalar(keys %contigs_B));	
 	
 	# todo 
-	print "Extracting:\n";
-	print "\tA: ", join(' ', @$contigs_A_aref), "\n";
-	print "\tB: ", join(' ', @$contigs_B_aref), "\n";
+	# print "Extracting:\n";
+	# print "\tA: ", join(' ', @$contigs_A_aref), "\n";
+	# print "\tB: ", join(' ', @$contigs_B_aref), "\n";
 	
 	open(A, '>', $file_A) or die;
 	open(B, '>', $file_B) or die;
@@ -1074,11 +1079,10 @@ sub construct_A_B_files
 	close(B);
 
 	# todo
-	print "Have extracted:\n";
-	print "\tA: ", $length_A, "\n";
-	print "\tB: ", $length_B, "\n";
+	# print "Have extracted:\n";
+	# print "\tA: ", $length_A, "\n";
+	# print "\tB: ", $length_B, "\n";
 	
-	exit;
 	
 	foreach my $contigID (keys %contigs_A)
 	{

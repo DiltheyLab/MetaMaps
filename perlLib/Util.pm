@@ -7,6 +7,31 @@ use Data::Dumper;
 
 use taxTree;
 
+sub extractContigLengths
+{
+	my $fn = shift;
+	my %forReturn;
+
+	my $currentContigID;
+	open(F, '<', $fn) or die "Cannot open file $fn";
+	while(<F>)
+	{
+		chomp;
+		if(substr($_, 0, 1) eq '>')
+		{
+			$currentContigID = substr($_, 1);	
+			$forReturn{$currentContigID} = 0;
+		}
+		else
+		{
+			$forReturn{$currentContigID} += length($_);
+		}
+	}
+	close(F);
+	
+	return \%forReturn;
+}
+
 sub extractTaxonID
 {
 	my $contigID = shift;
