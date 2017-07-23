@@ -371,8 +371,7 @@ elsif($mode eq 'prepareFromTemplate')
 		doJobIFromTemplate($jobI, $best_template_jobI);
 	}
 	
-	
-	doCollect();
+	doCollect(1);
 }
 elsif($mode eq 'doJobIFromTemplate')
 {
@@ -406,14 +405,8 @@ elsif($mode eq 'doJobI')
 	my $results_fn_reads_many = get_results_file_for_jobI($jobI);
 	my $readInfo_fn_reads_many = get_readInfo_file_for_jobI($jobI);
 	my $readResults_fn_reads_many = get_readResults_file_for_jobI($jobI);
-	
-	# make sure results file is writable and empty
-	
-	open(F, '>', $results_fn_reads_many) or die "Cannot open $results_fn_reads_many";
-	print F $contigs_A, "\t", $contigs_B, "\n";
-	close(F);
 
-	my $seed_rand = rand();
+	my $seed_rand = rand(1024); # todo
 	srand($seed_rand);
 				
 	open(READINFO, '>', $readInfo_fn_reads_many) or die "Cannot open $readInfo_fn_reads_many";
@@ -493,7 +486,7 @@ sub map_reads_keepTrack_similarity
 	my $A_contigs_href = Util::readFASTA($file_A);
 	
 	my $file_A_reads_many = $tmpDir . '/A.reads.many';
-	my $outputFn_MetaMap = $tmpDir . '.MetaMap.many';	
+	my $outputFn_MetaMap = $tmpDir . '/MetaMap.many';	
 	
 	open(READS, '>', $file_A_reads_many) or die "Cannot open $file_A_reads_many";
 	
@@ -638,7 +631,10 @@ sub getChunkPositions
 	
 	my $A_contigs_href = Util::readFASTA($file_A);
 		
-	srand($srand_value);
+	# todo
+	srand(length(join(';', @$contigs_A_order)));
+	
+	# srand($srand_value);
 	
 	my @forReturn;
 	
@@ -1080,6 +1076,8 @@ sub construct_A_B_files
 
 sub doCollect
 {
+	my $collectFromTemplate = shift;
+	
 	print "Collect results from folder $outputDir_results\n";
 	
 	my %taxonID_2_contigs;
@@ -1095,7 +1093,8 @@ sub doCollect
 	my %results_reads_many_per_node;
 	my $total_jobs = 0;
 	my $total_jobs_reads_many_ok = 0;	
-	open(JOBS, '<', $outputFn_jobs) or die "Canot open $outputFn_jobs";
+	my $jobs_fn = ($collectFromTemplate) ? $outputFn_jobs_fromTemplate : $outputFn_jobs;
+	open(JOBS, '<', $jobs_fn) or die "Canot open $jobs_fn";
 	my $lineI = -1;
 	while(<JOBS>)
 	{
@@ -1151,9 +1150,9 @@ sub doCollect
 					}
 					push(@{$results_reads_many_per_node{$readLength}{$nodeID}}, $h{$readLength});
 				}
-
-				$total_jobs_reads_many_ok++;
 			}
+			
+			$total_jobs_reads_many_ok++;			
 		}
 						
 	}

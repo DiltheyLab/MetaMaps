@@ -96,6 +96,7 @@ protected:
 		size_t inputReads_mapped = 0;
 		size_t inputReads_tooShort = 0;
 		size_t inputReads_notMapped = 0;
+		std::string lastProcessedReadID;
 		for(const auto& qSF : querySequences)
 		{
 			//Open the file using kseq
@@ -144,6 +145,7 @@ protected:
 					{
 						processedReadIDs.insert(readID);
 					}
+					lastProcessedReadID = readID;
 				}
 			}
 
@@ -152,11 +154,15 @@ protected:
 			gzclose(fp);
 		}
 
-		for(auto iS : openFiles)
+		size_t reads_mappable = totalInputReads - inputReads_tooShort;
+		for(size_t fileI = 0; fileI < openFiles.size(); fileI++)
 		{
-			if(iS->good())
+			std::ifstream* iS = openFiles.at(fileI);
+			if(iS->good() && (reads_mappable != 0))
 			{
-				std::cerr << "Error: output file not completely processed.\n" << std::flush;
+				std::cerr << "Error: output file " << fileI << " / " << openFiles.size() << " not completely processed.\n" << std::flush;
+				std::cerr << "\tFile: " << mappingFiles.at(fileI) << std::endl;
+				std::cerr << "\tLast processed read ID: " << lastProcessedReadID << std::endl;
 				exit(1);
 			}
 			iS->close();
@@ -210,13 +216,13 @@ protected:
 				readIDs.insert(fields.at(0));
 				read_lengths.insert(std::stoi(fields.at(1)));
 
-				double identity = (std::stoi(fields.at(9)))/100.0;
+				double identity = (std::stod(fields.at(9)))/100.0;
 				int intersection_size = std::stoi(fields.at(10));
 				int sketch_size = std::stoi(fields.at(11));
 				assert(intersection_size <= sketch_size);
 				if(identity > max_identity)
 				{
-					max_identity = identity;
+					max_identity = identity; 
 				}
 
 				identities.push_back(identity);
@@ -243,6 +249,7 @@ protected:
 
 			std::vector<double> likelihoods;
 			double likelihood_sum = 0;
+			assert(observed_set_sizes.size());
 			for(auto p : observed_set_sizes)
 			{
 				double likelihood = likelihood_observed_set_sizes(param.kmerSize, n_kmers, max_identity, p.first, p.second);
@@ -251,6 +258,25 @@ protected:
 				likelihoods.push_back(likelihood);
 				likelihood_sum += likelihood;
 			}
+			if((!likelihood_sum))
+			{
+				std::cerr << "WARNING!\n";
+				std::cerr << "\t" << "likelihood_sum" << ": " << likelihood_sum << std::endl;
+				std::cerr << "\t" << "max_identity" << ": " << max_identity << std::endl;
+				std::cerr << "\t" << "readID" << ": " << *(readIDs.begin()) << std::endl;
+				
+				for(auto p : observed_set_sizes)
+				{
+					likelihood_observed_set_sizes(param.kmerSize, n_kmers, max_identity, p.first, p.second, true);
+				}
+				
+				for(auto l : lines)
+				{
+					std::cerr << l << "\n" << std::flush;
+				}
+				
+				std::cerr << "========= END ==========\n" << std::endl;
+			}	
 			assert(likelihood_sum > 0);
 			//std::cout << "max_identity: " << max_identity << "\n" << std::flush;
 			//std::cout << "n_kmers: " << n_kmers < "\n";
@@ -278,7 +304,7 @@ protected:
 		}
 	}
 
-	double likelihood_observed_set_sizes(int k, int n_kmers, double identity, int sketch_size, int intersection_size)
+	double likelihood_observed_set_sizes(int k, int n_kmers, double identity, int sketch_size, int intersection_size, bool verbose = false)
 	{
 		assert(intersection_size <= sketch_size);
 		double p_kMer_survival = std::pow(identity, k);
@@ -287,6 +313,20 @@ protected:
 		double E_union_size = n_kmers + (n_kmers - E_surviving_kMers_int);
 		double E_intersection_size = E_surviving_kMers_int;
 		double likelihood = boost::math::pdf(boost::math::binomial_distribution<>(sketch_size, E_intersection_size/E_union_size), intersection_size);
+		
+		if(verbose)
+		{
+			std::cerr << "OUTPUT: likelihood = " << likelihood << "\n";
+			std::cerr << "k" << ": " << k << std::endl;
+			std::cerr << "n_kmers" << ": " << n_kmers << std::endl;
+			std::cerr << "identity" << ": " << identity << std::endl;
+			std::cerr << "sketch_size" << ": " << sketch_size << std::endl;
+			std::cerr << "intersection_size" << ": " << intersection_size << std::endl;
+			std::cerr << "E_intersection_size" << ": " << E_intersection_size << std::endl;
+			std::cerr << "E_union_size" << ": " << E_union_size << std::endl;			
+			std::cerr << std::endl;
+		}
+		
 		return likelihood;
 	}
 
@@ -420,7 +460,7 @@ public:
 		useParameters.windowSize = restoredParameters.windowSize;
 		useParameters.referenceSize = restoredParameters.referenceSize;
 		useParameters.reportAll = param.reportAll;
-
+  
 		std::cout << "Parameters restored from index " << fn_serialize_arguments << "\n";
 		std::cout << "\t" << "- alphabetSize: " << useParameters.alphabetSize << "\n";
 		std::cout << "\t" << "- kmerSize: " << useParameters.kmerSize << "\n";
