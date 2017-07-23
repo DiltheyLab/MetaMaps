@@ -86,7 +86,7 @@ elsif($mode eq 'prepareFromScratch')
 	# read taxonID -> contigs
 	my %taxonID_2_contigs;
 	my %contigLength;
-	read_taxonIDs_and_contigs($DB, \%taxonID_2_contigs, \%contigLength);
+	Util::read_taxonIDs_and_contigs($DB, \%taxonID_2_contigs, \%contigLength);
 	
 	# sanity check: get contig lengths from actual DB
 	my $actualContigLengths_href = Util::extractContigLengths($file_ref);
@@ -236,7 +236,7 @@ elsif($mode eq 'prepareFromTemplate')
 	# details for reduced DB
 	my %reduced_taxonID_2_contigs;
 	my %reduced_contigLength;
-	read_taxonIDs_and_contigs($DB, \%reduced_taxonID_2_contigs, \%reduced_contigLength);
+	Util::read_taxonIDs_and_contigs($DB, \%reduced_taxonID_2_contigs, \%reduced_contigLength);
 	
 	# read reduced taxonomy
 	my $reduced_taxonomy = taxTree::readTaxonomy($taxonomyDir);
@@ -248,7 +248,7 @@ elsif($mode eq 'prepareFromTemplate')
 	my %template_taxonID_2_contigs;
 	my %template_contigLength;
 	my $template_taxonomy = taxTree::readTaxonomy($templateDB . '/taxonomy');	
-	read_taxonIDs_and_contigs($templateDB, \%template_taxonID_2_contigs, \%template_contigLength);
+	Util::read_taxonIDs_and_contigs($templateDB, \%template_taxonID_2_contigs, \%template_contigLength);
 	taxTree::removeUnmappableParts($template_taxonomy, \%template_taxonID_2_contigs);
 	
 	# check that this is a valid template
@@ -324,8 +324,8 @@ elsif($mode eq 'prepareFromTemplate')
 				my $template_jobI = $templateDB_existingComputation_toJobID{$computation_key};
 				my $existing_results_file = get_results_file_for_jobI_fromTemplateDB($template_jobI);
 				my $new_results_file = get_results_file_for_jobI($jobI);
-				print "Have 1:1 template for $computation_key - copy $existing_results_file --> $new_results_file \n";
-				copy($existing_results_file, $new_results_file);
+				copy($existing_results_file, $new_results_file) or die "Cannot copy $existing_results_file --> $new_results_file";
+				# print "Have 1:1 template for $computation_key - copy $existing_results_file --> $new_results_file \n"; # todo remove
 			}
 			else
 			{
@@ -488,11 +488,92 @@ sub map_reads_keepTrack_similarity
 	my $file_A_reads_many = $tmpDir . '/A.reads.many';
 	my $outputFn_MetaMap = $tmpDir . '/MetaMap.many';	
 	
+	my %readID_2_chunkLength;
+	
+	my %readCounts_toPopulate_local;
+	
+	my $processAndClearReads = sub {
+		close(READS) or die;
+		
+		my $MetaMap_cmd = qq($metamap_bin mapDirectly -r $file_B -q $file_A_reads_many -m 2000 -o $outputFn_MetaMap --pi 80);
+		print "\t\tExecute command $MetaMap_cmd\n";		
+		system($MetaMap_cmd) and die "MetaMap command $MetaMap_cmd failed";
+		
+		my $currentReadID = '';
+		my @currentReadLines;
+		my $processAlignments_oneRead = sub {
+			my $bestIdentity;
+			my $bestIdentity_which;
+			my $readID;
+			foreach my $line (@currentReadLines)
+			{
+				my @fields = split(/ /, $line);
+				die Dumper($fields[0], $currentReadID) unless($fields[0] eq $currentReadID);
+				
+				if(not defined $readID)
+				{
+					$readID = $fields[0];
+				}
+				else
+				{
+					die unless($readID eq $fields[0]);
+				}
+				my $targetContig = $fields[5];
+				my $identity = $fields[9];
+				die unless(($identity >= 0) and ($identity <= 100));
+				if((not defined $bestIdentity) or ($bestIdentity < $identity))
+				{
+					$bestIdentity = $identity;
+					$bestIdentity_which = $targetContig;
+				}
+			}
+			$bestIdentity = int($bestIdentity + 0.5);
+			
+			die unless(defined $readID_2_chunkLength{$readID});
+			
+			my $chunkLength = $readID_2_chunkLength{$readID};
+			$readCounts_toPopulate_local{$chunkLength}{$bestIdentity}++;
+				
+			if($call_eachReadResult)
+			{
+				$call_eachReadResult->($readID, $bestIdentity_which, $bestIdentity);
+			}
+		};	
+			
+		open(MetaMapOUTPUT, '<', $outputFn_MetaMap) or die "Cannot open $outputFn_MetaMap";
+		while(<MetaMapOUTPUT>)
+		{
+			chomp;
+			next unless($_);
+			die "Weird input" unless($_ =~ /^(.+?) /);
+			my $readID = $1;
+			if($currentReadID ne $readID)
+			{
+				if(@currentReadLines)
+				{
+					$processAlignments_oneRead->();
+				}
+				$currentReadID = $readID;
+				@currentReadLines = ();
+			}
+			push(@currentReadLines, $_);
+		}
+		if(@currentReadLines)
+		{
+			$processAlignments_oneRead->();
+		}	
+		
+		close(MetaMapOUTPUT) or die;
+	
+		open(READS, '>', $file_A_reads_many) or die "Cannot open $file_A_reads_many";
+	};
+	
 	open(READS, '>', $file_A_reads_many) or die "Cannot open $file_A_reads_many";
 	
-	my @chunk_positions = getChunkPositions($file_A, $contigs_A_order, $v_for_srand);
-	my %readID_2_chunkLength;
 	my %generated_reads_chunkLength;
+	
+	my @chunk_positions = getChunkPositions($file_A, $contigs_A_order, $v_for_srand);
+	my $generatedSequence = 0;
 	foreach my $oneChunk (@chunk_positions)
 	{
 		my $chunkLength = $oneChunk->[0];
@@ -519,83 +600,19 @@ sub map_reads_keepTrack_similarity
 		
 		$generated_reads_chunkLength{$chunkLength}++;	
 		$readID_2_chunkLength{$readID} = $chunkLength;
+		
+		$generatedSequence += length($chunkLength);
+		
+		if($generatedSequence >= 1e9)
+		{
+			$processAndClearReads->();
+			$generatedSequence = 0;
+		}
 	}
+	$processAndClearReads->();
 	close(READS);
-		
-	print "\t\tReads file $file_A_reads_many with ", sum(values %generated_reads_chunkLength), " reads";
-
-	# important - without this we get a different sort order!
-
-	my $MetaMap_cmd = qq($metamap_bin mapDirectly -r $file_B -q $file_A_reads_many -m 2000 -o $outputFn_MetaMap --pi 80);
-	print "\t\tExecuted command $MetaMap_cmd\n";		
-	system($MetaMap_cmd) and die "MetaMap command $MetaMap_cmd failed";
 	
-	my %readCounts_toPopulate_local;
-	my $currentReadID = '';
-	my @currentReadLines;
-	my $processAlignments_oneRead = sub {
-		my $bestIdentity;
-		my $bestIdentity_which;
-		my $readID;
-		foreach my $line (@currentReadLines)
-		{
-			my @fields = split(/ /, $line);
-			die Dumper($fields[0], $currentReadID) unless($fields[0] eq $currentReadID);
-			
-			if(not defined $readID)
-			{
-				$readID = $fields[0];
-			}
-			else
-			{
-				die unless($readID eq $fields[0]);
-			}
-			my $targetContig = $fields[5];
-			my $identity = $fields[9];
-			die unless(($identity >= 0) and ($identity <= 100));
-			if((not defined $bestIdentity) or ($bestIdentity < $identity))
-			{
-				$bestIdentity = $identity;
-				$bestIdentity_which = $targetContig;
-			}
-		}
-		$bestIdentity = int($bestIdentity + 0.5);
-		
-		die unless(defined $readID_2_chunkLength{$readID});
-		
-		my $chunkLength = $readID_2_chunkLength{$readID};
-		$readCounts_toPopulate_local{$chunkLength}{$bestIdentity}++;
-			
-		if($call_eachReadResult)
-		{
-			$call_eachReadResult->($readID, $bestIdentity_which, $bestIdentity);
-		}
-	};	
-		
-	open(MetaMapOUTPUT, '<', $outputFn_MetaMap) or die "Cannot open $outputFn_MetaMap";
-	while(<MetaMapOUTPUT>)
-	{
-		chomp;
-		next unless($_);
-		die "Weird input" unless($_ =~ /^(.+?) /);
-		my $readID = $1;
-		if($currentReadID ne $readID)
-		{
-			if(@currentReadLines)
-			{
-				$processAlignments_oneRead->();
-			}
-			$currentReadID = $readID;
-			@currentReadLines = ();
-		}
-		push(@currentReadLines, $_);
-	}
-	if(@currentReadLines)
-	{
-		$processAlignments_oneRead->();
-	}	
-	
-	close(MetaMapOUTPUT);
+	print "\t\tReads file $file_A_reads_many with ", (sum(values %generated_reads_chunkLength) // 0), " reads\n\n";
 
 	foreach my $chunkLength (keys %generated_reads_chunkLength)
 	{
@@ -618,8 +635,7 @@ sub map_reads_keepTrack_similarity
 			$readCounts_toPopulate_href->{$chunkLength}{$idty} += $count;
 		}
 	}
-	
-	
+		
 	system('rm ' . $tmpDir . '/*') and die "Cannot delete $tmpDir (I)";	
 	system('rm -r ' . $tmpDir) and die "Cannot delete $tmpDir (II)"
 }
@@ -913,38 +929,7 @@ sub get_readResults_file_for_jobI_fromTemplateDB
 }
 
 
-sub read_taxonIDs_and_contigs
-{
-	my $DB = shift;
-	my $taxonID_2_contigs_href = shift;
-	my $contigLength_href = shift;
-	
-	my $file_taxonGenomes = $DB . '/taxonInfo.txt';
-	
-	open(GENOMEINFO, '<', $file_taxonGenomes) or die "Cannot open $file_taxonGenomes";
-	while(<GENOMEINFO>)
-	{
-		my $line = $_;
-		chomp($line);
-		next unless($line);
-		my @line_fields = split(/ /, $line);
-		die unless(scalar(@line_fields) == 2);
-		my $taxonID = $line_fields[0];
-		my $contigs = $line_fields[1];
-		die if(exists $taxonID_2_contigs_href->{$taxonID});
 
-		my @components = split(/;/, $contigs);
-		foreach my $component (@components)
-		{
-			my @p = split(/=/, $component);
-			die unless(scalar(@p) == 2);
-			die if(exists $taxonID_2_contigs_href->{$taxonID}{$p[0]});
-			$taxonID_2_contigs_href->{$taxonID}{$p[0]} = $p[1];
-			$contigLength_href->{$p[0]} = $p[1];
-		}
-	}
-	close(GENOMEINFO);
-}
 
 
 sub get_job_info
@@ -1099,7 +1084,7 @@ sub doCollect
 	
 	my %taxonID_2_contigs;
 	my %contigLength;
-	read_taxonIDs_and_contigs($DB, \%taxonID_2_contigs, \%contigLength);
+	Util::read_taxonIDs_and_contigs($DB, \%taxonID_2_contigs, \%contigLength);
 	
 	# read taxonomy
 	my $taxonomy = taxTree::readTaxonomy($taxonomyDir);

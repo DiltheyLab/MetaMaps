@@ -216,5 +216,37 @@ sub readFASTA
 	return \%R;
 }
 
+sub read_taxonIDs_and_contigs
+{
+	my $DB = shift;
+	my $taxonID_2_contigs_href = shift;
+	my $contigLength_href = shift;
+	
+	my $file_taxonGenomes = $DB . '/taxonInfo.txt';
+	
+	open(GENOMEINFO, '<', $file_taxonGenomes) or die "Cannot open $file_taxonGenomes";
+	while(<GENOMEINFO>)
+	{
+		my $line = $_;
+		chomp($line);
+		next unless($line);
+		my @line_fields = split(/ /, $line);
+		die unless(scalar(@line_fields) == 2);
+		my $taxonID = $line_fields[0];
+		my $contigs = $line_fields[1];
+		die if(exists $taxonID_2_contigs_href->{$taxonID});
+
+		my @components = split(/;/, $contigs);
+		foreach my $component (@components)
+		{
+			my @p = split(/=/, $component);
+			die unless(scalar(@p) == 2);
+			die if(exists $taxonID_2_contigs_href->{$taxonID}{$p[0]});
+			$taxonID_2_contigs_href->{$taxonID}{$p[0]} = $p[1];
+			$contigLength_href->{$p[0]} = $p[1];
+		}
+	}
+	close(GENOMEINFO);
+}
 
 1;
