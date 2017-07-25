@@ -11,7 +11,7 @@ use FindBin;
 use lib "$FindBin::Bin/perlLib";
 use Cwd qw/getcwd abs_path/;
 use File::Copy;
-use Storable qw/store retrieve/;
+use Storable qw/dclone store retrieve/;
 
 # TODO
 # REMOVE ONE SPECIES REMOVALL!!!
@@ -39,13 +39,19 @@ unless(-e $globalOutputDir)
 my $simulation_read_length = 5000;
 
 # my $taxonomyDir = '/data/projects/phillippy/projects/mashsim/NCBI/refseq/taxonomy/';
-my $fullReferenceTaxonomy = '/data/projects/phillippy/projects/MetaMap/downloads/taxonomy';
+my $masterTaxonomy_dir = '/data/projects/phillippy/projects/MetaMap/downloads/taxonomy';
+die "Verify this patH, should be RefSew!";
+
+# these are populated globally if required
+my $masterTaxonomy; 
+my $masterTaxonomy_merged;
 
 #my $ref = '../db/refseq/ref.fa';
 #my $contigsTaxa = $ref . '.taxa';
 
 #my $treeSelfSimiliarityReads = '/data/projects/phillippy/projects/mashsim/NCBI/refseq/taxonomy/selfSimilarity/results.reads.byNode';
 #(my $treeSelfSimilarityReadsMany = $treeSelfSimiliarityReads) =~ s/results\.reads\.byNode/results.reads.many.byNode/;
+
 
 my $PBsim_cmd = qq(/data/projects/phillippy/projects/mashsim/PBSIM-PacBio-Simulator/src/pbsim --model_qc /data/projects/phillippy/projects/mashsim/PBSIM-PacBio-Simulator/data/model_qc_clr --data-type CLR --depth DEPTH --prefix --length-mean $simulation_read_length --accuracy-mean 0.88 REF);
 
@@ -244,8 +250,17 @@ sub evaluateOneSimulation
 {
 	my $simulation_href = shift;
 	
-	my $fullTaxonomy_dir = $simulation_href->{outputDirectory} . '/DB_fullDB/taxonomy';
-	my $taxonomy_full = taxTree::readTaxonomy($fullTaxonomy_dir);
+	my $masterTaxonomy_merged;
+	unless(defined $masterTaxonomy)
+	{
+		$masterTaxonomy = taxTree::readTaxonomy($masterTaxonomy_dir);
+		$masterTaxonomy_merged = taxTree::readMerged($masterTaxonomy_dir);
+	}
+	
+	my $taxonomyFromSimulation_dir = $simulation_href->{outputDirectory} . '/DB_fullDB/taxonomy';
+	my $taxonomy_usedForSimulation = taxTree::readTaxonomy($taxonomyFromSimulation_dir);
+		
+	my $extendedMaster = taxTree::cloneTaxonomy_integrateX($masterTaxonomy, $masterTaxonomy_merged, $taxonomy_usedForSimulation);
 	
 	my %truth_raw_reads;
 	my %truth_raw_taxonIDs;
@@ -258,12 +273,15 @@ sub evaluateOneSimulation
 		next unless($line);
 		my @f = split(/\t/, $line);
 		my $readID = $f[0];
-		my $taxonID = $f[1];
+		my $taxonID_original = $f[1];
 		
-		die unless(exists $taxonomy_full->{$taxonID});
+		my $taxonID_master = taxTree::findCurrentNodeID($extendedMaster, $masterTaxonomy_merged, $taxonID_original);
+		
+		die unless(exists $extendedMaster->{$taxonID_master});
 		die if(defined $truth_raw_reads{$readID});
-		$truth_raw_reads{$readID} = $taxonID;
-		$truth_raw_taxonIDs{$taxonID}++;
+		
+		$truth_raw_reads{$readID} = $taxonID_master;
+		$truth_raw_taxonIDs{$taxonID_master}++;
 	}
 	close(T);
 			
@@ -276,22 +294,30 @@ sub evaluateOneSimulation
 		my $simulation_results_dir = $simulation_href->{outputDirectory} . '/inference_' . $varietyName;
 		my $DBdir = $simulation_href->{outputDirectory} . '/DB_' . $varietyName;
 		
-		my $specificTaxonomy = taxTree::readTaxonomy($DBdir . '/taxonomy');
+		# my $specificTaxonomy = taxTree::readTaxonomy($DBdir . '/taxonomy');
 		
 		# details for reduced DB
-		my %reduced_taxonID_2_contigs;
+		my %reduced_taxonID_original_2_contigs;
 		my %reduced_contigLength;
-		Util::read_taxonIDs_and_contigs($DBdir, \%reduced_taxonID_2_contigs, \%reduced_contigLength);
+		Util::read_taxonIDs_and_contigs($DBdir, \%reduced_taxonID_original_2_contigs, \%reduced_contigLength);
 		
 		# read reduced taxonomy
-		taxTree::removeUnmappableParts($specificTaxonomy, \%reduced_taxonID_2_contigs);
+		my %reduced_taxonID_master_2_contigs;
+		foreach my $taxonID_original (keys %reduced_taxonID_original_2_contigs)
+		{
+			my $taxonID_master = taxTree::findCurrentNodeID($extendedMaster, $masterTaxonomy_merged, $taxonID_original);
+			$reduced_taxonID_master_2_contigs{$taxonID_master} = $reduced_taxonID_original_2_contigs{$taxonID_original};
+		}
+		
+		my $specificTaxonomy = dclone $extendedMaster;
+		taxTree::removeUnmappableParts($extendedMaster, \%reduced_taxonID_master_2_contigs);
 	
 		# translate truth
 		my %truth_allReads;
 		my %taxonID_translation;
 		foreach my $taxonID (keys %truth_raw_taxonIDs)
 		{
-			$taxonID_translation{$taxonID} = getRank_phylogeny($taxonomy_full, $specificTaxonomy, $taxonID);
+			$taxonID_translation{$taxonID} = getRank_phylogeny($extendedMaster, $specificTaxonomy, $taxonID);
 			my $count = $truth_raw_taxonIDs{$taxonID};
 			foreach my $rank (keys %{$taxonID_translation{$taxonID}})
 			{
@@ -316,6 +342,8 @@ sub evaluateOneSimulation
 				next;
 			}
 			
+			# unclassified = deliberately no caller
+			# undefined = there would be an assignment, but there is no node
 			my %inference;
 			open(I, '<', $f) or die "Cannot open $f";
 			my $header_line = <I>;
@@ -330,27 +358,29 @@ sub evaluateOneSimulation
 				die unless($#line_fields == $#header_fields);
 				my %line = (mesh @header_fields, @line_fields);
 				
-				my $taxonID = ($line{ID} // $line{taxonID});
-				die unless(defined $taxonID);
+				my $taxonID_nonMaster = ($line{ID} // $line{taxonID});
+				die unless(defined $taxonID_nonMaster);
 				
 				next if($line{Name} eq 'TooShort');
 				next if($line{Name} eq 'Unmapped');
 
-				if(($taxonID eq '0') and (($line{Name} eq 'Undefined') or ($line{Name} eq 'Unclassified')))
+				if(($taxonID_nonMaster eq '0') and (($line{Name} eq 'Undefined') or ($line{Name} eq 'Unclassified')))
 				{
-					$taxonID = 'Unclassified' ;
+					$taxonID_nonMaster = 'Unclassified' ;
 				}
-				if($taxonID eq '0')
+				if($taxonID_nonMaster eq '0')
 				{
 					die Dumper($line, $f);
 				}
 				
-				die Dumper(\%line) unless(defined $taxonID);
-				die Dumper("Unknown taxon ID $taxonID in file $f", $taxonomy_full->{$taxonID}) unless(($taxonID eq 'Unclassified') or (defined $specificTaxonomy->{$taxonID}));
+				my $taxonID_master = taxTree::findCurrentNodeID($extendedMaster, $masterTaxonomy_merged, $taxonID_nonMaster);
+							
+				die Dumper(\%line) unless(defined $taxonID_master);
+				die Dumper("Unknown taxon ID $taxonID_master in file $f", $extendedMaster->{$taxonID_master}) unless(($taxonID_master eq 'Unclassified') or (defined $specificTaxonomy->{$taxonID_master}));
 				die unless(defined $line{Absolute});
 				die unless(defined $line{PotFrequency});
-				$inference{$line{AnalysisLevel}}{$taxonID}[0] += $line{Absolute};
-				$inference{$line{AnalysisLevel}}{$taxonID}[1] += $line{PotFrequency};
+				$inference{$line{AnalysisLevel}}{$taxonID_master}[0] += $line{Absolute};
+				$inference{$line{AnalysisLevel}}{$taxonID_master}[1] += $line{PotFrequency};
 			}
 			close(I);
 			
@@ -402,6 +432,7 @@ sub getRank_phylogeny
 	my @nodes_to_consider = ($taxonID, taxTree::get_ancestors($fullTaxonomy, $taxonID));
 	
 	my $inTaxonomicAgreement = 0;
+	my $firstRankAssigned;
 	foreach my $nodeID (@nodes_to_consider)
 	{
 		my $rank = $fullTaxonomy->{$nodeID}{rank};
@@ -412,11 +443,33 @@ sub getRank_phylogeny
 			{
 				$forReturn{$rank} = $nodeID;
 				$inTaxonomicAgreement = 1;
+				$firstRankAssigned = $rank;
 			}
 			else
 			{
 				$forReturn{$rank} = 'Unclassified';
 				die if($inTaxonomicAgreement);
+			}
+		}
+	}
+	
+	if(defined $firstRankAssigned)
+	{
+		my $setToUndefined = 0;
+		foreach my $rank (taxTree::getRelevantRanks())
+		{
+			next unless(exists $forReturn{$rank});
+			if($rank eq $firstRankAssigned)
+			{
+				$setToUndefined = 1;
+				die if($forReturn{$rank} eq 'Unclassified');
+			}
+			else
+			{
+				if($setToUndefined and ($forReturn{$rank} eq 'Unclassified'))
+				{
+					$forReturn{$rank} = 'Undefined';
+				}
 			}
 		}
 	}

@@ -137,6 +137,43 @@ sub readTaxonomy
 	return ($nodeid_2_names_href, $tree_href);
 }
 
+sub cloneTaxonomy_integrateX
+{
+	my $masterTaxonomy_template = shift;
+	my $masterTaxonomy_merged = shift;
+	my $taxonomyWithX = shift;
+	
+	die unless(defined $taxonomyWithX);
+	
+	my @x_nodes = grep {$_ =~ /^x/} keys %$taxonomyWithX;
+	
+	print "Now integrate ", scalar(@x_nodes), " into clone of master taxonomy.\n";
+	
+	my $masterTaxonomy = dclone $masterTaxonomy_template;
+	
+	foreach my $xNode (@x_nodes)
+	{
+		my $nodeData = $taxonomyWithX->{$xNode};
+		die unless(defined $nodeData);
+		die if(exists $masterTaxonomy->{$xNode});
+		die unless(scalar(@{$nodeData->{children}}) == 0);
+		
+		my $parent_in_taxonomyWithX = $nodeData->{parent};
+		die unless(defined $taxonomyWithX->{$parent_in_taxonomyWithX});
+		
+		my $newParent = findCurrentNodeID($masterTaxonomy, $masterTaxonomy_merged, $parent_in_taxonomyWithX);
+		my $nodeData_new = dclone $nodeData;
+		
+		$nodeData_new->{parent} = $newParent;
+		push(@{$masterTaxonomy->{$newParent}{children}}, $xNode);
+		$masterTaxonomy->{$xNode} = $nodeData_new;
+	}
+	
+	taxonomy_checkConsistency($masterTaxonomy);	
+		
+	return $masterTaxonomy;
+}
+
 sub cloneTaxonomy_removeNodes
 {
 	my $tree_href = shift;
@@ -509,6 +546,11 @@ sub findCurrentNodeID
 	my $taxonomy = shift;
 	my $merged = shift;
 	my $originalID = shift;
+	
+	if(($originalID == 0) or ($originalID !~ /^\d+$/))
+	{
+		return $originalID;
+	}
 	
 	if(exists $taxonomy->{$originalID})
 	{
