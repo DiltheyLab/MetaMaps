@@ -65,7 +65,7 @@ while(<INPUT>)
 {
 	if(substr($_, 0, 1) eq '>')
 	{
-		my $taxonID = Util::extractTaxonID($contigID, $input_fn, $.);
+		my $taxonID = Util::extractTaxonID($_, $input_fn, $.);
 		
 		die "Taxon ID not defined" unless(exists $taxonomy->{$taxonID});
 		

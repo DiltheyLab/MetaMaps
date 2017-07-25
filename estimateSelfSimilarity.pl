@@ -22,6 +22,7 @@ use Util;
 
 my @taxonomy_fields = qw/species genus family order phylum superkingdom/;
 my $metamap_bin = Util::get_metaMap_bin_and_enforce_mainDir();
+my $classical_mashmap_bin = '/data/projects/phillippy/software/mashmap/mashmap';
 
 my $action = '';   
 
@@ -492,12 +493,23 @@ sub map_reads_keepTrack_similarity
 	
 	my %readCounts_toPopulate_local;
 	
+	my $useClassicalMashmap = 0;
 	my $processAndClearReads = sub {
+		my $chunkLength = shift;
+		
+		die unless(defined $chunkLength);
+		
 		close(READS) or die;
 		
-		my $MetaMap_cmd = qq($metamap_bin mapDirectly -r $file_B -q $file_A_reads_many -m 2000 -o $outputFn_MetaMap --pi 80);
-		print "\t\tExecute command $MetaMap_cmd\n";		
-		system($MetaMap_cmd) and die "MetaMap command $MetaMap_cmd failed";
+		my $mapping_cmd = qq($metamap_bin mapDirectly -r $file_B -q $file_A_reads_many -m $chunkLength -o $outputFn_MetaMap --pi 80);
+		if($useClassicalMashmap)
+		{
+			die unless(-e $classical_mashmap_bin);
+			$mapping_cmd = qq($classical_mashmap_bin mapDirectly -s $file_B -q $file_A_reads_many -m $chunkLength -o $outputFn_MetaMap --pi 80);
+		}
+		
+		print "\t\tExecute command $mapping_cmd\n";		
+		system($mapping_cmd) and die "MetaMap command $mapping_cmd failed";
 		
 		my $currentReadID = '';
 		my @currentReadLines;
@@ -568,49 +580,119 @@ sub map_reads_keepTrack_similarity
 		open(READS, '>', $file_A_reads_many) or die "Cannot open $file_A_reads_many";
 	};
 	
-	open(READS, '>', $file_A_reads_many) or die "Cannot open $file_A_reads_many";
 	
 	my %generated_reads_chunkLength;
 	
 	my @chunk_positions = getChunkPositions($file_A, $contigs_A_order, $v_for_srand);
-	my $generatedSequence = 0;
+	my $actually_map_reads = 0;
 	foreach my $oneChunk (@chunk_positions)
 	{
-		my $chunkLength = $oneChunk->[0];
-		my $readI_within_chunkLength_1based = $oneChunk->[1];
-		my $contigID = $oneChunk->[2];
-		my $posI = $oneChunk->[3];
 		my $readID = $oneChunk->[4];
 		
 		if(defined $limitToReadsIDs)
 		{
 			next unless($limitToReadsIDs->{$readID});
-		}			
-		
-		if(defined $call_eachSimulatedRead)
-		{
-			$call_eachSimulatedRead->($readID, $contigID, $posI, $chunkLength);
 		}		
-
-		die unless(defined $A_contigs_href->{$contigID});			
-		my $S = substr($A_contigs_href->{$contigID}, $posI, $chunkLength);
-		die unless(length($S) == $chunkLength);
-		print READS '>', $readID, "\n";
-		print READS $S, "\n";
 		
-		$generated_reads_chunkLength{$chunkLength}++;	
-		$readID_2_chunkLength{$readID} = $chunkLength;
-		
-		$generatedSequence += length($chunkLength);
-		
-		if($generatedSequence >= 1e9)
-		{
-			$processAndClearReads->();
-			$generatedSequence = 0;
-		}
+		$actually_map_reads++;
 	}
-	$processAndClearReads->();
-	close(READS);
+	
+	my $splitByReadLength = 1;
+	if($splitByReadLength)
+	{
+		my %chunks_by_length;
+		my $generatedSequence = 0;
+		foreach my $oneChunk (@chunk_positions)
+		{
+			my $chunkLength = $oneChunk->[0];
+			push(@{$chunks_by_length{$chunkLength}}, $oneChunk);
+		}
+		
+		open(READS, '>', $file_A_reads_many) or die "Cannot open $file_A_reads_many";			
+		
+		foreach my $chunkLength (keys %chunks_by_length)
+		{
+			my @chunks_thisLength = @{$chunks_by_length{$chunkLength}};
+	
+			foreach my $oneChunk (@chunks_thisLength)
+			{
+				my $chunkLength = $oneChunk->[0];
+				my $readI_within_chunkLength_1based = $oneChunk->[1];
+				my $contigID = $oneChunk->[2];
+				my $posI = $oneChunk->[3];
+				my $readID = $oneChunk->[4];
+				
+				if(defined $limitToReadsIDs)
+				{
+					next unless($limitToReadsIDs->{$readID});
+				}			
+				
+				if(defined $call_eachSimulatedRead)
+				{
+					$call_eachSimulatedRead->($readID, $contigID, $posI, $chunkLength);
+				}		
+
+				die unless(defined $A_contigs_href->{$contigID});			
+				my $S = substr($A_contigs_href->{$contigID}, $posI, $chunkLength);
+				die unless(length($S) == $chunkLength);
+				print READS '>', $readID, "\n";
+				print READS $S, "\n";
+				
+				$generated_reads_chunkLength{$chunkLength}++;	
+				$readID_2_chunkLength{$readID} = $chunkLength;
+				
+				$generatedSequence += length($chunkLength);
+			}
+			$processAndClearReads->($chunkLength);		
+		}
+		close(READS);
+
+	}
+	else
+	{
+		open(READS, '>', $file_A_reads_many) or die "Cannot open $file_A_reads_many";
+	
+		my $generatedSequence = 0;
+		foreach my $oneChunk (@chunk_positions)
+		{
+			my $chunkLength = $oneChunk->[0];
+			my $readI_within_chunkLength_1based = $oneChunk->[1];
+			my $contigID = $oneChunk->[2];
+			my $posI = $oneChunk->[3];
+			my $readID = $oneChunk->[4];
+			
+			if(defined $limitToReadsIDs)
+			{
+				next unless($limitToReadsIDs->{$readID});
+			}			
+			
+			if(defined $call_eachSimulatedRead)
+			{
+				$call_eachSimulatedRead->($readID, $contigID, $posI, $chunkLength);
+			}		
+
+			die unless(defined $A_contigs_href->{$contigID});			
+			my $S = substr($A_contigs_href->{$contigID}, $posI, $chunkLength);
+			die unless(length($S) == $chunkLength);
+			print READS '>', $readID, "\n";
+			print READS $S, "\n";
+			
+			$generated_reads_chunkLength{$chunkLength}++;	
+			$readID_2_chunkLength{$readID} = $chunkLength;
+			
+			$generatedSequence += length($chunkLength);
+			
+			if($generatedSequence >= 1e9)
+			{
+				$processAndClearReads->(2000);
+				$generatedSequence = 0;
+			}
+		}
+		$processAndClearReads->(2000);
+		
+		close(READS);		
+	}
+	
 	
 	print "\t\tReads file $file_A_reads_many with ", (sum(values %generated_reads_chunkLength) // 0), " reads\n\n";
 

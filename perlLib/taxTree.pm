@@ -369,6 +369,7 @@ sub search_leave_names
 	
 	return @forReturn;
 }
+
 sub get_ancestors
 {
 	my $tree_href = shift;

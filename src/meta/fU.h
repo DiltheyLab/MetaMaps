@@ -25,6 +25,7 @@ namespace meta
 {
 
 void cleanF_U(std::pair<std::map<std::string, double>, std::map<std::string, double>>& f, const std::pair<std::map<std::string, size_t>, std::map<std::string, size_t>>& assignedReads, size_t distributedReads);
+std::string getReadIDFromReadLines(const std::vector<std::string>& readLines);
 
 void producePotFile_U(std::string outputFN, const taxonomy& T, std::pair<std::map<std::string, double>, std::map<std::string, double>> frequencies, std::pair<std::map<std::string, size_t>, std::map<std::string, size_t>> readCount, size_t mappableReads)
 {
@@ -498,12 +499,16 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 
 	std::string output_assigned_reads_and_identities = mappedFile + ".U.lengthAndIdentitiesPerTaxonID";
 	std::string output_pot_frequencies = mappedFile + ".U.WIMP";
+	std::string output_reads_taxonID = mappedFile + ".U.reads2Taxon";
 
 
 	std::ofstream strout_reads_identities(output_assigned_reads_and_identities);
 	assert(strout_reads_identities.is_open());
 	strout_reads_identities << "taxonID" << "\t" << "directIndirect" << "\t" << "taxonName" << "\t" << "Identity" << "\t" << "Length" << "\n";
 
+	std::ofstream strout_reads_taxonIDs(output_reads_taxonID);
+	assert(strout_reads_taxonIDs.is_open());
+	
 	std::pair<std::map<std::string, size_t>, std::map<std::string, size_t>> assignedReads;
 
 	std::function<void(const std::vector<std::string>&)> processOneRead_final = [&](const std::vector<std::string>& readLines) -> void
@@ -511,6 +516,8 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 		assert(readLines.size() > 0);
 		std::vector<oneMappingLocation_U> mappingLocations = getMappingLocations_U(iM, indirectUpwardNodes, f, readLines);
 
+		std::string readID = getReadIDFromReadLines(readLines);
+		
 		oneMappingLocation_U bestMapping = getBestMapping_U(mappingLocations);
 
 		std::map<std::string, size_t>& assignedReads_dirIndir = (bestMapping.direct) ? assignedReads.first : assignedReads.second;
@@ -526,11 +533,15 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 				T.getNode(bestMapping.taxonID).name.scientific_name << "\t" <<
 				bestMapping.identity << "\t" <<
 				bestMapping.readLength << "\n";
+				
+		strout_reads_taxonIDs << readID << "\t" << bestMapping.taxonID << "\n";
+				
 	};
 
 	callBackForAllReads(mappedFile, processOneRead_final);
 
 	strout_reads_identities.close();
+	strout_reads_taxonIDs.close();
 	
 	for(auto oneUnmappedReadLength : unmappedReadsLengths)
 	{
@@ -627,6 +638,26 @@ void cleanF_U(std::pair<std::map<std::string, double>, std::map<std::string, dou
 	assert(abs(1 - f_sum_2) <= 1e-3);
 }
 
+
+std::string getReadIDFromReadLines(const std::vector<std::string>& readLines)
+{
+	assert(readLines.size());
+	std::string readID;
+	for(unsigned int lineI = 0; lineI < readLines.size(); lineI++)
+	{
+		std::vector<std::string> line_fields = split(readLines.at(lineI), " ");	
+		if(lineI == 0)
+		{
+			readID = line_fields.at(0);
+		}
+		else
+		{
+			assert(readID == line_fields.at(0));
+		}
+	}
+	
+	return readID;
+}		
 
 }
 #endif /* META_FU_H_ */

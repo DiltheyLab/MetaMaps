@@ -4,12 +4,14 @@ use strict;
 use warnings;
 use Data::Dumper;
 use List::Util qw/all any shuffle/;
+use List::MoreUtils qw/mesh/;
 use Getopt::Long;   
 use File::Path qw(make_path remove_tree);
 use FindBin;
 use lib "$FindBin::Bin/perlLib";
 use Cwd qw/getcwd abs_path/;
 use File::Copy;
+use Storable qw/store retrieve/;
 
 # TODO
 # REMOVE ONE SPECIES REMOVALL!!!
@@ -53,6 +55,8 @@ my $Bracken_dir = qq(/data/projects/phillippy/software/Bracken/);
 my $metaPalette_installation_dir = qq(/data/projects/phillippy/software/MetaPalette/);
 my $jellyfish_2_bin = qq(/data/projects/phillippy/software/jellyfish-2.2.6/bin/jellyfish);
 my $krakenDBTemplate = '/data/projects/phillippy/projects/mashsim/src/krakenDBTemplate/'; # make sure this is current!
+
+my @evaluateAccuracyAtLevels = qw/species genus family superkingdom/;
 
 die unless(-e $metamap_bin);
 
@@ -120,7 +124,7 @@ system("export PATH=/data/projects/phillippy/software/jellyfish-1.1.11/bin:\$PAT
 system("eval 'module load libs/hdf5/1.8.12'") and die "Could load hdf5";
 system("eval 'module load libs/scipy/0.18.1'") and die "Could load scipy";
 	
-my $action = 'prepare';
+my $action;
 my $DB = 'databases/miniSeq_100';
 my $jobI;
 my $really;
@@ -131,6 +135,11 @@ GetOptions (
 	'really:s' => \$really,
 	'jobIMethod:s' => \$jobIMethod,
 );
+
+if(not defined $action)
+{
+	die "Please specify --action, e.g. prepare, inferenceJobI, analyzeJobI";
+}
 
 if($action eq 'prepare')
 {
@@ -170,6 +179,251 @@ if($action eq 'prepare')
 		executeSimulation($oneSimulation_href, \%taxonID_2_contigIDs, \%contig_2_length);
 	}
 }
+elsif($action eq 'inferenceJobI')
+{
+	die"Please specify --jobI" unless(defined $jobI);
+	my $simulation_href_fn = $globalOutputDir . '/' . $jobI . '/simulationStore';
+	my $simulation_href = retrieve $simulation_href_fn;
+	inferenceOneSimulation($simulation_href);
+}
+elsif($action eq 'analyzeJobI')
+{
+	die"Please specify --jobI" unless(defined $jobI);
+	my $simulation_href_fn = $globalOutputDir . '/' . $jobI . '/simulationStore';
+	my $simulation_href = retrieve $simulation_href_fn;
+	evaluateOneSimulation($simulation_href);
+}
+else
+{
+	die "Unknown --action";
+}
+
+sub inferenceOneSimulation
+{
+	my $simulation_href = shift;
+	
+	for(my $varietyI = 0; $varietyI <= $#{$simulation_href->{dbDirs_metamap}}; $varietyI++)
+	{
+		print "Inference $simulation_href->{inferenceDBs}[$varietyI][2] \n";
+		
+		my $DB_target_dir = $simulation_href->{outputDirectory} . '/DB_' . $simulation_href->{inferenceDBs}[$varietyI][2];
+		die unless($DB_target_dir eq $simulation_href->{dbDirs_metamap}[$varietyI]);
+		
+		my $inference_target_dir = $simulation_href->{outputDirectory} . '/inference_' . $simulation_href->{inferenceDBs}[$varietyI][2];
+		
+		(mkdir($inference_target_dir) or die "Cannot mkdir $inference_target_dir") unless(-d $inference_target_dir);
+		
+		print "Doing inference in $DB_target_dir\n";
+		doMetaMap($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq});
+		# SimulationsKraken::doKraken($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $krakenDBTemplate, $kraken_binPrefix, $Bracken_dir);
+		# SimulationsMetaPalette::doMetaPalette($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $metaPalette_installation_dir, $jellyfish_2_bin, $fullTaxonomy);			
+	}
+	
+	# foreach my $oneDBdir (@{$simulation_href->{dbDirs_metamap}})
+	# {
+	
+	# foreach my $inference_variety (@{$simulation_href->{inferenceDBs}})
+	# {
+		
+		# print "Doing inference in $oneDBdir\n";
+		# # doMetaMap($simulation_href->{outputDirectory}, $oneDBdir, $simulation_href->{readsFastq});
+		# SimulationsKraken::doKraken($simulation_href->{outputDirectory}, $oneDBdir, $simulation_href->{readsFastq}, $krakenDBTemplate, $kraken_binPrefix, $Bracken_dir);
+		# #SimulationsMetaPalette::doMetaPalette($simulation_href->{outputDirectory}, $oneDBdir, $simulation_href->{readsFastq}, $metaPalette_installation_dir, $jellyfish_2_bin, $fullTaxonomy);			
+	# }
+	
+}	
+
+sub get_files_for_evaluation
+{
+	my $simulation_href = shift;
+	# return ('Bracken' => 'results_bracken.txt', 'Kraken' => 'results_kraken.txt', 'Metamap-U' => 'metamap.U.WIMP', 'Metamap-EM' => 'metamap.EM.WIMP');
+	return ('Metamap-U' => 'metamap.U.WIMP', 'Metamap-EM' => 'metamap.EM.WIMP');
+}
+
+sub evaluateOneSimulation
+{
+	my $simulation_href = shift;
+	
+	my $fullTaxonomy_dir = $simulation_href->{outputDirectory} . '/DB_fullDB/taxonomy';
+	my $taxonomy_full = taxTree::readTaxonomy($fullTaxonomy_dir);
+	
+	my %truth_raw_reads;
+	my %truth_raw_taxonIDs;
+	my $truth_fn =  $simulation_href->{outputDirectory} . '/truth_reads.txt';
+	open(T, '<', $truth_fn) or die "Cannot open $truth_fn";
+	while(<T>)
+	{
+		my $line = $_;
+		chomp($line);
+		next unless($line);
+		my @f = split(/\t/, $line);
+		my $readID = $f[0];
+		my $taxonID = $f[1];
+		
+		die unless(exists $taxonomy_full->{$taxonID});
+		die if(defined $truth_raw_reads{$readID});
+		$truth_raw_reads{$readID} = $taxonID;
+		$truth_raw_taxonIDs{$taxonID}++;
+	}
+	close(T);
+			
+	my %expected_results_files = get_files_for_evaluation();
+	for(my $varietyI = 0; $varietyI <= $#{$simulation_href->{dbDirs_metamap}}; $varietyI++)
+	{
+		my $varietyName = $simulation_href->{inferenceDBs}[$varietyI][2];
+		print "Analyse $varietyName\n";
+		
+		my $simulation_results_dir = $simulation_href->{outputDirectory} . '/inference_' . $varietyName;
+		my $DBdir = $simulation_href->{outputDirectory} . '/DB_' . $varietyName;
+		
+		my $specificTaxonomy = taxTree::readTaxonomy($DBdir . '/taxonomy');
+		
+		# details for reduced DB
+		my %reduced_taxonID_2_contigs;
+		my %reduced_contigLength;
+		Util::read_taxonIDs_and_contigs($DBdir, \%reduced_taxonID_2_contigs, \%reduced_contigLength);
+		
+		# read reduced taxonomy
+		taxTree::removeUnmappableParts($specificTaxonomy, \%reduced_taxonID_2_contigs);
+	
+		# translate truth
+		my %truth_allReads;
+		my %taxonID_translation;
+		foreach my $taxonID (keys %truth_raw_taxonIDs)
+		{
+			$taxonID_translation{$taxonID} = getRank_phylogeny($taxonomy_full, $specificTaxonomy, $taxonID);
+			my $count = $truth_raw_taxonIDs{$taxonID};
+			foreach my $rank (keys %{$taxonID_translation{$taxonID}})
+			{
+				my $v = $taxonID_translation{$taxonID}{$rank};
+				$truth_allReads{$rank}{$v} += $count;
+			}
+		}
+		foreach my $rank (keys %truth_allReads)
+		{
+			foreach my $taxonID (keys %{$truth_allReads{$rank}})
+			{
+				$truth_allReads{$rank}{$taxonID} /= scalar(keys %truth_raw_reads);
+			}
+		}
+		
+		foreach my $name (keys %expected_results_files)
+		{
+			my $f = $simulation_results_dir . '/' . $expected_results_files{$name};
+			unless(-e $f)
+			{
+				warn "Expected file $f for $name not present.";
+				next;
+			}
+			
+			my %inference;
+			open(I, '<', $f) or die "Cannot open $f";
+			my $header_line = <I>;
+			chomp($header_line);
+			my @header_fields = split(/\t/, $header_line);
+			while(<I>)
+			{
+				my $line = $_;
+				chomp($line);
+				next unless($line);
+				my @line_fields = split(/\t/, $line, -1);
+				die unless($#line_fields == $#header_fields);
+				my %line = (mesh @header_fields, @line_fields);
+				
+				my $taxonID = ($line{ID} // $line{taxonID});
+				die unless(defined $taxonID);
+				
+				next if($line{Name} eq 'TooShort');
+				next if($line{Name} eq 'Unmapped');
+
+				if(($taxonID eq '0') and (($line{Name} eq 'Undefined') or ($line{Name} eq 'Unclassified')))
+				{
+					$taxonID = 'Unclassified' ;
+				}
+				if($taxonID eq '0')
+				{
+					die Dumper($line, $f);
+				}
+				
+				die Dumper(\%line) unless(defined $taxonID);
+				die Dumper("Unknown taxon ID $taxonID in file $f", $taxonomy_full->{$taxonID}) unless(($taxonID eq 'Unclassified') or (defined $specificTaxonomy->{$taxonID}));
+				die unless(defined $line{Absolute});
+				die unless(defined $line{PotFrequency});
+				$inference{$line{AnalysisLevel}}{$taxonID}[0] += $line{Absolute};
+				$inference{$line{AnalysisLevel}}{$taxonID}[1] += $line{PotFrequency};
+			}
+			close(I);
+			
+			foreach my $level (@evaluateAccuracyAtLevels)
+			{
+				die unless(defined $inference{$level});
+				die unless(defined $truth_allReads{$level});
+				my $totalFreq = 0;
+				my $totalFreqCorrect = 0;
+				foreach my $inferredTaxonID (keys %{$inference{$level}})
+				{
+					my $isFreq = $inference{$level}{$inferredTaxonID}[1];
+					my $shouldBeFreq = 0;
+					if(exists $truth_allReads{$level}{$inferredTaxonID})
+					{
+						$shouldBeFreq = $truth_allReads{$level}{$inferredTaxonID};
+					}
+					
+					$totalFreq += $isFreq;
+					if($isFreq <= $shouldBeFreq)					
+					{
+						$totalFreqCorrect += $isFreq;
+					}
+					else
+					{
+						$totalFreqCorrect += $shouldBeFreq;
+					}
+				}
+				die Dumper("Weird total freq", $name, $totalFreq, $f, $level) unless(abs(1 - $totalFreq) <= 1e-3);
+				
+				print join("\t", $varietyName, $name, $level, $totalFreqCorrect), "\n";
+			}
+		}
+			
+	}
+}
+
+sub getRank_phylogeny
+{
+	my $fullTaxonomy = shift;
+	my $reducedTaxonomy = shift;
+	my $taxonID = shift;
+	
+	my %forReturn = map {$_ => 'Unclassified'} @evaluateAccuracyAtLevels;
+	
+	die unless(all {exists $fullTaxonomy->{$_}} keys %$reducedTaxonomy);
+	die unless(defined $fullTaxonomy->{$taxonID});
+	
+	my @nodes_to_consider = ($taxonID, taxTree::get_ancestors($fullTaxonomy, $taxonID));
+	
+	my $inTaxonomicAgreement = 0;
+	foreach my $nodeID (@nodes_to_consider)
+	{
+		my $rank = $fullTaxonomy->{$nodeID}{rank};
+		die unless(defined $rank);
+		if(exists $forReturn{$rank})
+		{
+			if(exists $reducedTaxonomy->{$nodeID})
+			{
+				$forReturn{$rank} = $nodeID;
+				$inTaxonomicAgreement = 1;
+			}
+			else
+			{
+				$forReturn{$rank} = 'Unclassified';
+				die if($inTaxonomicAgreement);
+			}
+		}
+	}
+	
+	return \%forReturn;
+}
+
 
 sub addInferenceRoundsWithReducedDBs
 {
@@ -245,16 +499,13 @@ sub executeSimulation
 	die unless($simulation_href->{dbDirs_metamap});
 	die unless($simulation_href->{readsFastq});
 	
-	foreach my $oneDBdir (@{$simulation_href->{dbDirs_metamap}})
-	{
-		# todo
-		#doMetaMap($simulation_href->{outputDirectory}, $oneDBdir, $simulation_href->{readsFastq}); # todo
-		#SimulationsKraken::doKraken($simulation_href->{outputDirectory}, $oneDBdir, $simulation_href->{readsFastq}, $krakenDBTemplate, $kraken_binPrefix, $Bracken_dir);
-		#SimulationsMetaPalette::doMetaPalette($simulation_href->{outputDirectory}, $oneDBdir, $simulation_href->{readsFastq}, $metaPalette_installation_dir, $jellyfish_2_bin, $fullTaxonomy);			
-	}
+	store $simulation_href, $simulation_href->{outputDirectory} . '/simulationStore';
+	
+	inferenceOneSimulation($simulation_href);
 
-	print "\n\nExecuted simulation!\n\n";
+	print "\n\nPrepared simulation!\n\n";
 }
+
 
 
 sub doMetaMap
@@ -295,13 +546,19 @@ sub doMetaMap
 	
 
 	my $resultsFile_EM = $file_mappings . '.EM.WIMP';
+	my $resultsFile_EM_reads = $file_mappings . '.EM.reads2Taxon';
 	my $resultsFile_U = $file_mappings . '.U.WIMP';
+	my $resultsFile_U_reads = $file_mappings . '.U.reads2Taxon';
 	
 	die "No MetaMap EM classification -- $resultsFile_EM" unless(-e $resultsFile_EM);
-	die "No MetaMap EM classification -- $resultsFile_U" unless(-e $resultsFile_U);
+	die "No MetaMap EM-reads classification -- $resultsFile_U" unless(-e $resultsFile_EM_reads);	
+	die "No MetaMap EM-U classification -- $resultsFile_U" unless(-e $resultsFile_U);
+	die "No MetaMap EM-U-reads classification -- $resultsFile_U" unless(-e $resultsFile_U_reads);
 	
 	copy($resultsFile_EM, $dir);
+	copy($resultsFile_EM_reads, $dir);	
 	copy($resultsFile_U, $dir);
+	copy($resultsFile_U_reads, $dir);
 }
 
 sub prepareDBs
@@ -582,10 +839,11 @@ sub produceReducedDB
 	}
 	
 	die unless(-e 'estimateSelfSimilarity.pl');
-	my $cmd_self_similarity = qq(perl estimateSelfSimilarity.pl --DB $targetDir --template $baseDB --mode prepareFromTemplate);
-	die "Check command:\n$cmd_self_similarity\n\n";
+	my $cmd_self_similarity = qq(perl estimateSelfSimilarity.pl --DB $targetDir --templateDB $baseDB --mode prepareFromTemplate);
+	warn  "Check command:\n$cmd_self_similarity\n\n";
 	
-	system($cmd_self_similarity) and die "Command $cmd_self_similarity failed";
+	# todo activate
+	# system($cmd_self_similarity) and die "Command $cmd_self_similarity failed";
 
 	
 	print "\t\tCreated reduced DB ", $targetDir, " with ", scalar(keys %$reducedTaxonomy), " nodes instead of ", scalar(keys %$taxonomy_base), " nodes\n";

@@ -450,6 +450,7 @@ void doEM(std::string DBdir, std::string mappedFile)
 	std::string output_pot_frequencies = mappedFile + ".EM.WIMP";
 	std::string output_recalibrated_mappings = mappedFile + ".EM";
 	std::string output_assigned_reads_and_identities = mappedFile + ".EM.lengthAndIdentitiesPerMappingUnit";
+	std::string output_reads_taxonID = mappedFile + ".EM.reads2Taxon";
 	std::string output_contig_coverage = mappedFile + ".EM.contigCoverage";
 
 	std::ofstream strout_reads_identities(output_assigned_reads_and_identities);
@@ -459,6 +460,9 @@ void doEM(std::string DBdir, std::string mappedFile)
 	std::ofstream strout_recalibrated_mappings(output_recalibrated_mappings);
 	assert(strout_recalibrated_mappings.is_open());
 
+	std::ofstream strout_reads_taxonIDs(output_reads_taxonID);
+	assert(strout_reads_taxonIDs.is_open());
+	
 	size_t coverage_windowSize = 1000;
 	std::map<std::string, std::map<std::string, std::vector<size_t>>> coverage_per_contigID;
 	std::map<std::string, std::map<std::string, size_t>> size_last_window;
@@ -470,23 +474,30 @@ void doEM(std::string DBdir, std::string mappedFile)
 		assert(readLines.size() > 0);
 		std::vector<oneMappingLocation> mappingLocations = getMappingLocations(taxonInfo, f, readLines);
 
+		std::string readID;
 		assert(readLines.size() == mappingLocations.size());
 		for(unsigned int lineI = 0; lineI < readLines.size(); lineI++)
 		{
 			double finalMappingQuality = mappingLocations.at(lineI).p;
 			std::vector<std::string> line_fields = split(readLines.at(lineI), " ");
+			readID = line_fields.at(0);			
 			line_fields.at(13) = std::to_string(finalMappingQuality);
 			strout_recalibrated_mappings << join(line_fields, " ") << "\n";
 		}
 
 		oneMappingLocation bestMapping = getBestMapping(mappingLocations);
+
 		strout_reads_identities << "EqualCoverageUnit" << "\t" << bestMapping.contigID << "\t" << runningReadI << "\t" << bestMapping.identity << "\t" << bestMapping.readLength << "\n";
+		strout_reads_taxonIDs << readID << "\t" << bestMapping.taxonID << "\n";
+		
+		
 		if(reads_per_taxonID.count(bestMapping.taxonID) == 0)
 		{
 			reads_per_taxonID[bestMapping.taxonID] = 0;
 		}
 		reads_per_taxonID[bestMapping.taxonID]++;
 
+		
 		if(coverage_per_contigID[bestMapping.taxonID].count(bestMapping.contigID) == 0)
 		{
 			size_t contigLength = taxonInfo.at(bestMapping.taxonID).at(bestMapping.contigID);
@@ -538,6 +549,7 @@ void doEM(std::string DBdir, std::string mappedFile)
 	std::cout << "Outputting mappings with adjusted alignment qualities." << std::endl;
 	callBackForAllReads(mappedFile, processOneRead_final);
 	strout_reads_identities.close();
+	strout_reads_taxonIDs.close();
 
 	cleanF(f, reads_per_taxonID, mappingStats.at("ReadsMapped"));
 	producePotFile(output_pot_frequencies, T, f, reads_per_taxonID, nTotalReads, nUnmapped, nTooShort);
