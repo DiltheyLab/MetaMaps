@@ -40,7 +40,6 @@ my $simulation_read_length = 5000;
 
 # my $taxonomyDir = '/data/projects/phillippy/projects/mashsim/NCBI/refseq/taxonomy/';
 my $masterTaxonomy_dir = '/data/projects/phillippy/projects/MetaMap/downloads/taxonomy';
-die "Verify this patH, should be RefSew!";
 
 # these are populated globally if required
 my $masterTaxonomy; 
@@ -242,8 +241,8 @@ sub inferenceOneSimulation
 sub get_files_for_evaluation
 {
 	my $simulation_href = shift;
-	# return ('Bracken' => 'results_bracken.txt', 'Kraken' => 'results_kraken.txt', 'Metamap-U' => 'metamap.U.WIMP', 'Metamap-EM' => 'metamap.EM.WIMP');
-	return ('Metamap-U' => 'metamap.U.WIMP', 'Metamap-EM' => 'metamap.EM.WIMP');
+	return ('Bracken' => 'results_bracken.txt', 'Kraken' => 'results_kraken.txt', 'Metamap-U' => 'metamap.U.WIMP', 'Metamap-EM' => 'metamap.EM.WIMP');
+	# return ('Metamap-U' => 'metamap.U.WIMP', 'Metamap-EM' => 'metamap.EM.WIMP');
 }
 
 sub evaluateOneSimulation
@@ -251,10 +250,11 @@ sub evaluateOneSimulation
 	my $simulation_href = shift;
 	
 	my $masterTaxonomy_merged;
+
 	unless(defined $masterTaxonomy)
 	{
-		$masterTaxonomy = taxTree::readTaxonomy($masterTaxonomy_dir);
 		$masterTaxonomy_merged = taxTree::readMerged($masterTaxonomy_dir);
+		$masterTaxonomy = taxTree::readTaxonomy($masterTaxonomy_dir);
 	}
 	
 	my $taxonomyFromSimulation_dir = $simulation_href->{outputDirectory} . '/DB_fullDB/taxonomy';
@@ -310,7 +310,7 @@ sub evaluateOneSimulation
 		}
 		
 		my $specificTaxonomy = dclone $extendedMaster;
-		taxTree::removeUnmappableParts($extendedMaster, \%reduced_taxonID_master_2_contigs);
+		taxTree::removeUnmappableParts($specificTaxonomy, \%reduced_taxonID_master_2_contigs);
 	
 		# translate truth
 		my %truth_allReads;
@@ -386,7 +386,7 @@ sub evaluateOneSimulation
 			
 			foreach my $level (@evaluateAccuracyAtLevels)
 			{
-				die unless(defined $inference{$level});
+				next unless(defined $inference{$level});
 				die unless(defined $truth_allReads{$level});
 				my $totalFreq = 0;
 				my $totalFreqCorrect = 0;
@@ -426,7 +426,11 @@ sub getRank_phylogeny
 	
 	my %forReturn = map {$_ => 'Unclassified'} @evaluateAccuracyAtLevels;
 	
-	die unless(all {exists $fullTaxonomy->{$_}} keys %$reducedTaxonomy);
+	unless(all {exists $fullTaxonomy->{$_}} keys %$reducedTaxonomy)
+	{
+		my @missing = grep {not exists $fullTaxonomy->{$_}} keys %$reducedTaxonomy;
+		die Dumper("Reduced taxonomy doesn't seem to be a proper subset of full taxonomy!", \@missing);
+	}
 	die unless(defined $fullTaxonomy->{$taxonID});
 	
 	my @nodes_to_consider = ($taxonID, taxTree::get_ancestors($fullTaxonomy, $taxonID));

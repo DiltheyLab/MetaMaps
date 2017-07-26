@@ -29,6 +29,7 @@ sub readTaxonomy
 		open(NAMES, '<', $taxonomy_names_f) or die "Cannot open $taxonomy_names_f";
 		while(<NAMES>)
 		{
+			# print "\rNAMES $.       " if(($. % 10000) == 0);
 			my $line = $_;
 			chomp($line);
 			$line =~ s/\t?\|$//;
@@ -48,6 +49,7 @@ sub readTaxonomy
 	open(NODES, '<', $taxonomy_nodes_f) or die "Cannot open $taxonomy_nodes_f";
 	while(<NODES>)
 	{
+		# print "\rNODES $.       " if(($. % 10000) == 0);	
 		my $line = $_;
 		chomp($line);
 		$line =~ s/\t?\|$//;		
@@ -59,6 +61,8 @@ sub readTaxonomy
 	}
 	close(NODES);
 	
+	# print "\n";
+
 	my %full_tree = map {$_ => {}} keys %$tree_href; 
 	foreach my $node (keys %$tree_href)
 	{
@@ -272,14 +276,28 @@ sub taxonomy_checkConsistency
 {
 	my $taxonomy = shift;
 	my $root_nodes = 0;
+	my $nI = -1;
+	my %children_index;
 	foreach my $node (keys %$taxonomy)
 	{
+		foreach my $childID (@{$taxonomy->{$node}{children}})
+		{
+			$children_index{$node}{$childID}++;
+		}
+	}
+	foreach my $node (keys %$taxonomy)
+	{
+		$nI++;
+		# print "\rCHECK $nI     ";
+		
 		my $parentID = $taxonomy->{$node}{parent};
 		die unless((defined $parentID) or ($node eq '1'));
 		if($parentID)
 		{
 			my $parent_node = $taxonomy->{$parentID};
-			die unless(scalar(grep {$_ eq $node} @{$parent_node->{children}}) == 1);
+			# die unless(scalar(grep {$_ eq $node} @{$parent_node->{children}}) == 1);
+			die unless($children_index{$parentID}{$node});
+			# die unless(scalar(grep {$_ eq $node} @{$parent_node->{children}}) == 1);
 		}
 		else
 		{
@@ -294,6 +312,7 @@ sub taxonomy_checkConsistency
 			die unless($childNode->{parent} eq $node);
 		}
 	}
+	print "\n";
 	
 	die unless($root_nodes == 1);
 }
