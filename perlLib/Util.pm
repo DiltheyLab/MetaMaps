@@ -231,7 +231,7 @@ sub read_taxonIDs_and_contigs
 		chomp($line);
 		next unless($line);
 		my @line_fields = split(/ /, $line);
-		die unless(scalar(@line_fields) == 2);
+		die Dumper("Weird line", \@line_fields) unless(scalar(@line_fields) == 2);
 		my $taxonID = $line_fields[0];
 		my $contigs = $line_fields[1];
 		die if(exists $taxonID_2_contigs_href->{$taxonID});

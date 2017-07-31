@@ -2,7 +2,7 @@ package SimulationsMetaPalette;
 
 use strict;
 use Data::Dumper;
-use Cwd qw/abs_path/;
+use Cwd qw/getcwd abs_path/;
 
 use taxTree;
 

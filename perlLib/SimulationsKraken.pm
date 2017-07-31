@@ -93,6 +93,14 @@ sub doKraken
 		'reads_classified_report',
 	);
 	
+	
+	create_compatible_reads_file_from_kraken(
+		$jobDir_abs . '/results_kraken.txt.reads2Taxon',
+		'DB/taxonomy',
+		'reads_classified',
+	);
+		
+		
 	create_compatible_file_from_kraken_bracken(
 		$jobDir_abs . '/results_bracken.txt',
 		'DB/taxonomy',
@@ -190,6 +198,41 @@ sub create_compatible_file_from_kraken
 	close(OUTPUT);
 	
 }
+
+sub create_compatible_reads_file_from_kraken
+{
+	my $output_fn = shift;
+	my $taxonomy_kraken_dir = shift;
+	my $f_reads = shift;
+	
+	my $taxonomy_kraken = taxTree::readTaxonomy($taxonomy_kraken_dir);
+	
+	open(OUTPUT, '>', $output_fn) or die "Cannot open $output_fn";	
+	open(KRAKEN, '<', $f_reads) or die "Cannot open $f_reads";
+	while(<KRAKEN>)
+	{
+		my $line = $_;
+		chomp($line);
+		next unless($line);
+		my @f = split(/\t/, $line);
+		my $classified = $f[0];
+		my $readID = $f[1];
+		my $taxonID = $f[2];
+		die unless(($classified eq 'C') or ($classified eq 'U'));
+		if($classified eq 'C')
+		{
+			print OUTPUT $readID, "\t", $taxonID, "\n";
+		}
+		else
+		{
+			print OUTPUT $readID, "\t", 'Unclassified', "\n";		
+		}
+	}
+	close(KRAKEN);
+	close(OUTPUT);
+	
+}
+
 sub create_compatible_file_from_kraken_bracken
 {
 	my $output_fn = shift;

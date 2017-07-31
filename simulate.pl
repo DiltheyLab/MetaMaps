@@ -62,7 +62,10 @@ my $jellyfish_2_bin = qq(/data/projects/phillippy/software/jellyfish-2.2.6/bin/j
 my $krakenDBTemplate = '/data/projects/phillippy/projects/mashsim/src/krakenDBTemplate/'; # make sure this is current!
 
 my @evaluateAccuracyAtLevels = qw/species genus family superkingdom/;
-
+{
+	my %_knowRank = map {$_ => 1} taxTree::getRelevantRanks();
+	die unless(all {$_knowRank{$_}} @evaluateAccuracyAtLevels);
+}
 die unless(-e $metamap_bin);
 
 # my $taxonomy_full = taxTree::readTaxonomy($fullReferenceTaxonomy);
@@ -207,6 +210,8 @@ sub inferenceOneSimulation
 {
 	my $simulation_href = shift;
 	
+	my $fullTaxonomy = taxTree::readTaxonomy($masterTaxonomy_dir);
+	
 	for(my $varietyI = 0; $varietyI <= $#{$simulation_href->{dbDirs_metamap}}; $varietyI++)
 	{
 		print "Inference $simulation_href->{inferenceDBs}[$varietyI][2] \n";
@@ -219,10 +224,13 @@ sub inferenceOneSimulation
 		(mkdir($inference_target_dir) or die "Cannot mkdir $inference_target_dir") unless(-d $inference_target_dir);
 		
 		print "Doing inference in $DB_target_dir\n";
-		doMetaMap($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq});
-		# SimulationsKraken::doKraken($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $krakenDBTemplate, $kraken_binPrefix, $Bracken_dir);
-		# SimulationsMetaPalette::doMetaPalette($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $metaPalette_installation_dir, $jellyfish_2_bin, $fullTaxonomy);			
-	}
+		# doMetaMap($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq});
+		SimulationsKraken::doKraken($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $krakenDBTemplate, $kraken_binPrefix, $Bracken_dir);
+		if($simulation_href->{inferenceDBs}[$varietyI][2] eq 'fullDB')
+		{
+			SimulationsMetaPalette::doMetaPalette($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $metaPalette_installation_dir, $jellyfish_2_bin, $fullTaxonomy);			
+		}
+	} 
 	
 	# foreach my $oneDBdir (@{$simulation_href->{dbDirs_metamap}})
 	# {
@@ -275,6 +283,7 @@ sub evaluateOneSimulation
 		my $readID = $f[0];
 		my $taxonID_original = $f[1];
 		
+		# get the taxon ID in the master taxonomy
 		my $taxonID_master = taxTree::findCurrentNodeID($extendedMaster, $masterTaxonomy_merged, $taxonID_original);
 		
 		die unless(exists $extendedMaster->{$taxonID_master});
@@ -306,9 +315,11 @@ sub evaluateOneSimulation
 		foreach my $taxonID_original (keys %reduced_taxonID_original_2_contigs)
 		{
 			my $taxonID_master = taxTree::findCurrentNodeID($extendedMaster, $masterTaxonomy_merged, $taxonID_original);
+			# store which taxon IDs *are* mappable
 			$reduced_taxonID_master_2_contigs{$taxonID_master} = $reduced_taxonID_original_2_contigs{$taxonID_original};
 		}
 		
+		# reduce master taxonomy
 		my $specificTaxonomy = dclone $extendedMaster;
 		taxTree::removeUnmappableParts($specificTaxonomy, \%reduced_taxonID_master_2_contigs);
 	
@@ -366,7 +377,7 @@ sub evaluateOneSimulation
 
 				if(($taxonID_nonMaster eq '0') and (($line{Name} eq 'Undefined') or ($line{Name} eq 'Unclassified')))
 				{
-					$taxonID_nonMaster = 'Unclassified' ;
+					$taxonID_nonMaster = $line{Name};
 				}
 				if($taxonID_nonMaster eq '0')
 				{

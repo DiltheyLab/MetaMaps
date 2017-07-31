@@ -18,13 +18,17 @@ my $DB = 'refseq';
 my $FASTAs;
 my $taxonomyDir;
 my $maxSpecies;
-my $Utest;
+# my $Utest;
+my $updateTaxonomy;
+my $oldTaxonomy;
 GetOptions (
 	'DB:s' => \$DB, 
 	'FASTAs:s' => \$FASTAs, 
 	'taxonomy:s' => \$taxonomyDir, 
 	'maxSpecies:s' => \$maxSpecies, 
-	'Utest:s' => \$Utest, 
+	'updateTaxonomy:s' => \$updateTaxonomy, 
+	'oldTaxonomy:s' => \$oldTaxonomy, 
+#	'Utest:s' => \$Utest, 
 );
 
 # Get input arguments
@@ -59,6 +63,7 @@ foreach my $f (taxTree::getTaxonomyFileNames())
 	my $cmd_cp = qq(cp $fP $dir_copy_taxonomy);
 	system($cmd_cp) and die "Copy command $cmd_cp failed";
 }
+
 # Find input files
 
 my @FASTAfiles;
@@ -87,8 +92,34 @@ print "\nNumber of found FASTA input files: ", scalar(@FASTAfiles), "\n";
 # read taxonomy
 
 print "\nReading taxonomy from $taxonomyDir ..\n";
-my $taxonomy_href = taxTree::readTaxonomy($taxonomyDir);
 print "\tdone.\n\n";
+my $taxonomy_href;
+
+my $new_taxonomy_href;
+my $new_taxonomy_href_merged;
+if($updateTaxonomy)
+{	
+	die "Please specify --oldTaxonomy" 
+	unless(defined $oldTaxonomy);
+	
+	$taxonomy_href = taxTree::readTaxonomy($oldTaxonomy);
+	
+	my $new_taxonomy_href_nonX = taxTree::readTaxonomy($taxonomyDir);
+	$new_taxonomy_href_merged = taxTree::readMerged($taxonomyDir);
+	
+	if(scalar(grep {$_ =~ /^x/} keys %$new_taxonomy_href_nonX) > 0)
+	{
+		die "Your new --taxonomy has x nodes in it, abort";
+	}	
+	
+	$new_taxonomy_href = taxTree::cloneTaxonomy_integrateX($new_taxonomy_href_nonX, $new_taxonomy_href_merged, $taxonomy_href);	
+	
+	taxTree::storeXInDir($new_taxonomy_href, $dir_copy_taxonomy);
+}
+else
+{
+	 $taxonomy_href = taxTree::readTaxonomy($taxonomyDir);		
+}
 
 # get list of contigs IDs and their positions			
 			
@@ -114,11 +145,16 @@ for(my $fileI = 0; $fileI <= $#FASTAfiles; $fileI++)
 			push(@contigs, [$fileI, $position_contig_start, $contigID]);
 			
 			my $taxonID = Util::extractTaxonID($contigID, $fileN, $.);
+
 			unless(exists $taxonomy_href->{$taxonID})
 			{
 				die "Taxon ID $taxonID - from file $fileN, line $. - not found in taxonomy -- consider updating your taxonomy directory.";
+			}			
+			if($updateTaxonomy)
+			{
+				taxTree::findCurrentNodeID($new_taxonomy_href, $new_taxonomy_href_merged, $taxonID);
 			}
-			
+
 			push(@{$taxonID_2_contig{$taxonID}}, substr($contigID, 1));
 			
 			if(defined $currentContigID)
@@ -157,7 +193,14 @@ my $getContigSequence = sub {
 	my $firstLine = <F>;
 	chomp($firstLine);
 	die "Couldn't find contig - got $firstLine, wanted $expectedName, in $fn" unless($firstLine eq $expectedName);
+	
+	if($updateTaxonomy)
+	{
+		$firstLine = update_contigID_newTaxon_ID($firstLine);
+	}
+	
 	my $contigSequence = $firstLine . "\n";
+	
 	while(<F>)
 	{
 		if(substr($_, 0, 1) eq '>')
@@ -180,48 +223,91 @@ if((defined $maxSpecies) and (scalar(@useTaxonIDs) > $maxSpecies))
 	die unless($maxSpecies > 0);
 	@useTaxonIDs = @useTaxonIDs[0 .. ($maxSpecies-1)];
 }
-if($Utest)
-{
-	my $count_ancestors_with_genomes = sub {
-		my $nodeID = shift;
+
+# none of that stuff works with updated taxonomies
+# if($Utest)
+# {
+	# my $count_ancestors_with_genomes = sub {
+		# my $nodeID = shift;
 		
-		die unless(defined $taxonomy_href->{$nodeID}{children});
+		# die unless(defined $taxonomy_href->{$nodeID}{children});
 		
-		my @children_nodes = $taxonomy_href->{$nodeID}{children};
+		# my @children_nodes = $taxonomy_href->{$nodeID}{children};
 		
-		my @children_nodes_mappable = grep {
-			my $child_node_ID = $_;
+		# my @children_nodes_mappable = grep {
+			# my $child_node_ID = $_;
 			
-			my @descendants_of_child = taxTree::descendants($taxonomy_href, $child_node_ID);
-			my @child_and_descendants = ($child_node_ID, @descendants_of_child);
+			# my @descendants_of_child = taxTree::descendants($taxonomy_href, $child_node_ID);
+			# my @child_and_descendants = ($child_node_ID, @descendants_of_child);
 			
-			my @descendants_mappable = grep {exists $taxonID_2_contig{$_}} @child_and_descendants;
+			# my @descendants_mappable = grep {exists $taxonID_2_contig{$_}} @child_and_descendants;
 			
-			(scalar(@descendants_mappable) > 0);
-		} @children_nodes;
+			# (scalar(@descendants_mappable) > 0);
+		# } @children_nodes;
 		
-		return scalar(@children_nodes);
-	};
+		# return scalar(@children_nodes);
+	# };
 	
-	foreach my $level (qw/species genus family/)
-	{
-		my @nodes_thisLevel = grep {$taxonomy_href->{$_}{rank} eq $level} keys %$taxonomy_href;
-		my @nodes_thisLevel_atLeast3 = grep {$count_ancestors_with_genomes->($_) >= 3} @nodes_thisLevel;
-		print "Mappable nodes $level: ", scalar(@nodes_thisLevel_atLeast3), "\n";
-	}
+	# foreach my $level (qw/species genus family/)
+	# {
+		# my @nodes_thisLevel = grep {$taxonomy_href->{$_}{rank} eq $level} keys %$taxonomy_href;
+		# my @nodes_thisLevel_atLeast3 = grep {$count_ancestors_with_genomes->($_) >= 3} @nodes_thisLevel;
+		# print "Mappable nodes $level: ", scalar(@nodes_thisLevel_atLeast3), "\n";
+	# }
 	
-	exit;
-}
+	# exit;
+# }
 
 
 my %_useTaxonID = map {$_ => 1} @useTaxonIDs;
-
+my %_useTaxonIDs_afterUpdate;
 my $outputTaxonsAndContigs = $DB . '/' . 'taxonInfo.txt';
 open(DB, '>', $outputTaxonsAndContigs) or die "Cannot open $outputTaxonsAndContigs - check whether I have write permissions";
-foreach my $taxonID (@useTaxonIDs)
+if($updateTaxonomy)
 {
-	my @contigs = @{$taxonID_2_contig{$taxonID}};
-	print DB $taxonID, " ", join(';', map {die unless(defined $contig_2_length{$_}); $_ . '=' . $contig_2_length{$_}} @contigs), "\n";
+	my %new_taxonID_2_contigs;
+	my %new_contig_2_length;
+	my $made_updates_taxonID = 0;
+	my $made_updates_contigID = 0;
+	
+	foreach my $taxonID (@useTaxonIDs)
+	{
+		my $newTaxonID = taxTree::findCurrentNodeID($new_taxonomy_href, $new_taxonomy_href_merged, $taxonID);
+		$made_updates_taxonID++ if ($taxonID ne $newTaxonID);		
+		my @contigs = @{$taxonID_2_contig{$taxonID}};
+		my @new_contigs;
+		foreach my $contigID (@contigs)
+		{
+			die unless(Util::extractTaxonID($contigID, '?', '?') eq $taxonID);
+			my $newContigID = update_contigID_newTaxon_ID($contigID);
+			$made_updates_contigID++ if ($contigID ne $newContigID);
+			die if(defined $new_contig_2_length{$newContigID});
+			$new_contig_2_length{$newContigID} = $contig_2_length{$contigID};
+			push(@new_contigs, $newContigID);
+		}
+		push(@{$new_taxonID_2_contigs{$newTaxonID}}, @new_contigs);
+	}
+	
+	my @new_useTaxonIDs = keys %new_taxonID_2_contigs;
+	foreach my $taxonID (@new_useTaxonIDs)
+	{
+		my @new_contigs = @{$new_taxonID_2_contigs{$taxonID}};
+		print DB $taxonID, " ", join(';', map {die unless(defined $new_contig_2_length{$_}); $_ . '=' . $new_contig_2_length{$_}} @new_contigs), "\n";
+	}
+	
+	%_useTaxonIDs_afterUpdate = map {$_ => 1} @new_useTaxonIDs;
+	
+	print "Updated taxonomic information -- $made_updates_taxonID taxons, $made_updates_contigID contig IDs.\n";
+}
+else
+{
+	foreach my $taxonID (@useTaxonIDs)
+	{
+		my @contigs = @{$taxonID_2_contig{$taxonID}};
+		print DB $taxonID, " ", join(';', map {die unless(defined $contig_2_length{$_}); $_ . '=' . $contig_2_length{$_}} @contigs), "\n";
+	}
+	
+	%_useTaxonIDs_afterUpdate = map {$_ => 1} @useTaxonIDs;
 }
 close(DB);
 
@@ -240,7 +326,28 @@ for(my $contigI = 0; $contigI <= $#contigs; $contigI++)
 }
 close(DB);
 
+taxTree::trimTaxonomyInDir($dir_copy_taxonomy, \%_useTaxonIDs_afterUpdate);
+
 print "\nProduced randomized-order database sequence file $outputFN and\n\ttaxon info file $outputTaxonsAndContigs (" . scalar(@useTaxonIDs) . " taxa).\n\n";
+
+
+sub update_contigID_newTaxon_ID
+{
+	my $contigID = shift;
+	
+	my $oldContigID = $contigID;
+	
+	my $existingTaxonID = Util::extractTaxonID($contigID, '?', '?');
+	my $newTaxonID = taxTree::findCurrentNodeID($new_taxonomy_href, $new_taxonomy_href_merged, $existingTaxonID);
+	
+	$contigID =~ s/kraken:taxid\|(x?\d+)/kraken:taxid\|$newTaxonID/;
+	if($existingTaxonID ne $newTaxonID)
+	{
+		die if(index($contigID, $existingTaxonID) != -1);
+	}
+	
+	return $contigID;
+}
 
 sub print_help
 {

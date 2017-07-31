@@ -4,6 +4,7 @@ use strict;
 use Data::Dumper;
 use List::Util qw/all/;
 use Storable qw/dclone/;
+use File::Copy qw/move/;
 
 sub readTaxonomy
 {
@@ -178,6 +179,53 @@ sub cloneTaxonomy_integrateX
 	return $masterTaxonomy;
 }
 
+
+sub storeXInDir
+{
+	my $taxonomy_href = shift;
+	my $dir = shift;
+	
+	die unless(defined $dir);
+	my $existingTaxonomy = readTaxonomy($dir);
+	
+	# make sure the passed taxonomy is like the taxonomy in the directory, just without
+	# x's
+	foreach my $taxonID (keys %$existingTaxonomy)
+	{
+		die unless(exists $taxonomy_href->{$taxonID});
+	}
+	foreach my $taxonID (keys %$taxonomy_href)
+	{
+		die unless(($taxonID =~ /^x/) or (exists $existingTaxonomy->{$taxonID}));
+	}
+	
+	my @nodes_to_add = grep {($_ =~ /^x/) and (not exists($existingTaxonomy->{$_}))} keys %$taxonomy_href;
+		
+	my $taxonomy_names_f_out = $dir . '/names.dmp';
+	my $taxonomy_nodes_f_out = $dir . '/nodes.dmp';
+
+	die unless(-e $taxonomy_names_f_out);
+	open(NAMESOUT, '>>', $taxonomy_names_f_out) or die "Cannot open $taxonomy_names_f_out";
+	foreach my $xID (@nodes_to_add)
+	{
+		my $nodeName_1 = $taxonomy_href->{$xID}{names}[0];
+		my $nodeName_2 = ($taxonomy_href->{$xID}{names}[1] // '');
+		die unless($nodeName_1);
+		print NAMESOUT join("\t|\t", $xID, $nodeName_1, $nodeName_2, 'scientific name', ''), "\n";
+	}
+	close(NAMESOUT);
+
+	die unless(-e $taxonomy_nodes_f_out);
+	open(NODESOUT, '>>', $taxonomy_nodes_f_out) or die "Cannot open $taxonomy_nodes_f_out";
+	foreach my $xID (@nodes_to_add)
+	{	
+		my $parentNode = $taxonomy_href->{$xID}{parent};
+		die unless(exists $existingTaxonomy->{$parentNode});
+		print NODESOUT join("\t|\t", $xID,  $parentNode, 'pseudospecies', ''), "\n";
+	}	
+	close(NODESOUT);		
+}
+	
 sub cloneTaxonomy_removeNodes
 {
 	my $tree_href = shift;
@@ -258,6 +306,88 @@ sub expected_distance_newNode
 		
 }
 
+sub trimTaxonomyInDir
+{
+	my $dir = shift;
+	my $keepIDs_href = shift;
+	die unless(defined $keepIDs_href);
+	die unless(scalar((keys %$keepIDs_href)));
+	
+	my %keepIDs_extended;
+	my $existingTaxonomy = readTaxonomy($dir);
+	foreach my $nodeID (keys %$keepIDs_href)
+	{
+		die unless(defined $existingTaxonomy->{$nodeID});
+		$keepIDs_extended{$nodeID} = 1;
+		my @ancestors = get_ancestors($existingTaxonomy, $nodeID);
+		foreach my $ancestorNodeID (@ancestors)
+		{
+			$keepIDs_extended{$ancestorNodeID}++;
+		}	
+	}
+	
+	my $taxonomy_names_f = $dir . '/names.dmp';
+	my $taxonomy_nodes_f = $dir . '/nodes.dmp';
+
+	my $taxonomy_names_out = $dir . '/names.dmp.2';
+	my $taxonomy_nodes_out = $dir . '/nodes.dmp.2';
+
+	open(NAMES, '<', $taxonomy_names_f) or die "Cannot open $taxonomy_names_f";
+	open(NAMESOUT, '>', $taxonomy_names_out) or die "Cannot open $taxonomy_nodes_out";
+	while(<NAMES>)
+	{
+		my $line = $_;
+		my $originalLine = $line;
+		chomp($line);
+		$line =~ s/\t?\|$//;
+		my @fields = split(/\t\|\t/, $line, -1);
+		my $nodeID = $fields[0];
+		if($keepIDs_extended{$nodeID})
+		{
+			print NAMESOUT $originalLine;
+		}
+	}
+	close(NAMES);
+	close(NAMESOUT);
+	
+	open(NODES, '<', $taxonomy_nodes_f) or die "Cannot open $taxonomy_nodes_f";
+	open(NODESOUT, '>', $taxonomy_nodes_out) or die "Cannot open $taxonomy_nodes_out";
+	while(<NODES>)
+	{
+		# print "\rNODES $.       " if(($. % 10000) == 0);	
+		my $line = $_;
+		my $originalLine = $line;
+		chomp($line);
+		$line =~ s/\t?\|$//;		
+		my @fields = split(/\t\|\t/, $line, -1);
+		my $node_id = $fields[0];
+		my $parent_node = $fields[1];
+		if($keepIDs_extended{$node_id})
+		{
+			if($parent_node ne '0')
+			{
+				die unless($keepIDs_extended{$parent_node});
+			}
+			print NODESOUT $originalLine;
+		}
+	}
+	close(NODES);
+	close(NODESOUT);
+
+	move($taxonomy_names_out, $taxonomy_names_f) or die "Cannot mv $taxonomy_names_out -> $taxonomy_names_f";
+	move($taxonomy_nodes_out, $taxonomy_nodes_f) or die "Cannot mv $taxonomy_nodes_out -> $taxonomy_nodes_f";
+	
+	my $newTaxonomy = readTaxonomy($dir);
+	taxonomy_checkConsistency($newTaxonomy);	
+		
+	my $oldNodes = scalar(keys %$existingTaxonomy);
+	my $newNodes = scalar(keys %$newTaxonomy);
+	
+	print "Reduced taxonomy in $dir from $oldNodes nodes to $newNodes \n";
+	
+	die unless($newNodes < $oldNodes);
+}
+	
 sub get_leave_ids
 {
 	my $tree_href = shift;
