@@ -13,9 +13,9 @@ sub doMetaPalette
 	my $reads_fastq = shift;
 	my $metaPalette_installation_dir = shift;
 	my $jellyfish_2_bin = shift;
-	my $fullTaxonomy = shift;
+	my $fullTaxonomyDir = shift;
 	
-	die unless(defined $fullTaxonomy);
+	die unless(defined $fullTaxonomyDir);
 	
 	my $metapalette_dir = $jobDir . '/metapalette/';
 
@@ -64,7 +64,7 @@ sub doMetaPalette
 	create_compatible_file_from_metapalette( 
 		$jobDir_abs . '/results_metapalette.txt',
 		$metapalette_dir . '/combined_reads.fastq.profile',
-		$fullTaxonomy,
+		$fullTaxonomyDir,
 	);
 	
 	chdir($cwd_before) or die "Cannot chdir $cwd_before";
@@ -75,13 +75,13 @@ sub create_compatible_file_from_metapalette
 {
 	my $output_fn = shift;
 	my $output_metapalette_fn = shift;
-	my $fullTaxonomy = shift;
-	die unless(defined $fullTaxonomy);
+	my $fullTaxonomyDir = shift;
+	die unless(defined $fullTaxonomyDir);
 	
 	my %S_byLevel;
 		
-	my $taxonomy_metaPalette = taxTree::readTaxonomy($fullTaxonomy);
-	my $merged_href = taxTree::readMerged($fullTaxonomy);
+	my $taxonomy_metaPalette = taxTree::readTaxonomy($fullTaxonomyDir);
+	my $merged_href = taxTree::readMerged($fullTaxonomyDir);
 	
 	open(MP, '<', $output_metapalette_fn) or die "Cannot open $output_metapalette_fn";
 	while(<MP>)

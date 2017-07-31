@@ -25,6 +25,7 @@ use taxTree;
 use Util;
 use SimulationsKraken;
 use SimulationsMetaPalette;
+use validation;
 
 Util::get_metaMap_bin_and_enforce_mainDir();
 die unless(-e 'estimateSelfSimilarity.pl');
@@ -61,11 +62,6 @@ my $metaPalette_installation_dir = qq(/data/projects/phillippy/software/MetaPale
 my $jellyfish_2_bin = qq(/data/projects/phillippy/software/jellyfish-2.2.6/bin/jellyfish);
 my $krakenDBTemplate = '/data/projects/phillippy/projects/mashsim/src/krakenDBTemplate/'; # make sure this is current!
 
-my @evaluateAccuracyAtLevels = qw/species genus family superkingdom/;
-{
-	my %_knowRank = map {$_ => 1} taxTree::getRelevantRanks();
-	die unless(all {$_knowRank{$_}} @evaluateAccuracyAtLevels);
-}
 die unless(-e $metamap_bin);
 
 # my $taxonomy_full = taxTree::readTaxonomy($fullReferenceTaxonomy);
@@ -225,10 +221,10 @@ sub inferenceOneSimulation
 		
 		print "Doing inference in $DB_target_dir\n";
 		# doMetaMap($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq});
-		SimulationsKraken::doKraken($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $krakenDBTemplate, $kraken_binPrefix, $Bracken_dir);
+		# SimulationsKraken::doKraken($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $krakenDBTemplate, $kraken_binPrefix, $Bracken_dir);
 		if($simulation_href->{inferenceDBs}[$varietyI][2] eq 'fullDB')
 		{
-			SimulationsMetaPalette::doMetaPalette($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $metaPalette_installation_dir, $jellyfish_2_bin, $fullTaxonomy);			
+			SimulationsMetaPalette::doMetaPalette($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $metaPalette_installation_dir, $jellyfish_2_bin, $masterTaxonomy_dir);			
 		}
 	} 
 	
@@ -249,51 +245,25 @@ sub inferenceOneSimulation
 sub get_files_for_evaluation
 {
 	my $simulation_href = shift;
-	return ('Bracken' => 'results_bracken.txt', 'Kraken' => 'results_kraken.txt', 'Metamap-U' => 'metamap.U.WIMP', 'Metamap-EM' => 'metamap.EM.WIMP');
+	return ('Bracken' => ['distribution', 'results_bracken.txt'], 'Kraken' => ['reads', 'results_kraken.txt.reads2Taxon'], 'Metamap-U' => ['reads', 'metamap.U.WIMP'], 'Metamap-EM' => ['reads', 'metamap.EM.WIMP'], 'MetaPalette' => ['distribution', 'results_metapalette.txt', 1]);
 	# return ('Metamap-U' => 'metamap.U.WIMP', 'Metamap-EM' => 'metamap.EM.WIMP');
 }
 
 sub evaluateOneSimulation
 {
 	my $simulation_href = shift;
-	
-	my $masterTaxonomy_merged;
-
-	unless(defined $masterTaxonomy)
-	{
-		$masterTaxonomy_merged = taxTree::readMerged($masterTaxonomy_dir);
-		$masterTaxonomy = taxTree::readTaxonomy($masterTaxonomy_dir);
-	}
-	
+		
 	my $taxonomyFromSimulation_dir = $simulation_href->{outputDirectory} . '/DB_fullDB/taxonomy';
 	my $taxonomy_usedForSimulation = taxTree::readTaxonomy($taxonomyFromSimulation_dir);
 		
-	my $extendedMaster = taxTree::cloneTaxonomy_integrateX($masterTaxonomy, $masterTaxonomy_merged, $taxonomy_usedForSimulation);
+	(my $extendedMaster, my $extendedMaster_merged) = validation::prepare_masterTaxonomy_withX($masterTaxonomy_dir, $taxonomy_usedForSimulation);
+
+	my $truth_fn = $simulation_href->{outputDirectory} . '/truth_reads.txt';
+	my $truth_raw_reads_href = validation::readTruthFileReads($extendedMaster, $extendedMaster_merged, $truth_fn);
 	
-	my %truth_raw_reads;
-	my %truth_raw_taxonIDs;
-	my $truth_fn =  $simulation_href->{outputDirectory} . '/truth_reads.txt';
-	open(T, '<', $truth_fn) or die "Cannot open $truth_fn";
-	while(<T>)
-	{
-		my $line = $_;
-		chomp($line);
-		next unless($line);
-		my @f = split(/\t/, $line);
-		my $readID = $f[0];
-		my $taxonID_original = $f[1];
-		
-		# get the taxon ID in the master taxonomy
-		my $taxonID_master = taxTree::findCurrentNodeID($extendedMaster, $masterTaxonomy_merged, $taxonID_original);
-		
-		die unless(exists $extendedMaster->{$taxonID_master});
-		die if(defined $truth_raw_reads{$readID});
-		
-		$truth_raw_reads{$readID} = $taxonID_master;
-		$truth_raw_taxonIDs{$taxonID_master}++;
-	}
-	close(T);
-			
+	# my %truth_raw_taxonIDs;
+	# $truth_raw_taxonIDs{$taxonID_master}++;
+	
 	my %expected_results_files = get_files_for_evaluation();
 	for(my $varietyI = 0; $varietyI <= $#{$simulation_href->{dbDirs_metamap}}; $varietyI++)
 	{
@@ -302,8 +272,6 @@ sub evaluateOneSimulation
 		
 		my $simulation_results_dir = $simulation_href->{outputDirectory} . '/inference_' . $varietyName;
 		my $DBdir = $simulation_href->{outputDirectory} . '/DB_' . $varietyName;
-		
-		# my $specificTaxonomy = taxTree::readTaxonomy($DBdir . '/taxonomy');
 		
 		# details for reduced DB
 		my %reduced_taxonID_original_2_contigs;
@@ -314,7 +282,7 @@ sub evaluateOneSimulation
 		my %reduced_taxonID_master_2_contigs;
 		foreach my $taxonID_original (keys %reduced_taxonID_original_2_contigs)
 		{
-			my $taxonID_master = taxTree::findCurrentNodeID($extendedMaster, $masterTaxonomy_merged, $taxonID_original);
+			my $taxonID_master = taxTree::findCurrentNodeID($extendedMaster, $extendedMaster_merged, $taxonID_original);
 			# store which taxon IDs *are* mappable
 			$reduced_taxonID_master_2_contigs{$taxonID_master} = $reduced_taxonID_original_2_contigs{$taxonID_original};
 		}
@@ -323,173 +291,99 @@ sub evaluateOneSimulation
 		my $specificTaxonomy = dclone $extendedMaster;
 		taxTree::removeUnmappableParts($specificTaxonomy, \%reduced_taxonID_master_2_contigs);
 	
-		# translate truth
-		my %truth_allReads;
-		my %taxonID_translation;
-		foreach my $taxonID (keys %truth_raw_taxonIDs)
-		{
-			$taxonID_translation{$taxonID} = getRank_phylogeny($extendedMaster, $specificTaxonomy, $taxonID);
-			my $count = $truth_raw_taxonIDs{$taxonID};
-			foreach my $rank (keys %{$taxonID_translation{$taxonID}})
-			{
-				my $v = $taxonID_translation{$taxonID}{$rank};
-				$truth_allReads{$rank}{$v} += $count;
-			}
-		}
-		foreach my $rank (keys %truth_allReads)
-		{
-			foreach my $taxonID (keys %{$truth_allReads{$rank}})
-			{
-				$truth_allReads{$rank}{$taxonID} /= scalar(keys %truth_raw_reads);
-			}
-		}
+		# translate truth into reduced representation
+		my $truth_mappingDatabase_reads = validation::translateReadsTruthToReducedTaxonomy($extendedMaster, $specificTaxonomy, $truth_raw_reads_href);
 		
-		foreach my $name (keys %expected_results_files)
+		# get distribution
+		my $truth_mappingDatabase_distribution = validation::truthReadsToTruthSummary($specificTaxonomy, $truth_mappingDatabase_reads);
+		
+		# my %truth_allReads;
+		# my %taxonID_translation;
+		# foreach my $taxonID (keys %truth_raw_taxonIDs)
+		# {
+			# $taxonID_translation{$taxonID} = getRank_phylogeny($extendedMaster, $specificTaxonomy, $taxonID);
+			# my $count = $truth_raw_taxonIDs{$taxonID};
+			# foreach my $rank (keys %{$taxonID_translation{$taxonID}})
+			# {
+				# my $v = $taxonID_translation{$taxonID}{$rank};
+				# $truth_allReads{$rank}{$v} += $count;
+			# }
+		# }
+		# foreach my $rank (keys %truth_allReads)
+		# {
+			# foreach my $taxonID (keys %{$truth_allReads{$rank}})
+			# {
+				# $truth_allReads{$rank}{$taxonID} /= scalar(keys %truth_raw_reads);
+			# }
+		# }
+		
+		foreach my $methodName (keys %expected_results_files)
 		{
-			my $f = $simulation_results_dir . '/' . $expected_results_files{$name};
+			my $methodDetails = $expected_results_files{$methodName};
+			my $evaluationType = $methodDetails->[0];
+			my $f = $simulation_results_dir . '/' . $methodDetails->[1];
+			my $optional = $methodDetails->[2];
 			unless(-e $f)
 			{
-				warn "Expected file $f for $name not present.";
-				next;
+				if($optional)
+				{
+					warn "Expected file $f for $methodName not present.";
+					next;
+				}
+				else
+				{
+					die "Expected file $f for $methodName not present.";					
+				}
+			}
+			die unless(($evaluationType eq 'reads') or ($evaluationType eq 'distribution'));
+			
+			if($evaluationType eq 'reads')
+			{
+				my $inferred_reads = validation::readInferredFileReads($specificTaxonomy, $extendedMaster_merged, $f);
+				validation::readLevelComparison($extendedMaster, $truth_mappingDatabase_reads, $inferred_reads, $methodName);
+			}
+			else
+			{
+				my $inferred_distribution = validation::readInferredDistribution($extendedMaster, $extendedMaster_merged, $f);
+				validation::distributionLevelComparison($extendedMaster, $truth_mappingDatabase_distribution, $inferred_distribution, $methodName);
+			
 			}
 			
 			# unclassified = deliberately no caller
 			# undefined = there would be an assignment, but there is no node
-			my %inference;
-			open(I, '<', $f) or die "Cannot open $f";
-			my $header_line = <I>;
-			chomp($header_line);
-			my @header_fields = split(/\t/, $header_line);
-			while(<I>)
-			{
-				my $line = $_;
-				chomp($line);
-				next unless($line);
-				my @line_fields = split(/\t/, $line, -1);
-				die unless($#line_fields == $#header_fields);
-				my %line = (mesh @header_fields, @line_fields);
-				
-				my $taxonID_nonMaster = ($line{ID} // $line{taxonID});
-				die unless(defined $taxonID_nonMaster);
-				
-				next if($line{Name} eq 'TooShort');
-				next if($line{Name} eq 'Unmapped');
-
-				if(($taxonID_nonMaster eq '0') and (($line{Name} eq 'Undefined') or ($line{Name} eq 'Unclassified')))
-				{
-					$taxonID_nonMaster = $line{Name};
-				}
-				if($taxonID_nonMaster eq '0')
-				{
-					die Dumper($line, $f);
-				}
-				
-				my $taxonID_master = taxTree::findCurrentNodeID($extendedMaster, $masterTaxonomy_merged, $taxonID_nonMaster);
-							
-				die Dumper(\%line) unless(defined $taxonID_master);
-				die Dumper("Unknown taxon ID $taxonID_master in file $f", $extendedMaster->{$taxonID_master}) unless(($taxonID_master eq 'Unclassified') or (defined $specificTaxonomy->{$taxonID_master}));
-				die unless(defined $line{Absolute});
-				die unless(defined $line{PotFrequency});
-				$inference{$line{AnalysisLevel}}{$taxonID_master}[0] += $line{Absolute};
-				$inference{$line{AnalysisLevel}}{$taxonID_master}[1] += $line{PotFrequency};
-			}
-			close(I);
-			
-			foreach my $level (@evaluateAccuracyAtLevels)
-			{
-				next unless(defined $inference{$level});
-				die unless(defined $truth_allReads{$level});
-				my $totalFreq = 0;
-				my $totalFreqCorrect = 0;
-				foreach my $inferredTaxonID (keys %{$inference{$level}})
-				{
-					my $isFreq = $inference{$level}{$inferredTaxonID}[1];
-					my $shouldBeFreq = 0;
-					if(exists $truth_allReads{$level}{$inferredTaxonID})
-					{
-						$shouldBeFreq = $truth_allReads{$level}{$inferredTaxonID};
-					}
+		
+			# foreach my $level (@evaluateAccuracyAtLevels)
+			# {
+				# next unless(defined $inference{$level});
+				# die unless(defined $truth_allReads{$level});
+				# my $totalFreq = 0;
+				# my $totalFreqCorrect = 0;
+				# foreach my $inferredTaxonID (keys %{$inference{$level}})
+				# {
+					# my $isFreq = $inference{$level}{$inferredTaxonID}[1];
+					# my $shouldBeFreq = 0;
+					# if(exists $truth_allReads{$level}{$inferredTaxonID})
+					# {
+						# $shouldBeFreq = $truth_allReads{$level}{$inferredTaxonID};
+					# }
 					
-					$totalFreq += $isFreq;
-					if($isFreq <= $shouldBeFreq)					
-					{
-						$totalFreqCorrect += $isFreq;
-					}
-					else
-					{
-						$totalFreqCorrect += $shouldBeFreq;
-					}
-				}
-				die Dumper("Weird total freq", $name, $totalFreq, $f, $level) unless(abs(1 - $totalFreq) <= 1e-3);
+					# $totalFreq += $isFreq;
+					# if($isFreq <= $shouldBeFreq)					
+					# {
+						# $totalFreqCorrect += $isFreq;
+					# }
+					# else
+					# {
+						# $totalFreqCorrect += $shouldBeFreq;
+					# }
+				# }
+				# die Dumper("Weird total freq", $name, $totalFreq, $f, $level) unless(abs(1 - $totalFreq) <= 1e-3);
 				
-				print join("\t", $varietyName, $name, $level, $totalFreqCorrect), "\n";
-			}
+				# print join("\t", $varietyName, $name, $level, $totalFreqCorrect), "\n";
+			# }
 		}
 			
 	}
-}
-
-sub getRank_phylogeny
-{
-	my $fullTaxonomy = shift;
-	my $reducedTaxonomy = shift;
-	my $taxonID = shift;
-	
-	my %forReturn = map {$_ => 'Unclassified'} @evaluateAccuracyAtLevels;
-	
-	unless(all {exists $fullTaxonomy->{$_}} keys %$reducedTaxonomy)
-	{
-		my @missing = grep {not exists $fullTaxonomy->{$_}} keys %$reducedTaxonomy;
-		die Dumper("Reduced taxonomy doesn't seem to be a proper subset of full taxonomy!", \@missing);
-	}
-	die unless(defined $fullTaxonomy->{$taxonID});
-	
-	my @nodes_to_consider = ($taxonID, taxTree::get_ancestors($fullTaxonomy, $taxonID));
-	
-	my $inTaxonomicAgreement = 0;
-	my $firstRankAssigned;
-	foreach my $nodeID (@nodes_to_consider)
-	{
-		my $rank = $fullTaxonomy->{$nodeID}{rank};
-		die unless(defined $rank);
-		if(exists $forReturn{$rank})
-		{
-			if(exists $reducedTaxonomy->{$nodeID})
-			{
-				$forReturn{$rank} = $nodeID;
-				$inTaxonomicAgreement = 1;
-				$firstRankAssigned = $rank;
-			}
-			else
-			{
-				$forReturn{$rank} = 'Unclassified';
-				die if($inTaxonomicAgreement);
-			}
-		}
-	}
-	
-	if(defined $firstRankAssigned)
-	{
-		my $setToUndefined = 0;
-		foreach my $rank (taxTree::getRelevantRanks())
-		{
-			next unless(exists $forReturn{$rank});
-			if($rank eq $firstRankAssigned)
-			{
-				$setToUndefined = 1;
-				die if($forReturn{$rank} eq 'Unclassified');
-			}
-			else
-			{
-				if($setToUndefined and ($forReturn{$rank} eq 'Unclassified'))
-				{
-					$forReturn{$rank} = 'Undefined';
-				}
-			}
-		}
-	}
-	
-	return \%forReturn;
 }
 
 
