@@ -213,76 +213,195 @@ sub getAllRanksForTaxon_withUnclassified
 	return \%forReturn;
 }
 
-sub getRank_phylogeny
-{
-	my $fullTaxonomy = shift;
-	my $reducedTaxonomy = shift;
-	my $taxonID = shift;
+# sub getRank_phylogeny
+# {
+	# my $fullTaxonomy = shift;
+	# my $reducedTaxonomy = shift;
+	# my $taxonID = shift;
 	
-	my %forReturn = map {$_ => 'Unclassified'} @evaluateAccuracyAtLevels;
+	# my %forReturn = map {$_ => 'Unclassified'} @evaluateAccuracyAtLevels;
 	
-	unless(all {exists $fullTaxonomy->{$_}} keys %$reducedTaxonomy)
-	{
-		my @missing = grep {not exists $fullTaxonomy->{$_}} keys %$reducedTaxonomy;
-		die Dumper("Reduced taxonomy doesn't seem to be a proper subset of full taxonomy!", \@missing);
-	}
-	die unless(defined $fullTaxonomy->{$taxonID});
+	# unless(all {exists $fullTaxonomy->{$_}} keys %$reducedTaxonomy)
+	# {
+		# my @missing = grep {not exists $fullTaxonomy->{$_}} keys %$reducedTaxonomy;
+		# die Dumper("Reduced taxonomy doesn't seem to be a proper subset of full taxonomy!", \@missing);
+	# }
+	# die unless(defined $fullTaxonomy->{$taxonID});
 	
-	my @nodes_to_consider = ($taxonID, taxTree::get_ancestors($fullTaxonomy, $taxonID));
+	# my @nodes_to_consider = ($taxonID, taxTree::get_ancestors($fullTaxonomy, $taxonID));
 	
-	my $inTaxonomicAgreement = 0;
-	my $firstRankAssigned;
-	foreach my $nodeID (@nodes_to_consider)
-	{
-		my $rank = $fullTaxonomy->{$nodeID}{rank};
-		die unless(defined $rank);
-		if(exists $forReturn{$rank})
-		{
-			if(exists $reducedTaxonomy->{$nodeID})
-			{
-				$forReturn{$rank} = $nodeID;
-				$inTaxonomicAgreement = 1;
-				$firstRankAssigned = $rank;
-			}
-			else
-			{
-				$forReturn{$rank} = 'Unclassified';
-				die if($inTaxonomicAgreement);
-			}
-		}
-	}
+	# my $inTaxonomicAgreement = 0;
+	# my $firstRankAssigned;
+	# foreach my $nodeID (@nodes_to_consider)
+	# {
+		# my $rank = $fullTaxonomy->{$nodeID}{rank};
+		# die unless(defined $rank);
+		# if(exists $forReturn{$rank})
+		# {
+			# if(exists $reducedTaxonomy->{$nodeID})
+			# {
+				# $forReturn{$rank} = $nodeID;
+				# $inTaxonomicAgreement = 1;
+				# $firstRankAssigned = $rank;
+			# }
+			# else
+			# {
+				# $forReturn{$rank} = 'Unclassified';
+				# die if($inTaxonomicAgreement);
+			# }
+		# }
+	# }
 	
-	if(defined $firstRankAssigned)
-	{
-		my $setToUndefined = 0;
-		foreach my $rank (taxTree::getRelevantRanks())
-		{
-			next unless(exists $forReturn{$rank});
-			if($rank eq $firstRankAssigned)
-			{
-				$setToUndefined = 1;
-				die if($forReturn{$rank} eq 'Unclassified');
-			}
-			else
-			{
-				if($setToUndefined and ($forReturn{$rank} eq 'Unclassified'))
-				{
-					$forReturn{$rank} = 'Undefined';
-				}
-			}
-		}
-	}
+	# if(defined $firstRankAssigned)
+	# {
+		# my $setToUndefined = 0;
+		# foreach my $rank (taxTree::getRelevantRanks())
+		# {
+			# next unless(exists $forReturn{$rank});
+			# if($rank eq $firstRankAssigned)
+			# {
+				# $setToUndefined = 1;
+				# die if($forReturn{$rank} eq 'Unclassified');
+			# }
+			# else
+			# {
+				# if($setToUndefined and ($forReturn{$rank} eq 'Unclassified'))
+				# {
+					# $forReturn{$rank} = 'Undefined';
+				# }
+			# }
+		# }
+	# }
 	
-	return \%forReturn;
-}
+	# return \%forReturn;
+# }
 
 
 sub readLevelComparison
 {
 	my $masterTaxonomy = shift;
-	my $reads_truth = shift;
+	my $reads_truth_absolute = shift;
+	my $reads_truth_mappingDB = shift;
 	my $reads_inferred = shift;
-	my $name = shift;
+	my $label = shift;
+	
+	die unless(defined $label);
+	
+	my @readIDs = keys %$reads_truth_absolute;
+	unless((scalar(@readIDs) == scalar(keys %$reads_inferred)) and (all {exists $reads_inferred->{$_}} @readIDs))
+	{
+		die "Read ID problem - truth and inference sets are not congruent.";
+	}
+	
+	die unless(all {exists $masterTaxonomy->{$_}} values %$reads_truth_absolute);
+	die unless(all {exists $masterTaxonomy->{$_}} values %$reads_inferred);
+
+	
+	# a 'lightning' is the way from a taxon ID to the top of the tree, and back
+	# ... setting levels below the ID to 'unclassified'
+	my %_getLightning_cache;
+	my $getLightning = sub {
+		my $taxonID = shift;
+		if(exists $_getLightning_cache{$taxonID})
+		{
+			return $_getLightning_cache{$taxonID};
+		}
+		else
+		{
+			my $lightning = getAllRanksForTaxon_withUnclassified($masterTaxonomy, $taxonID);
+			$_getLightning_cache{$taxonID} = $lightning;
+			return $lightning;
+		}
+	};
+	
+	my $get_read_categories = sub {
+		my $readID = shift;
+		
+		my @categories = ('ALL');
+		if($reads_truth_mappingDB->{$readID} eq $reads_truth_absolute->{$readID})
+		{
+			push(@categories, 'inDB');
+		}
+		else
+		{
+			push(@categories, 'novel');
+			my $lightning_truth_inDB = $getLightning->($reads_truth_mappingDB->{$readID});
+			my $shouldBeAssignedTo;
+			foreach my $rank (@evaluateAccuracyAtLevels)
+			{
+				die unless(defined $lightning_truth_inDB->{$rank});
+				if($lightning_truth_inDB->{$rank} ne 'Unclassified')
+				{
+					$shouldBeAssignedTo = $rank;
+				}
+			}
+			die unless(defined $shouldBeAssignedTo);
+			push(@categories, 'novel_to' . $shouldBeAssignedTo);
+		}
+		return ('ALL');
+	};
+	
+	my %n_reads_correct;
+	my %n_reads_correct_byLevel;
+	my %taxonID_across_ranks;
+	foreach my $readID (@readIDs)
+	{
+		my $trueTaxonID_inUsedDB = $reads_truth_mappingDB->{$readID};
+		my $inferredTaxonID = $reads_truth_mappingDB->{$readID};
+		
+		my $lightning_truth = $getLightning->($trueTaxonID_inUsedDB);
+		my $lightning_inferred = $getLightning->($inferredTaxonID);
+		
+		my @read_categories = $get_read_categories->($readID);
+		foreach my $category (@read_categories)
+		{
+			unless(defined $n_reads_correct{$category}{N})
+			{
+				$n_reads_correct{$category}{N} = 0;
+				$n_reads_correct{$category}{correct} = 0;
+			}
+			$n_reads_correct{$category}{N}++;
+			if($inferredTaxonID eq $trueTaxonID_inUsedDB)
+			{
+				$n_reads_correct{$category}{correct}++;
+			}
+		}
+		
+		foreach my $level (@evaluateAccuracyAtLevels)
+		{
+			die unless((defined $lightning_truth->{$level}) and (defined defined $lightning_truth->{$level}));
+			foreach my $category (@read_categories)
+			{
+				unless(defined $n_reads_correct_byLevel{$category}{$level}{N})
+				{
+					$n_reads_correct_byLevel{$category}{$level}{N} = 0;
+					$n_reads_correct_byLevel{$category}{$level}{N_truthDefined} = 0;
+					$n_reads_correct_byLevel{$category}{$level}{correct} = 0;
+					$n_reads_correct_byLevel{$category}{$level}{correct_truthDefined} = 0;
+				}
+				
+				$n_reads_correct_byLevel{$category}{$level}{N}++;
+				$n_reads_correct_byLevel{$category}{$level}{N_truthDefined}++ if($lightning_truth->{$level} ne 'Undefined');
+				if($lightning_truth->{$level} eq $lightning_truth->{$level})
+				{
+					$n_reads_correct_byLevel{$category}{$level}{correct}++;
+					$n_reads_correct_byLevel{$category}{$level}{correct_truthDefined}++ if($lightning_truth->{$level} ne 'Undefined');
+				}				
+			}
+		}
+	}
+	
+	foreach my $category (keys %n_reads_correct)
+	{
+		my $prop_absoluteCorrectness = ($n_reads_correct{$category}{N} > 0) ? ($n_reads_correct{$category}{correct} / $n_reads_correct{$category}{N}) : -1;
+		print join("\t", $label, $category, "absoluteCorrectness", $n_reads_correct{$category}{N}, $n_reads_correct{$category}{correct}, sprintf("%.2f", $prop_absoluteCorrectness));
+		foreach my $level (@evaluateAccuracyAtLevels)
+		{
+			my $prop_levelCorrectness = ($n_reads_correct_byLevel{$category}{$level}{N} > 0) ? ($n_reads_correct_byLevel{$category}{$level}{correct} / $n_reads_correct_byLevel{$category}{$level}{N}) : -1;
+			print join("\t", $label, $category, $level, $n_reads_correct_byLevel{$category}{$level}{N}, $n_reads_correct_byLevel{$category}{$level}{correct}, sprintf("%.2f", $prop_levelCorrectness));
+
+		}
+	}	
 }
 
 sub distributionLevelComparison
@@ -320,10 +439,8 @@ sub distributionLevelComparison
 		die Dumper("Weird total freq", $label, $totalFreq, $level) unless(abs(1 - $totalFreq) <= 1e-3);
 		
 		print join("\t", $label, $level, $totalFreqCorrect), "\n";
-	}
-			
-}	
-			
+	}		
+}			
 			
 
 sub readInferredDistribution

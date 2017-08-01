@@ -340,7 +340,7 @@ sub evaluateOneSimulation
 			if($evaluationType eq 'reads')
 			{
 				my $inferred_reads = validation::readInferredFileReads($specificTaxonomy, $extendedMaster_merged, $f);
-				validation::readLevelComparison($extendedMaster, $truth_mappingDatabase_reads, $inferred_reads, $methodName);
+				validation::readLevelComparison($extendedMaster, $truth_raw_reads_href, $truth_mappingDatabase_reads, $inferred_reads, $methodName);
 			}
 			else
 			{
