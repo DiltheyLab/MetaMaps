@@ -112,7 +112,7 @@ die unless(-e $metamap_bin);
 	# '/data/projects/phillippy/projects/mashsim/src/simulations/0/combined_reads.fastq.classified.bracken_G',
 	# '/data/projects/phillippy/projects/mashsim/src/simulations/0/combined_reads.fastq.classified.bracken_F'
 # );
-# exit;
+# exit; 
 
 # create_compatible_file_from_metapalette( 
 	# '/data/projects/phillippy/software/MetaPalette/simReads/combined_reads.fastq.profile.compatible',
@@ -133,16 +133,24 @@ my $DB = 'databases/miniSeq_100';
 my $jobI;
 my $really;
 my $jobIMethod = 'all';
+my $n_simulations = 10;
 GetOptions (
+	'DB:s' => \$DB,
 	'action:s' => \$action,
 	'jobI:s' => \$jobI,
 	'really:s' => \$really,
+	'n_simulations:s' => \$n_simulations,
 	'jobIMethod:s' => \$jobIMethod,
 );
 
 if(not defined $action)
 {
 	die "Please specify --action, e.g. prepare, inferenceJobI, analyzeJobI";
+}
+
+unless(defined $DB)
+{
+	die "Please specify --DB, e.g. databases/miniSeq";
 }
 
 if($action eq 'prepare')
@@ -159,9 +167,9 @@ if($action eq 'prepare')
 	my %contig_2_length;
 	fill_contigID_taxonID($DB, $MetaMap_taxonomy, \%contigID_2_taxonID, \%taxonID_2_contigIDs, \%contig_2_length);
 	my %taxon_2_genomeLength = map {$_ => getGenomeLength($_, \%taxonID_2_contigIDs, \%contig_2_length)} keys %taxonID_2_contigIDs;
-		
+	
+
 	my @simulations_to_execute;
-	my $n_simulations = 1;
 	for(my $simulationI = 0; $simulationI < $n_simulations; $simulationI++)
 	{
 		my $thisSimulation_outputDirectory = $globalOutputDir . '/' . $simulationI;
@@ -170,18 +178,37 @@ if($action eq 'prepare')
 		my $oneSimulation_href;
 		if($simulationI < $n_simulations)
 		{
-			$oneSimulation_href = returnOneSimulation_noUnknown($DB, \%taxonID_2_contigIDs, \%taxon_2_genomeLength, 4, $thisSimulation_outputDirectory, 1, $MetaMap_taxonomy);
+			$oneSimulation_href = returnOneSimulation_noUnknown($DB, \%taxonID_2_contigIDs, \%taxon_2_genomeLength, 10, $thisSimulation_outputDirectory, 1, $MetaMap_taxonomy);
 		}
 		
 		addInferenceRoundsWithReducedDBs($oneSimulation_href, $MetaMap_taxonomy);
 		
 		push(@simulations_to_execute, $oneSimulation_href);
 	}
-		
+
 	foreach my $oneSimulation_href (@simulations_to_execute)
 	{
 		executeSimulation($oneSimulation_href, \%taxonID_2_contigIDs, \%contig_2_length);
 	}
+	
+	my $simulations_qsub_file = $globalOutputDir. '/qsub.txt';	
+	open(QSUB, '>', $simulations_qsub_file) or die "Cannot open $simulations_qsub_file";
+print QSUB qq(#!/bin/bash
+#\$ -t 1-${n_simulations}
+#\$ -q public.q
+#\$ -l mem_free=172G
+jobID=\$(expr \$SGE_TASK_ID - 1)
+cd $FindBin::Bin
+perl simulate.pl --action inferenceJobI --DB $DB --jobI \$jobID
+);	
+	close(QSUB);
+	
+	my $n_simulations_file = $globalOutputDir . '/n_simulations.txt';
+	open(N, '>', $n_simulations_file) or die "Cannot open $n_simulations_file";
+	print N $n_simulations, "\n";
+	close(N);
+	
+	print "$n_simulations prepared on DB $DB -- if you're in an SGE environment, you can now\n\tqsub $simulations_qsub_file\n\n";
 }
 elsif($action eq 'inferenceJobI')
 {
@@ -221,10 +248,10 @@ sub inferenceOneSimulation
 		
 		print "Doing inference in $DB_target_dir\n";
 		# doMetaMap($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq});
-		# SimulationsKraken::doKraken($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $krakenDBTemplate, $kraken_binPrefix, $Bracken_dir);
+		SimulationsKraken::doKraken($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $krakenDBTemplate, $kraken_binPrefix, $Bracken_dir);
 		if($simulation_href->{inferenceDBs}[$varietyI][2] eq 'fullDB')
 		{
-			SimulationsMetaPalette::doMetaPalette($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $metaPalette_installation_dir, $jellyfish_2_bin, $masterTaxonomy_dir);			
+			# SimulationsMetaPalette::doMetaPalette($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $metaPalette_installation_dir, $jellyfish_2_bin, $masterTaxonomy_dir);			
 		}
 	} 
 	
@@ -245,11 +272,17 @@ sub inferenceOneSimulation
 sub get_files_for_evaluation
 {
 	my $simulation_href = shift;
-	return ('Bracken' => ['distribution', 'results_bracken.txt'], 'Kraken' => ['reads', 'results_kraken.txt.reads2Taxon'], 'Metamap-U' => ['reads', 'metamap.U.WIMP'], 'Metamap-EM' => ['reads', 'metamap.EM.WIMP'], 'MetaPalette' => ['distribution', 'results_metapalette.txt', 1]);
+	return (
+		'Bracken' => ['distribution', 'results_bracken.txt'],
+		'Kraken' => ['reads', 'results_kraken.txt.reads2Taxon'],
+		'Metamap-U' => ['reads', 'metamap.U.reads2Taxon'],
+		'Metamap-EM' => ['reads', 'metamap.EM.reads2Taxon'],
+		'MetaPalette' => ['distribution', 'results_metapalette.txt', 1]
+	);
 	# return ('Metamap-U' => 'metamap.U.WIMP', 'Metamap-EM' => 'metamap.EM.WIMP');
 }
 
-sub evaluateOneSimulation
+sub evaluateOneSimulation 
 {
 	my $simulation_href = shift;
 		
@@ -346,7 +379,6 @@ sub evaluateOneSimulation
 			{
 				my $inferred_distribution = validation::readInferredDistribution($extendedMaster, $extendedMaster_merged, $f);
 				validation::distributionLevelComparison($extendedMaster, $truth_mappingDatabase_distribution, $inferred_distribution, $methodName);
-			
 			}
 			
 			# unclassified = deliberately no caller
@@ -407,7 +439,6 @@ sub addInferenceRoundsWithReducedDBs
 		my $removeNode = $ancestors_href->{$removeRank};
 		push(@{$simulation_href->{inferenceDBs}}, ['remove', [$removeNode], 'removeOne_' . $removeRank]);
 	}
-	
 }
 
 sub returnOneSimulation_noUnknown
@@ -441,7 +472,7 @@ sub returnOneSimulation_noUnknown
 	}
 	
 	my $simulation_href = {
-		coverageFactor => 1,
+		coverageFactor => 20,
 		outputDirectory => $outputDirectory,
 		DB_simulation => $DB,
 		targetTaxons => \%targetTaxonIDs,
@@ -463,7 +494,7 @@ sub executeSimulation
 	
 	store $simulation_href, $simulation_href->{outputDirectory} . '/simulationStore';
 	
-	inferenceOneSimulation($simulation_href);
+	# inferenceOneSimulation($simulation_href);
 
 	print "\n\nPrepared simulation!\n\n";
 }
@@ -802,10 +833,9 @@ sub produceReducedDB
 	
 	die unless(-e 'estimateSelfSimilarity.pl');
 	my $cmd_self_similarity = qq(perl estimateSelfSimilarity.pl --DB $targetDir --templateDB $baseDB --mode prepareFromTemplate);
-	warn  "Check command:\n$cmd_self_similarity\n\n";
+	# warn  "Check command:\n$cmd_self_similarity\n\n";
 	
-	# todo activate
-	# system($cmd_self_similarity) and die "Command $cmd_self_similarity failed";
+	system($cmd_self_similarity) and die "Command $cmd_self_similarity failed";
 
 	
 	print "\t\tCreated reduced DB ", $targetDir, " with ", scalar(keys %$reducedTaxonomy), " nodes instead of ", scalar(keys %$taxonomy_base), " nodes\n";

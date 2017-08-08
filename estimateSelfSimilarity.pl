@@ -584,6 +584,9 @@ sub map_reads_keepTrack_similarity
 	my %generated_reads_chunkLength;
 	
 	my @chunk_positions = getChunkPositions($file_A, $contigs_A_order, $v_for_srand);
+	# print Dumper(@chunk_positions[0 .. 2]);
+	# ;
+		
 	my $actually_map_reads = 0;
 	foreach my $oneChunk (@chunk_positions)
 	{
@@ -610,6 +613,26 @@ sub map_reads_keepTrack_similarity
 		
 		open(READS, '>', $file_A_reads_many) or die "Cannot open $file_A_reads_many";			
 		
+		foreach my $oneChunk (@chunk_positions)
+		{
+			my $chunkLength = $oneChunk->[0];
+			my $readI_within_chunkLength_1based = $oneChunk->[1];
+			my $contigID = $oneChunk->[2];
+			my $posI = $oneChunk->[3];
+			my $readID = $oneChunk->[4];
+			
+			if(defined $limitToReadsIDs)
+			{
+				next unless($limitToReadsIDs->{$readID});
+			}			
+			
+			if(defined $call_eachSimulatedRead)
+			{
+				$call_eachSimulatedRead->($readID, $contigID, $posI, $chunkLength);
+			}		
+		}
+		
+		my $totalChunkI = 0;
 		foreach my $chunkLength (keys %chunks_by_length)
 		{
 			my @chunks_thisLength = @{$chunks_by_length{$chunkLength}};
@@ -621,6 +644,18 @@ sub map_reads_keepTrack_similarity
 				my $contigID = $oneChunk->[2];
 				my $posI = $oneChunk->[3];
 				my $readID = $oneChunk->[4];
+				$totalChunkI++;
+				
+				# todo
+				# if($totalChunkI <= 3)
+				# {
+					# print "CHUNK $totalChunkI posI: $posI\n";
+					# print Dumper($oneChunk), "\n";
+				# }
+				# else
+				# {
+					# exit;
+				# }
 				
 				if(defined $limitToReadsIDs)
 				{
@@ -752,9 +787,12 @@ sub getChunkPositions
 				if($lastPos < length($contigSequence))
 				{
 					$read_start_positions++;
-				}
+				} 
 			}  
 		}	
+		
+		# todo 
+		# print Dumper("Contigs: " . length(join(';', @$contigs_A_order)), $chunkLength, $read_start_positions);
 		
 		my $start_rate = 1;
 		if($read_start_positions > $target_max_simulatedChunks)
@@ -796,6 +834,9 @@ sub doJobIFromTemplate
 {
 	my $jobI = shift;
 	my $jobITemplate = shift;
+	
+	# todo
+	# return unless($jobI == 15); 
 	
 	print "Carying out job $jobI (DB $DB) based on template $jobITemplate ($templateDB)\n";
 	
@@ -850,6 +891,9 @@ sub doJobIFromTemplate
 	# todo remove
 	# my @chunk_positions_2 = getChunkPositions($file_A, \@contigIDs_A, $v_for_srand);
 	
+	# todo 
+	# print Dumper(@chunk_positions[0 .. 2]);
+	
 	my $readI = -1;
 	foreach my $oneChunk (@chunk_positions)
 	{
@@ -871,10 +915,14 @@ sub doJobIFromTemplate
 		
 		if(defined $readPositions_aref)
 		{
-			die unless($posI == $readPositions_aref->[$readI][1]);
+			die Dumper("Discrepancy read $readI", $jobI, $jobITemplate, $oneChunk, $readPositions_aref->[$readI][1], $readPositions_aref->[$readI], $outputFn_jobs_fromTemplate, $outputFn_jobs_inTemplateDir, get_readInfo_file_for_jobI_fromTemplateDB($jobITemplate)) unless($posI == $readPositions_aref->[$readI][1]);
+			die Dumper("Discrepancy", $posI, $readPositions_aref->[$readI][1], $readPositions_aref->[$readI], $jobI, $jobITemplate, $v_for_srand, [@chunk_positions[0 .. 10]], $readPositions_aref) unless($posI == $readPositions_aref->[$readI][1]);
+		}
+		else
+		{
+			die; # todo
 		}
 	}
-	
 	
 	# find reads that need to be remapped, and fill histogram with non-remapped reads
 	my %reads_for_remapping;

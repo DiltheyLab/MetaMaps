@@ -3,6 +3,7 @@ package SimulationsMetaPalette;
 use strict;
 use Data::Dumper;
 use Cwd qw/getcwd abs_path/;
+use File::Basename;
 
 use taxTree;
 
@@ -61,9 +62,14 @@ sub doMetaPalette
 	print $cmd_metaPalette, "\n";
 	system($cmd_metaPalette) and die "Couldn't execute metapalette command $cmd_metaPalette";
 	
+	my($reads_fastq_filename, $reads_fastq_dirs, $reads_fastq_suffix) = fileparse($reads_fastq);
+		
+	my $metaPalette_results_file = $metapalette_dir . '/' . $reads_fastq_filename . '.profile';
+	
+	my $filename_reads = 
 	create_compatible_file_from_metapalette( 
 		$jobDir_abs . '/results_metapalette.txt',
-		$metapalette_dir . '/combined_reads.fastq.profile',
+		$metaPalette_results_file,
 		$fullTaxonomyDir,
 	);
 	
