@@ -150,15 +150,16 @@ sub truthReadsToTruthSummary
 			my $v = $taxonID_translation{$taxonID}{$rank};
 			$truth_allReads{$rank}{$v}++;
 		}
-		
-		foreach my $rank (keys %truth_allReads)
-		{
-			foreach my $taxonID (keys %{$truth_allReads{$rank}})
-			{
-				$truth_allReads{$rank}{$taxonID} /= scalar(keys %$truthReads_href);
-			}
-		}
 	}
+	
+		
+	foreach my $rank (keys %truth_allReads)
+	{
+		foreach my $taxonID (keys %{$truth_allReads{$rank}})
+		{
+			$truth_allReads{$rank}{$taxonID} /= scalar(keys %$truthReads_href);
+		}
+	}	
 	
 	return \%truth_allReads;
 }
@@ -284,6 +285,8 @@ sub readLevelComparison
 	my $reads_truth_mappingDB = shift;
 	my $reads_inferred = shift;
 	my $label = shift;
+	my $external_reads_correct = shift;
+	my $external_reads_correct_byLevel = shift;
 	
 	die unless(defined $label);
 	
@@ -338,14 +341,14 @@ sub readLevelComparison
 				}
 			}
 			die unless(defined $shouldBeAssignedTo);
-			push(@categories, 'novel_to' . $shouldBeAssignedTo);
+			push(@categories, 'novel_to_' . $shouldBeAssignedTo);
 		}
-		return ('ALL');
+		return @categories;
 	};
 	
 	my %n_reads_correct;
 	my %n_reads_correct_byLevel;
-	my %taxonID_across_ranks;
+	# my %taxonID_across_ranks;
 	foreach my $readID (@readIDs)
 	{
 		
@@ -429,6 +432,31 @@ sub readLevelComparison
 
 		}
 	}	
+
+	if(defined $external_reads_correct)
+	{
+		foreach my $category (keys %n_reads_correct)
+		{
+			foreach my $key (keys %{$n_reads_correct{$category}})
+			{
+				$external_reads_correct->{$label}{$category}{$key} += $n_reads_correct{$category}{$key};
+			}
+		}
+	}
+	
+	if(defined $external_reads_correct_byLevel)
+	{
+		foreach my $category (keys %n_reads_correct_byLevel)
+		{
+			foreach my $level (keys %{$n_reads_correct_byLevel{$category}})
+			{
+				foreach my $key (keys %{$n_reads_correct_byLevel{$category}{$level}})
+				{
+					$external_reads_correct_byLevel->{$label}{$category}{$level}{$key} += $n_reads_correct_byLevel{$category}{$level}{$key};
+				}
+			}
+		}
+	}	
 }
 
 sub distributionLevelComparison
@@ -437,7 +465,8 @@ sub distributionLevelComparison
 	my $distribution_truth = shift;
 	my $distribution_inferred = shift;
 	my $label = shift;
-
+	my $external_comparison = shift;
+	
 	foreach my $level (@evaluateAccuracyAtLevels)
 	{
 		next unless(defined $distribution_inferred->{$level});
@@ -466,6 +495,12 @@ sub distributionLevelComparison
 		die Dumper("Weird total freq", $label, $totalFreq, $level) unless(abs(1 - $totalFreq) <= 1e-3);
 		
 		print join("\t", $label, $level, $totalFreqCorrect), "\n";
+		
+		if(defined $external_comparison)
+		{
+			$external_comparison->{$label}{$level}{total} += $totalFreq; 
+			$external_comparison->{$label}{$level}{correct} += $totalFreqCorrect; 
+		}
 	}		
 }			
 			
@@ -509,7 +544,7 @@ sub readInferredDistribution
 		my $taxonID_master = taxTree::findCurrentNodeID($taxonomy, $taxonomy_merged, $taxonID_nonMaster);
 				
 		die Dumper(\%line) unless(defined $taxonID_master);
-		die Dumper("Unknown taxon ID $taxonID_master in file $f", $taxonomy->{$taxonID_master}) unless(($taxonID_master eq 'Unclassified') or (defined $taxonomy->{$taxonID_master}));
+		die Dumper("Unknown taxon ID $taxonID_master in file $f", $taxonomy->{$taxonID_master}) unless(($taxonID_master eq 'Undefined') or ($taxonID_master eq 'Unclassified') or (defined $taxonomy->{$taxonID_master}));
 		die unless(defined $line{Absolute});
 		die unless(defined $line{PotFrequency});
 		$inference{$line{AnalysisLevel}}{$taxonID_master}[0] += $line{Absolute};

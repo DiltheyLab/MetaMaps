@@ -224,6 +224,298 @@ elsif($action eq 'analyzeJobI')
 	my $simulation_href = retrieve $simulation_href_fn;
 	evaluateOneSimulation($simulation_href);
 }
+elsif($action eq 'analyzeAll')
+{
+	my $n_simulations_file = $globalOutputDir . '/n_simulations.txt';
+	open(N, '<', $n_simulations_file) or die "Cannot open $n_simulations_file";
+	my $realizedN = <N>;
+	chomp($realizedN);
+	close(N);
+	die unless($realizedN =~ /^\d+$/);
+	
+	my %n_reads_correct_byVariety;
+	my %n_reads_correct_byVariety_byLevel;
+	my %freq_byVariety_byLevel;
+	
+	# for(my $jobI = 0; $jobI < $realizedN; $jobI++)
+	for(my $jobI = 0; $jobI < $realizedN; $jobI++)
+	{
+		my $simulation_href_fn = $globalOutputDir . '/' . $jobI . '/simulationStore';
+		my $simulation_href = retrieve $simulation_href_fn;
+		evaluateOneSimulation($simulation_href, \%n_reads_correct_byVariety, \%n_reads_correct_byVariety_byLevel, \%freq_byVariety_byLevel);	
+	}
+	
+	my @varieties = qw/fullDB removeOne_self removeOne_species removeOne_genus/;
+	die unless(scalar(@varieties) == scalar(keys %n_reads_correct_byVariety));
+	die unless(all {exists $n_reads_correct_byVariety{$_}} @varieties);
+	
+	{
+		my %_methods;
+		my %_readStratification;
+		my %_evaluationLevels;
+		foreach my $variety (@varieties)
+		{
+			foreach my $methodName (keys %{$n_reads_correct_byVariety{$variety}})
+			{
+				$_methods{$methodName}++;
+				foreach my $category (keys %{$n_reads_correct_byVariety{$variety}{$methodName}})
+				{
+					$_readStratification{$category}++;
+					
+					if(exists $n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$category})
+					{
+						foreach my $k (keys %{$n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$category}})
+						{
+							$_evaluationLevels{$k}++;
+						}
+					}
+				}
+			}
+		}
+		die unless(all {$_methods{$_} == scalar(@varieties)} keys %_methods);
+		my @methods = sort keys %_methods;
+		my @readLevels = sort keys %_readStratification;
+		# my @evaluationLevels = sort keys %_evaluationLevels;
+		my @evaluationLevels = qw/species genus family/;
+		die Dumper("Missing evaluation levels", \@evaluationLevels, \%_evaluationLevels) unless(all {exists $_evaluationLevels{$_}} @evaluationLevels);
+		
+		{
+			open(READSABSOLUTELYCORRECT, '>', '_readsAbsolutelyCorrect') or die;
+			my @header_fields_1_absolutelyCorrect = ('ReadLevel');
+			my @header_fields_2_absolutelyCorrect = ('');
+			my @header_fields_3_absolutelyCorrect = ('');
+
+			foreach my $variety (@varieties)
+			{
+				my $hf2_before = $#header_fields_2_absolutelyCorrect;
+				foreach my $method (@methods)
+				{
+					push(@header_fields_2_absolutelyCorrect, $method, '', '');		
+					push(@header_fields_3_absolutelyCorrect, 'N', 'OK', 'M');
+				}
+				my $hf2_after = $#header_fields_2_absolutelyCorrect;
+				my $requiredFields = $hf2_after - $hf2_before;
+				die unless($requiredFields > 0);
+				my @addToHeader1 = ($variety, (('') x ($requiredFields - 1)));
+				die unless(scalar(@addToHeader1) == $requiredFields);
+				push(@header_fields_1_absolutelyCorrect, @addToHeader1);
+			}
+			
+			print READSABSOLUTELYCORRECT join("\t", @header_fields_1_absolutelyCorrect), "\n";
+			print READSABSOLUTELYCORRECT join("\t", @header_fields_2_absolutelyCorrect), "\n";
+			print READSABSOLUTELYCORRECT join("\t", @header_fields_3_absolutelyCorrect), "\n";
+			
+			foreach my $readLevel (@readLevels)
+			{
+				my @output_fields_absolutelyCorrect = ($readLevel);
+					
+				foreach my $variety (@varieties)
+				{
+					foreach my $methodName (@methods)
+					{
+						my $missing = 0;
+						my $N = 0;
+						my $correct = 0;
+						my $percOK = 0;
+						
+						if(exists $n_reads_correct_byVariety{$variety}{$methodName}{$readLevel})
+						{
+							$missing =  $n_reads_correct_byVariety{$variety}{$methodName}{$readLevel}{missing};
+							$N =  $n_reads_correct_byVariety{$variety}{$methodName}{$readLevel}{N};
+							$correct =  $n_reads_correct_byVariety{$variety}{$methodName}{$readLevel}{correct};
+						}
+
+						$percOK = sprintf("%.2f", ($correct / $N)) if($N > 0);
+						
+						push(@output_fields_absolutelyCorrect, $N, $percOK, $missing);
+					}
+				}
+			
+				print READSABSOLUTELYCORRECT join("\t", @output_fields_absolutelyCorrect), "\n";
+			}	
+			
+
+			close(READSABSOLUTELYCORRECT);
+		}
+		
+		{
+			open(READSABSOLUTELYCORRECT, '>', '_readsCorrectByLevel') or die;
+			my @header_fields_1_byLevelCorrect = ('ReadLevel', 'EvaluationLevel');
+			my @header_fields_2_byLevelCorrect = ('', '');
+			my @header_fields_3_byLevelCorrect = ('', '');	
+			
+			foreach my $variety (@varieties)
+			{
+				my $hf2_before = $#header_fields_2_byLevelCorrect;
+				foreach my $method (@methods)
+				{
+					push(@header_fields_2_byLevelCorrect, $method, '', '');		
+					push(@header_fields_3_byLevelCorrect, 'OK', 'OK2', 'M');
+				}
+				my $hf2_after = $#header_fields_2_byLevelCorrect;
+				my $requiredFields = $hf2_after - $hf2_before;
+				die unless($requiredFields > 0);
+				my @addToHeader1 = ($variety, (('') x ($requiredFields - 1)));
+				die unless(scalar(@addToHeader1) == $requiredFields);
+				push(@header_fields_1_byLevelCorrect, @addToHeader1);
+			}
+			
+			print READSABSOLUTELYCORRECT join("\t", @header_fields_1_byLevelCorrect), "\n";
+			print READSABSOLUTELYCORRECT join("\t", @header_fields_2_byLevelCorrect), "\n";
+			print READSABSOLUTELYCORRECT join("\t", @header_fields_3_byLevelCorrect), "\n";
+
+			foreach my $readLevel (@readLevels)
+			{
+				foreach my $evaluationLevel (@evaluationLevels)
+				{
+					my @output_fields_byLevelCorrect = ($readLevel, $evaluationLevel);
+					foreach my $variety (@varieties)
+					{
+						foreach my $methodName (@methods)
+						{				
+							my $missing = 0;
+							my $N = 0;
+							my $N_tD = 0;
+							my $correct = 0;
+							my $correct_tD = 0;
+							my $percOK = 0;
+							my $percOK_tD = 0;
+							my $percMissing = 0;
+							
+							print "N $N \n";
+							if(exists $n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$readLevel}{$evaluationLevel})
+							{
+								$missing = $n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$readLevel}{$evaluationLevel}{missing};
+								$N = $n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$readLevel}{$evaluationLevel}{N};
+								$correct = $n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$readLevel}{$evaluationLevel}{correct};
+								$N_tD = $n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$readLevel}{$evaluationLevel}{N_truthDefined};
+								$correct_tD = $n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$readLevel}{$evaluationLevel}{correct_truthDefined};
+							}					
+							
+							$percOK = sprintf("%.2f", ($correct / $N)) if($N > 0);
+							$percOK_tD = sprintf("%.2f", ($correct_tD / $N_tD)) if($N_tD > 0);
+							$percMissing = sprintf("%.2f", ($missing / $N)) if($N > 0);
+							
+							push(@output_fields_byLevelCorrect, $percOK, $percOK_tD, $percMissing);
+						}
+					}
+					print READSABSOLUTELYCORRECT join("\t", @output_fields_byLevelCorrect), "\n";
+				}
+			}
+			
+			close(READSABSOLUTELYCORRECT);
+		}
+	}
+	{
+		my %_methods;
+		my %_readStratification;
+		my %_evaluationLevels;
+		foreach my $variety (@varieties)
+		{
+			foreach my $methodName (keys %{$freq_byVariety_byLevel{$variety}})
+			{
+				$_methods{$methodName}++;
+				foreach my $level (keys %{$freq_byVariety_byLevel{$variety}{$methodName}})
+				{
+					$_evaluationLevels{$level}++;
+				}
+			}
+		}
+		
+		my @methods = sort keys %_methods;
+		
+		my @evaluationLevels = qw/species genus family/;
+		# my @evaluationLevels = sort keys %_evaluationLevels;
+		die Dumper("Missing evaluation levels", \@evaluationLevels, \%_evaluationLevels) unless(all {exists $_evaluationLevels{$_}} @evaluationLevels);
+				
+		open(FREQEVALUATION, '>', '_frequenciesCorrectByLevel') or die;
+		my @header_fields_1_freqCorrect = ('EvaluationLevel');
+		my @header_fields_2_freqCorrect = ('');
+		
+		foreach my $variety (@varieties)
+		{
+			my $hf2_before = $#header_fields_2_freqCorrect;
+			foreach my $method (@methods)
+			{
+				push(@header_fields_2_freqCorrect, $method);		
+			}
+			my $hf2_after = $#header_fields_2_freqCorrect;
+			my $requiredFields = $hf2_after - $hf2_before;
+			die unless($requiredFields > 0);
+			my @addToHeader1 = ($variety, (('') x ($requiredFields - 1)));
+			die unless(scalar(@addToHeader1) == $requiredFields);
+			push(@header_fields_1_freqCorrect, @addToHeader1);
+		}
+		
+		print FREQEVALUATION join("\t", @header_fields_1_freqCorrect), "\n";
+		print FREQEVALUATION join("\t", @header_fields_2_freqCorrect), "\n";
+		 
+		foreach my $evaluationLevel (@evaluationLevels)
+		{		
+			my @output_fields_freqCorrect = ($evaluationLevel);	
+		
+			foreach my $variety (@varieties)
+			{				
+				foreach my $methodName (@methods)
+				{				
+					my $freqOK = 'NA';
+					
+					if(exists $freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel})
+					{
+						$freqOK = $freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{correct}/$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{total};
+					}
+					
+					push(@output_fields_freqCorrect, $freqOK);
+				}				
+			}	
+			
+			print FREQEVALUATION join("\t", @output_fields_freqCorrect), "\n";
+		}
+		
+		close(FREQEVALUATION);
+	
+	}
+	
+	if(1 == 0)
+	{
+		foreach my $variety (@varieties)
+		{
+			print $variety, "\n";
+			print "\tReads correctly assigned:\n";
+			foreach my $methodName (keys %{$n_reads_correct_byVariety{$variety}})
+			{
+				print "\t\t", $methodName, "\n";
+				foreach my $category (keys %{$n_reads_correct_byVariety{$variety}{$methodName}})
+				{
+					print "\t\t\t", $category, "\n";
+					print "\t\t\t\t", "Missing:  ", $n_reads_correct_byVariety{$variety}{$methodName}{$category}{missing}, "\n";
+					print "\t\t\t\t", "N      :  ", $n_reads_correct_byVariety{$variety}{$methodName}{$category}{N}, "\n";
+					print "\t\t\t\t", "Correct:  ", $n_reads_correct_byVariety{$variety}{$methodName}{$category}{correct}, "\n";
+				}
+			}
+			
+			print "\tReads correctly assigned, by level:\n";
+			foreach my $methodName (keys %{$n_reads_correct_byVariety_byLevel{$variety}})
+			{
+				print "\t\t", $methodName, "\n";
+				foreach my $category (keys %{$n_reads_correct_byVariety_byLevel{$variety}{$methodName}})
+				{
+					print "\t\t\t", $category, "\n";			
+					foreach my $level (keys %{$n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$category}})
+					{
+						print "\t\t\t\t", $level, "\n";			
+						print "\t\t\t\t\t", "Missing   :  ", $n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$category}{$level}{missing}, "\n";
+						print "\t\t\t\t\t", "N         :  ", $n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$category}{$level}{N}, "\n";
+						print "\t\t\t\t\t", "N_td      :  ", $n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$category}{$level}{N_truthDefined}, "\n";
+						print "\t\t\t\t\t", "Correct   :  ", $n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$category}{$level}{correct}, "\n";
+						print "\t\t\t\t\t", "Correct_tD:  ", $n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$category}{$level}{correct_truthDefined}, "\n";
+					}
+				}
+			}		
+		}
+	}
+
+}
 else
 {
 	die "Unknown --action";
@@ -247,7 +539,7 @@ sub inferenceOneSimulation
 		(mkdir($inference_target_dir) or die "Cannot mkdir $inference_target_dir") unless(-d $inference_target_dir);
 		
 		print "Doing inference in $DB_target_dir\n";
-		# doMetaMap($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq});
+		doMetaMap($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq});
 		SimulationsKraken::doKraken($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $krakenDBTemplate, $kraken_binPrefix, $Bracken_dir);
 		if($simulation_href->{inferenceDBs}[$varietyI][2] eq 'fullDB')
 		{
@@ -273,11 +565,14 @@ sub get_files_for_evaluation
 {
 	my $simulation_href = shift;
 	return (
-		'Bracken' => ['distribution', 'results_bracken.txt'],
-		'Kraken' => ['reads', 'results_kraken.txt.reads2Taxon'],
-		'Metamap-U' => ['reads', 'metamap.U.reads2Taxon'],
-		'Metamap-EM' => ['reads', 'metamap.EM.reads2Taxon'],
-		'MetaPalette' => ['distribution', 'results_metapalette.txt', 1]
+		'Bracken-Dist' => ['distribution', 'results_bracken.txt'],
+		'Kraken-Dist' => ['distribution', 'results_kraken.txt'],
+		'MetaMap-EM-Dist' => ['distribution', 'metamap.EM.WIMP'],
+		'MetaMap-U-Dist' => ['distribution', 'metamap.U.WIMP'],
+		'Kraken-Reads' => ['reads', 'results_kraken.txt.reads2Taxon'],
+		'Metamap-U-Reads' => ['reads', 'metamap.U.reads2Taxon'],
+		'Metamap-EM-Reads' => ['reads', 'metamap.EM.reads2Taxon'],
+		# 'MetaPalette' => ['distribution', 'results_metapalette.txt', 1]
 	);
 	# return ('Metamap-U' => 'metamap.U.WIMP', 'Metamap-EM' => 'metamap.EM.WIMP');
 }
@@ -285,7 +580,10 @@ sub get_files_for_evaluation
 sub evaluateOneSimulation 
 {
 	my $simulation_href = shift;
-		
+	my $n_reads_correct_byVariety = shift;
+	my $n_reads_correct_byVariety_byLevel = shift;
+	my $freq_byVariety_byLevel = shift;
+	
 	my $taxonomyFromSimulation_dir = $simulation_href->{outputDirectory} . '/DB_fullDB/taxonomy';
 	my $taxonomy_usedForSimulation = taxTree::readTaxonomy($taxonomyFromSimulation_dir);
 		
@@ -302,6 +600,10 @@ sub evaluateOneSimulation
 	{
 		my $varietyName = $simulation_href->{inferenceDBs}[$varietyI][2];
 		print "Analyse $varietyName\n";
+		
+		$n_reads_correct_byVariety->{$varietyName} = {} unless(defined $n_reads_correct_byVariety->{$varietyName});
+		$n_reads_correct_byVariety_byLevel->{$varietyName} = {} unless(defined $n_reads_correct_byVariety_byLevel->{$varietyName});
+		$freq_byVariety_byLevel->{$varietyName} = {} unless(defined $freq_byVariety_byLevel->{$varietyName});
 		
 		my $simulation_results_dir = $simulation_href->{outputDirectory} . '/inference_' . $varietyName;
 		my $DBdir = $simulation_href->{outputDirectory} . '/DB_' . $varietyName;
@@ -329,6 +631,8 @@ sub evaluateOneSimulation
 		
 		# get distribution
 		my $truth_mappingDatabase_distribution = validation::truthReadsToTruthSummary($specificTaxonomy, $truth_mappingDatabase_reads);
+		
+		# die Dumper($varietyName, $truth_mappingDatabase_distribution);
 		
 		# my %truth_allReads;
 		# my %taxonID_translation;
@@ -373,12 +677,12 @@ sub evaluateOneSimulation
 			if($evaluationType eq 'reads')
 			{
 				my $inferred_reads = validation::readInferredFileReads($specificTaxonomy, $extendedMaster_merged, $f);
-				validation::readLevelComparison($extendedMaster, $truth_raw_reads_href, $truth_mappingDatabase_reads, $inferred_reads, $methodName);
+				validation::readLevelComparison($extendedMaster, $truth_raw_reads_href, $truth_mappingDatabase_reads, $inferred_reads, $methodName, $n_reads_correct_byVariety->{$varietyName}, $n_reads_correct_byVariety_byLevel->{$varietyName});
 			}
 			else
 			{
 				my $inferred_distribution = validation::readInferredDistribution($extendedMaster, $extendedMaster_merged, $f);
-				validation::distributionLevelComparison($extendedMaster, $truth_mappingDatabase_distribution, $inferred_distribution, $methodName);
+				validation::distributionLevelComparison($extendedMaster, $truth_mappingDatabase_distribution, $inferred_distribution, $methodName, $freq_byVariety_byLevel->{$varietyName});
 			}
 			
 			# unclassified = deliberately no caller
@@ -428,7 +732,6 @@ sub addInferenceRoundsWithReducedDBs
 	die unless(scalar(@targetTaxons_shuffled) > 1);
 
 	my $removal_origin = $targetTaxons_shuffled[0];
-	$removal_origin = 1496303; # todo remove
 	
 	my $ancestors_href = taxTree::get_ancestors_by_rank($taxonomy_href, $removal_origin);
 	$ancestors_href->{self} = $removal_origin;
