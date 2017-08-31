@@ -32,11 +32,7 @@ die unless(-e 'estimateSelfSimilarity.pl');
 
 #my $create_simulations = 2;
 #my $perSimulation_totalKnownGenomes = 5;
-my $globalOutputDir = 'new_simulations/';
-unless(-e $globalOutputDir)
-{
-	mkdir($globalOutputDir) or die "Cannot mkdir $globalOutputDir";
-}
+
 my $simulation_read_length = 5000;
 
 # my $taxonomyDir = '/data/projects/phillippy/projects/mashsim/NCBI/refseq/taxonomy/';
@@ -153,6 +149,12 @@ unless(defined $DB)
 	die "Please specify --DB, e.g. databases/miniSeq";
 }
 
+my $globalOutputDir = $DB . '/simulations';
+unless(-e $globalOutputDir)
+{
+	mkdir($globalOutputDir) or die "Cannot mkdir $globalOutputDir";
+}
+
 if($action eq 'prepare')
 {
 	my $DB_fa = $DB . '/DB.fa';
@@ -238,7 +240,7 @@ elsif($action eq 'analyzeAll')
 	my %freq_byVariety_byLevel;
 	
 	# for(my $jobI = 0; $jobI < $realizedN; $jobI++)
-	for(my $jobI = 0; $jobI < $realizedN; $jobI++)
+	for(my $jobI = 0; $jobI < 1; $jobI++)  
 	{
 		my $simulation_href_fn = $globalOutputDir . '/' . $jobI . '/simulationStore';
 		my $simulation_href = retrieve $simulation_href_fn;
@@ -246,8 +248,9 @@ elsif($action eq 'analyzeAll')
 	}
 	
 	my @varieties = qw/fullDB removeOne_self removeOne_species removeOne_genus/;
-	die unless(scalar(@varieties) == scalar(keys %n_reads_correct_byVariety));
-	die unless(all {exists $n_reads_correct_byVariety{$_}} @varieties);
+	@varieties = grep {exists $n_reads_correct_byVariety{$_}} @varieties;
+	#die Dumper(\@varieties, \%n_reads_correct_byVariety) unless(scalar(@varieties) == scalar(keys %n_reads_correct_byVariety));
+	die Dumper(\@varieties, [keys %n_reads_correct_byVariety], "Issue I") unless(all {exists $n_reads_correct_byVariety{$_}} @varieties);
 	
 	{
 		my %_methods;

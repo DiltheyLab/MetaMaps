@@ -548,7 +548,14 @@ sub readInferredDistribution
 		die unless(defined $line{Absolute});
 		die unless(defined $line{PotFrequency});
 		$inference{$line{AnalysisLevel}}{$taxonID_master}[0] += $line{Absolute};
-		$inference{$line{AnalysisLevel}}{$taxonID_master}[1] += $line{PotFrequency};
+		if(exists $line{EMFrequency})
+		{
+			$inference{$line{AnalysisLevel}}{$taxonID_master}[1] += $line{EMFrequency};
+		}
+		else
+		{
+			$inference{$line{AnalysisLevel}}{$taxonID_master}[1] += $line{PotFrequency};
+		}
 	}
 	close(I);	
 	
