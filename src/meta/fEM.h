@@ -83,7 +83,7 @@ void producePotFile(std::string outputFN, const taxonomy& T, std::map<std::strin
 		std::string nodeID = count_per_node.first;
 		assert(T.knowNode(nodeID));
 		std::map<std::string, std::string> upwardByLevel = T.getUpwardNodesByRanks(nodeID, targetLevels);
-		upwardByLevel["EqualCoverageUnit"] = nodeID;
+		upwardByLevel["mappingTarget"] = nodeID;
 		for(auto uN : upwardByLevel)
 		{
 			if(f_per_level[uN.first].count(uN.second) == 0)

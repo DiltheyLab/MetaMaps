@@ -62,6 +62,8 @@ void producePotFile_U(std::string outputFN, const taxonomy& T, std::pair<std::ma
 	for(auto taxonID : combinedKeys)
 	{
 		std::map<std::string, std::string> upwardByLevel = T.getUpwardNodesByRanks(taxonID, targetLevels);
+		upwardByLevel["mappingTarget"] = taxonID;
+
 		for(auto uN : upwardByLevel)
 		{
 			std::string level = uN.first;
