@@ -31,6 +31,7 @@ my $templateDB;
 my $mode;
 my $jobI;
 my $jobITemplate;
+my $autoSubmit = 0;
 my $readSimSize = 2000;
 my $readSimDelta = 1000;
 my $readSimSizeFrom = 2000;
@@ -48,6 +49,7 @@ GetOptions (
 	'jobITemplate:s' => \$jobITemplate, 
 	'mode:s' => \$mode, 
 	'jobI:s' => \$jobI, 
+	'autoSubmit:s' => \$autoSubmit, 
 );
 
 unless($DB and (-d $DB))
@@ -183,6 +185,11 @@ perl $path_to_myself --mode doJobI --DB $DB --jobI \$jobID
 close(QSUB);
 
 	print "\nIf you use an SGE environment, you can do 'qsub $outputFn_qsub' to submit inidividual computation jobs.\n\n";
+	
+	if($autoSubmit)
+	{
+		system("qsub $outputFn_qsub") and die "Could not qsub $outputFn_qsub";
+	}
 }
 elsif($mode eq 'prepareFromTemplate')
 {

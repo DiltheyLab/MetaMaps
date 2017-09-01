@@ -129,7 +129,7 @@ my $DB = 'databases/miniSeq_100';
 my $jobI;
 my $really;
 my $jobIMethod = 'all';
-my $n_simulations = 10;
+my $n_simulations = 1;
 GetOptions (
 	'DB:s' => \$DB,
 	'action:s' => \$action,
@@ -170,30 +170,47 @@ if($action eq 'prepare')
 	fill_contigID_taxonID($DB, $MetaMap_taxonomy, \%contigID_2_taxonID, \%taxonID_2_contigIDs, \%contig_2_length);
 	my %taxon_2_genomeLength = map {$_ => getGenomeLength($_, \%taxonID_2_contigIDs, \%contig_2_length)} keys %taxonID_2_contigIDs;
 	
+	my $fn_log = $globalOutputDir. '/log.txt';	
+	my $fn_selfSimilarities = $globalOutputDir. '/selfSimilarities.txt';	
+	my $fn_selfSimilarities_collect = $globalOutputDir. '/selfSimilarities_collect.txt';	
+		
+		
+	my $fh_log;
+	open($fh_log, '>', $fn_log) or die "Cannot open $fn_log";
 
+	my $fh_selfSimilarities;
+	open($fh_selfSimilarities, '>', $fn_selfSimilarities) or die "Cannot open $fn_selfSimilarities";
+
+	my $fh_selfSimilarities_collect;
+	open($fh_selfSimilarities_collect, '>', $fn_selfSimilarities_collect) or die "Cannot open $fn_selfSimilarities_collect";
+		
 	my @simulations_to_execute;
 	for(my $simulationI = 0; $simulationI < $n_simulations; $simulationI++)
 	{
+		print {$fh_log} "Outer simulation $simulationI\n";
+		
 		my $thisSimulation_outputDirectory = $globalOutputDir . '/' . $simulationI;
 		(mkdir($thisSimulation_outputDirectory) or die "Cannot mkdir $thisSimulation_outputDirectory") unless(-e $thisSimulation_outputDirectory);
 		
 		my $oneSimulation_href;
 		if($simulationI < $n_simulations)
 		{
-			$oneSimulation_href = returnOneSimulation_noUnknown($DB, \%taxonID_2_contigIDs, \%taxon_2_genomeLength, 10, $thisSimulation_outputDirectory, 1, $MetaMap_taxonomy);
+			$oneSimulation_href = returnOneSimulation_noUnknown($DB, \%taxonID_2_contigIDs, \%taxon_2_genomeLength, 10, $thisSimulation_outputDirectory, 1, $MetaMap_taxonomy, $fh_log);
 		}
 		
-		addInferenceRoundsWithReducedDBs($oneSimulation_href, $MetaMap_taxonomy);
+		addInferenceRoundsWithReducedDBs($oneSimulation_href, $MetaMap_taxonomy, $fh_log);
 		
 		push(@simulations_to_execute, $oneSimulation_href);
 	}
 
-	foreach my $oneSimulation_href (@simulations_to_execute)
+	for(my $simulationI = 0; $simulationI <= $#simulations_to_execute; $simulationI++)
 	{
-		executeSimulation($oneSimulation_href, \%taxonID_2_contigIDs, \%contig_2_length);
+		print {$fh_log} "Executing outer simulation $simulationI\n";
+		my $oneSimulation_href = $simulations_to_execute[$simulationI];
+		executeSimulation($oneSimulation_href, \%taxonID_2_contigIDs, \%contig_2_length, $MetaMap_taxonomy, $fh_log, $fh_selfSimilarities, $fh_selfSimilarities_collect);
 	}
 	
-	my $simulations_qsub_file = $globalOutputDir. '/qsub.txt';	
+	my $simulations_qsub_file = $globalOutputDir. '/qsub.txt';	 
 	open(QSUB, '>', $simulations_qsub_file) or die "Cannot open $simulations_qsub_file";
 print QSUB qq(#!/bin/bash
 #\$ -t 1-${n_simulations}
@@ -204,13 +221,16 @@ cd $FindBin::Bin
 perl simulate.pl --action inferenceJobI --DB $DB --jobI \$jobID
 );	
 	close(QSUB);
+	close($fh_log);
+	close($fh_selfSimilarities);
+	close($fh_selfSimilarities_collect);
 	
 	my $n_simulations_file = $globalOutputDir . '/n_simulations.txt';
 	open(N, '>', $n_simulations_file) or die "Cannot open $n_simulations_file";
 	print N $n_simulations, "\n";
-	close(N);
+	close(N); 
 	
-	print "$n_simulations prepared on DB $DB -- if you're in an SGE environment, you can now\n\tqsub $simulations_qsub_file\n\n";
+	print "$n_simulations prepared on DB $DB -- if you're in an SGE environment, you can now\n\n\texecute the commands in $fn_selfSimilarities\n\tand later these in $fn_selfSimilarities_collect\n\n\tqsub $simulations_qsub_file\n\n";
 }
 elsif($action eq 'inferenceJobI')
 {
@@ -730,11 +750,15 @@ sub addInferenceRoundsWithReducedDBs
 {
 	my $simulation_href = shift;
 	my $taxonomy_href = shift;
-
+	my $fh_log = shift;
+	
 	my @targetTaxons_shuffled = shuffle keys %{$simulation_href->{targetTaxons}};
 	die unless(scalar(@targetTaxons_shuffled) > 1);
 
 	my $removal_origin = $targetTaxons_shuffled[0];
+	
+	
+	print {$fh_log} "\tSelected origin for removal: ", $removal_origin, " (", taxTree::taxon_id_get_name(taxTree::node_get_rank_value($taxonomy_href, $removal_origin, 'superkingdom'), $taxonomy_href), " -- ", taxTree::species_or_strain($taxonomy_href, $removal_origin), ") -- ", taxTree::taxon_id_get_name($removal_origin, $taxonomy_href), "\n";
 	
 	my $ancestors_href = taxTree::get_ancestors_by_rank($taxonomy_href, $removal_origin);
 	$ancestors_href->{self} = $removal_origin;
@@ -744,6 +768,7 @@ sub addInferenceRoundsWithReducedDBs
 		next unless(exists $ancestors_href->{$removeRank});
 		my $removeNode = $ancestors_href->{$removeRank};
 		push(@{$simulation_href->{inferenceDBs}}, ['remove', [$removeNode], 'removeOne_' . $removeRank]);
+		print {$fh_log} "\t\tRemoval at level $removeRank: $removeNode -- ", taxTree::taxon_id_get_name($removeNode, $taxonomy_href), "\n";
 	}
 }
 
@@ -756,15 +781,19 @@ sub returnOneSimulation_noUnknown
 	my $outputDirectory = shift;
 	my $equalCoverage = shift;
 	my $taxonomy_href = shift;
+	my $fh_log = shift;
+	
 	die unless(defined $taxonomy_href);
 	
 	die unless($n_species <= scalar(keys %$taxon_2_contig_href));
 	
 	my @availableTaxonIDs = shuffle(keys %$taxon_2_contig_href);
 	
-	@availableTaxonIDs = grep {die unless(defined $taxon_2_genomelength_href->{$_}); ($taxon_2_genomelength_href->{$_} > (5 * $simulation_read_length))} @availableTaxonIDs;
+	@availableTaxonIDs = grep {die unless(defined $taxon_2_genomelength_href->{$_}); ($taxon_2_genomelength_href->{$_} >= 100000)} @availableTaxonIDs;
 	
 	my @selectedTaxa = @availableTaxonIDs[0 .. ($n_species-1)];
+	
+	print {$fh_log} "\tTaxa: ", join(', ', @selectedTaxa), "\n";
 	
 	my %targetTaxonIDs;
 	if($equalCoverage)
@@ -791,9 +820,16 @@ sub returnOneSimulation_noUnknown
 sub executeSimulation
 {
 	my $simulation_href = shift;
+	my $taxonID_2_contigIDs = shift;
+	my $contig_2_length = shift;
+	my $MetaMap_taxonomy = shift;
+	my $fh_log = shift;
+	my $fh_selfSimilarities = shift;
+	my $fh_selfSimilarities_collect = shift;
 	
-	setup_directory_and_simulate_reads($simulation_href);
-	prepareDBs($simulation_href);
+	
+	setup_directory_and_simulate_reads($simulation_href, $MetaMap_taxonomy, $fh_log);
+	prepareDBs($simulation_href, $fh_log, $fh_selfSimilarities, $fh_selfSimilarities_collect);
 	
 	die unless($simulation_href->{dbDirs_metamap});
 	die unless($simulation_href->{readsFastq});
@@ -863,11 +899,16 @@ sub doMetaMap
 sub prepareDBs
 {
 	my $simulation_href = shift;
+	my $fh_log = shift;
+	my $fh_selfSimilarities = shift;
+	my $fh_selfSimilarities_collect = shift;
 	
 	foreach my $inference_variety (@{$simulation_href->{inferenceDBs}})
 	{
 		my $DB_target_dir = $simulation_href->{outputDirectory} . '/DB_' . $inference_variety->[2];
 		my $outputFile_truth_inferenceDB = $DB_target_dir . '/truth_inferenceDB.txt';
+		
+		print {$fh_log} "\t", "Preparing DB variety: $inference_variety->[0]\n";
 		
 		if($inference_variety->[0] eq '$SAME')
 		{
@@ -879,12 +920,12 @@ sub prepareDBs
 			Util::copyMetaMapDB($simulation_href->{DB_simulation}, $DB_target_dir);
 			
 			# todo perhaps resoncier
-			# truthFileFromReadCounts($outputFile_truth_inferenceDB, \%reads_taxon, $taxonomy_simulation);
+			# simulation::truthFileFromReadCounts($outputFile_truth_inferenceDB, \%reads_taxon, $taxonomy_simulation);
 		}
 		else
 		{
 			die unless($inference_variety->[0] eq 'remove');
-			produceReducedDB($simulation_href->{DB_simulation}, $inference_variety->[1], $DB_target_dir);	
+			produceReducedDB($simulation_href->{DB_simulation}, $inference_variety->[1], $DB_target_dir, $fh_selfSimilarities, $fh_selfSimilarities_collect);	
 			
 			# perhaps reconsider
 			# truthFileForReducedInferenceDB();
@@ -897,6 +938,8 @@ sub prepareDBs
 sub setup_directory_and_simulate_reads
 {
 	my $simulation_href = shift;
+	my $MetaMap_taxonomy = shift;
+	my $fh_log = shift;
 
 	my $verbose = 1;
 	
@@ -929,15 +972,28 @@ sub setup_directory_and_simulate_reads
 	
 	# check that target coverages are normalized
 	{
-		print "Target coverage proportions:\n" if($verbose);
+		my %coverages_by_level;
+		print {$fh_log} "\tTarget coverage proportions:\n";
 		my $_s_taxons = 0;
 		foreach my $taxonID (@targetTaxonIDs)
 		{
 			$_s_taxons += $simulation_href->{targetTaxons}{$taxonID};
-			print "\t", $taxonID, ": ", $simulation_href->{targetTaxons}{$taxonID}, "\n" if ($verbose);
+			print {$fh_log} "\t\t", $taxonID, ": ", $simulation_href->{targetTaxons}{$taxonID}, " (", taxTree::taxon_id_get_name($taxonID, $MetaMap_taxonomy), ")\n";
+			my $ancestors_href = taxTree::get_ancestors_with_specific_ranks($MetaMap_taxonomy, $taxonID, [taxTree::getRelevantRanks()]);
+			foreach my $rank (keys %$ancestors_href)
+			{
+				$coverages_by_level{$rank}{$ancestors_href->{$rank}} += $simulation_href->{targetTaxons}{$taxonID};
+			}
+		}
+		
+		my $print_taxon_level = 'superkingdom';
+		print {$fh_log} "\n\t\tBy $print_taxon_level:\n";
+		foreach my $taxonID (sort keys %{$coverages_by_level{$print_taxon_level}})
+		{	
+			print {$fh_log}  "\t\t\t", $taxonID, " / ", taxTree::taxon_id_get_name($taxonID, $MetaMap_taxonomy), ": ", $coverages_by_level{$print_taxon_level}{$taxonID}, "\n";
 		}
 		die unless(abs(1 - $_s_taxons) <= 1e-3);
-		print "\n" if ($verbose);
+		print {$fh_log} "\n";
 	}
 	
 	my $firstTaxon_genomeLength;
@@ -964,14 +1020,14 @@ sub setup_directory_and_simulate_reads
 		}
 	}
 
-	if($verbose)
+	if(1)
 	{
-		print "Genome-size adjusted coverages:\n";
-		foreach my $taxonID (keys %simulationRelativeCoverages)
+		print {$fh_log} "\tGenome-size adjusted coverages:\n";
+		foreach my $taxonID (sort keys %simulationRelativeCoverages)
 		{
-			print "\t", $taxonID, ": ", sprintf("%.3f", $simulationRelativeCoverages{$taxonID}), " (length ", sprintf("%.3f", $taxa_genome_lengths{$taxonID}/(1024**2)), "M)\n";
+			print {$fh_log}  "\t\t", $taxonID, ": ", sprintf("%.3f", $simulationRelativeCoverages{$taxonID}), " (length ", sprintf("%.3f", $taxa_genome_lengths{$taxonID}/(1024**2)), "M)\n";
 		}	
-		print "\n";
+		print {$fh_log} "\n";
 	}
 	
 	my $genome_files_href = extractTaxonIDsFromREF($simulation_FASTA, $simulation_href->{outputDirectory} . '/forSimulation', \%simulationRelativeCoverages, $taxonID_2_contigIDs_href);
@@ -1030,14 +1086,14 @@ sub setup_directory_and_simulate_reads
 		$realizedTaxonProportions{$taxonID} = $reads_taxon{$taxonID} / $totalReads_allTaxa;
 	}
 	
-	if($verbose)
+	if(1)
 	{
-		print "Realized coverages:\n";
+		print {$fh_log} "\tRealized coverages:\n";
 		foreach my $taxonID (@targetTaxonIDs)
 		{
-			print "\t", $taxonID, ": ", $reads_taxon{$taxonID}, " reads, proportion ", sprintf("%.3f", $realizedTaxonProportions{$taxonID}), "; vs target ", sprintf("%.3f", $simulation_href->{targetTaxons}{$taxonID}), "\n";
+			print {$fh_log} "\t\t", $taxonID, ": ", $reads_taxon{$taxonID}, " reads, proportion ", sprintf("%.3f", $realizedTaxonProportions{$taxonID}), "; vs target ", sprintf("%.3f", $simulation_href->{targetTaxons}{$taxonID}), "\n";
 		}	
-		print "\n";
+		print {$fh_log} "\n";
 	}
 	
 	open(READCOUNTS, '>', $outputFile_rawReadCounts) or die "Cannot open $outputFile_rawReadCounts";
@@ -1054,7 +1110,7 @@ sub setup_directory_and_simulate_reads
 	}
 	close(READSTRUTH);
 	
-	truthFileFromReadCounts($outputFile_truthOverCompleteTaxonomy, \%reads_taxon, $taxonomy_simulation);
+	simulation::truthFileFromReadCounts($outputFile_truthOverCompleteTaxonomy, \%reads_taxon, $taxonomy_simulation);
 	
 	$simulation_href->{readsFastq} = $outputFile_combinedReads;
 }
@@ -1064,6 +1120,8 @@ sub produceReducedDB
 	my $baseDB = shift;
 	my $removeNodes_aref = shift;
 	my $targetDir = shift;
+	my $fh_selfSimilarities = shift;
+	my $fh_selfSimilarities_collect = shift;
 	
 	print "produceReducedDB(..)\n";
 	print "\tBase  : ", $baseDB, "\n";
@@ -1103,6 +1161,7 @@ sub produceReducedDB
 	}
 	close(TAXONIN);
 	close(TAXONOUT);
+	
 	# create reduced FASTA
 	my $baseDB_fa = $baseDB . '/DB.fa';
 	my $reducedDB_fa = $targetDir . '/DB.fa';
@@ -1138,11 +1197,17 @@ sub produceReducedDB
 	}
 	
 	die unless(-e 'estimateSelfSimilarity.pl');
-	my $cmd_self_similarity = qq(perl estimateSelfSimilarity.pl --DB $targetDir --templateDB $baseDB --mode prepareFromTemplate);
-	# warn  "Check command:\n$cmd_self_similarity\n\n";
 	
-	system($cmd_self_similarity) and die "Command $cmd_self_similarity failed";
 
+	# my $cmd_self_similarity = qq(perl estimateSelfSimilarity.pl --DB $targetDir --templateDB $baseDB --mode prepareFromTemplate);
+	my $cmd_self_similarity = qq(perl estimateSelfSimilarity.pl --DB $targetDir --mode prepareFromScratch --autoSubmit 1);
+	my $cmd_self_similarity_collect = qq(perl estimateSelfSimilarity.pl --DB $targetDir --mode collect);
+	
+	# warn  "Check command:\n$cmd_self_similarity\n\n";
+	# system($cmd_self_similarity) and die "Command $cmd_self_similarity failed";
+
+	print {$fh_selfSimilarities} $cmd_self_similarity, "\n";	
+	print {$fh_selfSimilarities_collect} $cmd_self_similarity_collect, "\n";	
 	
 	print "\t\tCreated reduced DB ", $targetDir, " with ", scalar(keys %$reducedTaxonomy), " nodes instead of ", scalar(keys %$taxonomy_base), " nodes\n";
 
@@ -1153,77 +1218,7 @@ sub truthFileForReducedInferenceDB
 	die;
 }
 
-sub truthFileFromReadCounts
-{
-	my $outputFn = shift;
-	my $readCounts_href = shift;
-	my $taxonomy_href = shift;
-	
-	my %relevantLevels = map {$_ => 1} taxTree::getRelevantRanks();
-	
-	my %readCount_by_level;
-	foreach my $taxonID (keys %$readCounts_href)
-	{
-		my %thisTaxon_levels;
-		$thisTaxon_levels{'EqualCoverageUnit'} = $taxonID;
-	
-		my @relevantNodes = ($taxonID, taxTree::get_ancestors($taxonomy_href, $taxonID));
-		
-		
-		foreach my $n (@relevantNodes)
-		{
-			my $rank = $taxonomy_href->{$n}{rank};
-			die unless(defined $rank);
-			if(exists $relevantLevels{$rank})
-			{
-				die if(defined $thisTaxon_levels{$rank});
-				$thisTaxon_levels{$rank} = $n;
-			}
-		}
-		
-		foreach my $l ('EqualCoverageUnit', keys %relevantLevels)
-		{
-			if(not defined $thisTaxon_levels{$l})
-			{
-				$thisTaxon_levels{$l} = 'Undefined';
-			}
-			
-			$readCount_by_level{$l}{$thisTaxon_levels{$l}} += $readCounts_href->{$taxonID};
-		}
-	}
-	
-	my $totalReads;
-	open(O, '>', $outputFn) or die "Cannot open $outputFn";
-	print O join("\t", qw/AnalysisLevel taxonID Name Absolute PotFrequency/), "\n";
-	foreach my $level (keys %readCount_by_level)
-	{
-		my $totalReads_thisLevel = 0;
-		foreach my $taxonID (keys %{$readCount_by_level{$level}})
-		{
-			$totalReads_thisLevel += $readCount_by_level{$level}{$taxonID};
-		}
-		
-		if(not defined $totalReads)
-		{
-			$totalReads = $totalReads_thisLevel;
-		}
-		else
-		{
-			die "Discrepancy with total read counts: $totalReads vs $totalReads_thisLevel at level $level" unless($totalReads == $totalReads_thisLevel);
-		}
-		
-		foreach my $taxonID (keys %{$readCount_by_level{$level}})
-		{
-			my $nReads = $readCount_by_level{$level}{$taxonID};
-			my $f = $nReads / $totalReads;
-			my $name = ($taxonID ne 'Undefined') ? taxTree::taxon_id_get_name($taxonID, $taxonomy_href) : 'Undefined';
-			print O join("\t", $level, $taxonID, $name, $nReads, $f), "\n";
-		}
-		
-	}
-	close(O);
-	
-}
+
 sub combineFASTQ
 {
 	my $in_aref = shift;

@@ -508,7 +508,7 @@ sub descendants
 	
 	return @forReturn;
 }
-	
+
 sub descendants_leaves
 {
 	my $tree_href = shift;
@@ -561,7 +561,7 @@ sub get_ancestors
 	my $tree_href = shift;
 	my $node = shift;
 	die unless(defined $node);
-	die unless(exists $tree_href->{$node});
+	die "Node $node doesn't exist!" unless(exists $tree_href->{$node});
 	my $current_id = $node;
 	my @forReturn;
 	while($tree_href->{$current_id}{parent})
@@ -588,6 +588,61 @@ sub get_ancestors_by_rank
 	}
 	return \%byRank;
 }
+
+sub node_get_rank_value
+{
+	my $tree_href = shift;
+	my $node = shift;
+	my $rank = shift;
+	die unless(exists $tree_href->{$node});
+	my $ranks_href = get_ancestors_with_specific_ranks($tree_href, $node, [$rank]);
+	die unless(defined $ranks_href->{$rank});
+	return $ranks_href->{$rank};
+}
+
+sub species_or_strain
+{
+	my $tree_href = shift;
+	my $node = shift;
+	die if(scalar(@{$tree_href->{$node}{children}}));
+	if($node =~ /^x/)
+	{
+		my $parent_id = $tree_href->{$node}{parent};
+		die unless($tree_href->{$parent_id}{rank} eq 'species');
+		return 'strain';
+	}
+	else
+	{
+		if($tree_href->{$node}{rank} eq 'species')
+		{
+			return 'species';
+		}
+		else
+		{
+			my $parent_id = $tree_href->{$node}{parent};
+			die unless($tree_href->{$parent_id}{rank} eq 'species');			
+			return 'strain';
+		}
+	}
+}
+
+sub get_ancestors_with_specific_ranks
+{
+	my $tree_href = shift;
+	my $node = shift;
+	my $ranks_aref = shift;
+	my @ancestor_nodeIDs = get_ancestors($tree_href, $node);
+	my %byRank = map {$_ => 'Undefined'} @$ranks_aref;
+	foreach my $ancestorID (@ancestor_nodeIDs)
+	{
+		my $rank = $tree_href->{$ancestorID}{rank};
+		die unless(defined $rank);
+		next unless(defined $byRank{$rank});
+		$byRank{$rank} = $ancestorID;
+	}
+	return \%byRank;
+}
+
 
 
 
