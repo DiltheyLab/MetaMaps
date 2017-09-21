@@ -241,7 +241,8 @@ std::vector<oneMappingLocation> getMappingLocations(const std::map<std::string, 
 		else
 			assert(readID == line_fields.at(0));
 
-		double identity = std::stod(line_fields.at(12))/100.0;
+		// todo perhaps back to 12
+		double identity = std::stod(line_fields.at(9))/100.0;
 		assert(identity >= 0);
 		assert(identity <= 1);
 
@@ -300,7 +301,14 @@ std::vector<oneMappingLocation> getMappingLocations(const std::map<std::string, 
 		assert(mL.l <= 1);		
 		mL.p = mL.l / p_allLocations;
 	}
-
+	
+	double postNormalization_sum = 0;
+	for(const auto& mL : mappingLocations)
+	{
+		postNormalization_sum += mL.p;
+	}
+	assert(abs(1 - postNormalization_sum) <= 1e-3);
+	
 	return mappingLocations;
 }
 
@@ -379,7 +387,7 @@ void doEM(std::string DBdir, std::string mappedFile)
 		}
 		assert(abs(1 - f_sum) <= 1e-3);
 		
-		// std::cout << "EM round " << EMiteration << std::endl;
+		std::cout << "EM round " << EMiteration << std::endl;
 		
 		double ll_thisIteration = 0;
 		std::map<std::string, double> f_nextIteration = f;
@@ -425,6 +433,12 @@ void doEM(std::string DBdir, std::string mappedFile)
 			fNextIterationE.second /= sum_f_nextIteration;
 		}
 		
+		double sum_postNormalization = 0;
+		for(const auto& fNextIterationE : f_nextIteration)
+		{
+			sum_postNormalization += fNextIterationE.second;
+		}
+		assert(abs(1 - sum_postNormalization) <= 1e-3);
 		
 		if(EMiteration > 0) 
 		{
@@ -436,10 +450,16 @@ void doEM(std::string DBdir, std::string mappedFile)
 			std::cout << "\tImprovement: " << ll_diff << std::endl;
 			std::cout << "\tRelative   : " << ll_relative << std::endl;
 		
+			if((ll_diff < 20) || (EMiteration > 30))
+			{
+				continueEM = false;
+			}
+		/*
 			if(abs(1-ll_relative) < 0.01)
 			{
 				continueEM = false;
 			}
+		*/
 		}
 		
 		f = f_nextIteration;

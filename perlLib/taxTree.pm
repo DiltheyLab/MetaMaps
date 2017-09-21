@@ -701,8 +701,14 @@ sub taxon_id_get_name
 {
 	my $node_id = shift;
 	my $taxonomy = shift;
-	die "ID $node_id undefined" unless(exists $taxonomy->{$node_id});
 	
+	if($node_id eq 0)
+	{
+		return 'Unclassified';
+	}
+	
+	die "ID $node_id undefined" unless(exists $taxonomy->{$node_id});
+
 	my $useName;
 	if($taxonomy->{$node_id}{names}->[1])
 	{

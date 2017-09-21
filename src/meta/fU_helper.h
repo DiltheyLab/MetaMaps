@@ -309,7 +309,6 @@ public:
 		{
 			readLengthHistogram[lI.first] = (double)lI.second / lengths_bestContig.size();
 		}
-		
 	}
 
 	double getReadLengthP(size_t readLength)
@@ -466,7 +465,7 @@ std::map<size_t, double> readReadLengthHistogram(std::string fn)
 		assert(line_fields.size() == 0);
 		size_t readLength = std::stoull(line_fields.at(0));
 		double p = std::stod(line_fields.at(1));
-		assert(forReturn.count(readLength) == 0);
+		assert(forReturn.count(readLength) == 0); 
 		forReturn[readLength] = p;
 		p_sum += p;
 	}
@@ -488,10 +487,10 @@ protected:
 public:
 	identityManager(identityAndReadLengthHistogram& iH, treeAdjustedIdentities& tAI) : iH(iH), tAI(tAI)
 	{		
-		granularReadIdentities = true;
+		granularReadIdentities = false;
 	}
 
-	double getIdentityP(int identity, std::string taxonID, size_t readLength, bool directlyAttached)
+	double getIdentityP(int identity, std::string taxonID, size_t readLength, bool directlyAttached, bool forceIgnoreReadLength = false)
 	{
 		if(directlyAttached)
 		{
@@ -508,7 +507,7 @@ public:
 		else
 		{
 			assert(tAI.D.count(taxonID));
-			if(granularReadIdentities)
+			if(granularReadIdentities && (!forceIgnoreReadLength))
 			{
 				// todo do we really want to bin read lengths?
 				readLength = size_t(readLength/(double)100 + 0.5) * 100;
@@ -523,6 +522,7 @@ public:
 					// printIdentityHistogram(iH.getCompleteIdentityHistogram(), " original");
 					// printIdentityHistogram(histogramForNode, "node " + taxonID + ", read length " + std::to_string(readLength) );
 
+					assert(readLength <= 1e10);
 					std::map<int, double> histogramForNode = getShiftedIdentityHistogramForNode_oneReadLength(taxonID, readLength);
 					
 					double forReturn =(histogramForNode.count(identity)) ? histogramForNode.at(identity) : 0;
@@ -544,6 +544,18 @@ public:
 					return forReturn;
 				}
 			}
+		}
+	}
+	
+	std::map<int, double> getHistogramForNode(std::string taxonID, bool directlyAttached)
+	{
+		if(directlyAttached)
+		{
+			return iH.getCompleteIdentityHistogram();
+		}
+		else
+		{
+			return getShiftedIdentityHistogramForNode(taxonID);
 		}
 	}
 

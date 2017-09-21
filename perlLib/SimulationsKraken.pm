@@ -6,22 +6,32 @@ use Cwd qw/abs_path getcwd/;
 
 use taxTree;
 
-sub doKraken
+sub getKrakenBinPrefix
 {
-	my $jobDir = shift;
-	my $dbDir = shift;
-	my $reads_fastq = shift;
-	
+	return qq(/data/projects/phillippy/software/kraken-0.10.5-beta/bin/kraken);
+}
+
+sub getBrackenDir
+{
+	return qq(/data/projects/phillippy/software/Bracken/);
+}
+
+sub getKrakenDBTemplate()
+{
+	return '/data/projects/phillippy/projects/mashsim/src/krakenDBTemplate/'; # make sure this is current!
+}
+
+
+sub translateMetaMapToKraken
+{
+	my $kraken_dir = shift;
+	my $MetaMapDBDir = shift;
 	my $krakenDBTemplate = shift;
 	my $kraken_binPrefix = shift;
 	my $Bracken_dir = shift;
 	
-	die unless(defined $Bracken_dir);
-	
-	my $kraken_dir = $jobDir . '/kraken/';
-	my $jobDir_abs = abs_path($jobDir);
-	my $dbDir_abs = abs_path($dbDir);
-	
+	my $dbDir_abs = abs_path($MetaMapDBDir);
+		
 	if(-e $kraken_dir)
 	{
 		system("rm -rf $kraken_dir") and die "Cannot delete $kraken_dir";
@@ -32,23 +42,21 @@ sub doKraken
 		mkdir($kraken_dir) or die "Cannot open $kraken_dir";
 	}
 	
-	my $kraken_dir_DB = $jobDir . '/kraken/DB';
-		
-	my $fasta_for_mapping = abs_path($dbDir . '/DB.fa');	
-	die unless(-e $fasta_for_mapping);
-	
-	my $simulatedReads = abs_path($reads_fastq);
-	die unless(-e $simulatedReads);
-	
 	my $pre_chdir_cwd = getcwd();
 	
-	chdir($kraken_dir) or die;  
+	chdir($kraken_dir) or die; 
+
 	
 	if(-e 'DB')
 	{
 		system('rm -rf DB') and die "Cannot rm";
 	}
 	
+			
+	my $fasta_for_mapping = abs_path($dbDir_abs . '/DB.fa');	
+	die "Required DB file $fasta_for_mapping not existing ($MetaMapDBDir)" unless(-e $fasta_for_mapping);	
+	
+
 	my $cmd_copy_DB = qq(cp -r $krakenDBTemplate DB);
 	system($cmd_copy_DB) and die "Cannot cp $krakenDBTemplate";
 	die "DB missing" unless(-d 'DB');
@@ -65,21 +73,40 @@ sub doKraken
 	my $cmd_build_III = qq(export PATH=/data/projects/phillippy/software/jellyfish-1.1.11/bin:\$PATH; /usr/bin/time -v ${kraken_binPrefix}-build --build --threads 16 --db DB &> output_build_III.txt);
 	system($cmd_build_III) and die "Could not execute command: $cmd_build_III";
 
-	my $cmd_classify = qq(/usr/bin/time -v ${kraken_binPrefix} --preload --db DB $simulatedReads > reads_classified);
-	system($cmd_classify) and die "Could not execute command: $cmd_classify";
 	
-	my $cmd_report = qq(/usr/bin/time -v ${kraken_binPrefix}-report --db DB reads_classified > reads_classified_report);
-	system($cmd_report) and die "Could not execute command: $cmd_report";
-		
 	my $cmd_Bracken_selfSimilarity = qq(bash -c '/usr/bin/time -v ${kraken_binPrefix} --db DB --fasta-input --threads=10 <( find -L DB/library \\( -name "*.fna"  -o -name "*.fa" -o -name "*.fasta" \\) -exec cat {} + ) > database_kraken');
 	system($cmd_Bracken_selfSimilarity) and die "Could not execute command: $cmd_Bracken_selfSimilarity";
 
 	my $cmd_Bracken_countkMers = qq(/usr/bin/time -v perl ${Bracken_dir}/count-kmer-abundances.pl --db=DB --read-length=2000 --threads=10 database_kraken > database75mers.kraken_cnts);
 	system($cmd_Bracken_countkMers) and die "Could not execute command: $cmd_Bracken_countkMers";
 	
-	
 	my $cmd_Bracken_kMerDist = qq(/usr/bin/time -v python ${Bracken_dir}/generate_kmer_distribution.py -i database75mers.kraken_cnts -o database75mers.kraken_cnts.bracken);
-	system($cmd_Bracken_kMerDist) and die "Could not execute command: $cmd_Bracken_kMerDist";
+	system($cmd_Bracken_kMerDist) and die "Could not execute command: $cmd_Bracken_kMerDist";	
+	
+	
+	chdir($pre_chdir_cwd) or die;
+	
+	
+}
+
+sub doKrakenOnExistingDB
+{
+	my $kraken_dir = shift;
+	my $simulatedReads = shift;
+	my $outputDir = shift;
+	my $kraken_binPrefix = shift;
+	my $Bracken_dir = shift;
+	
+	my $pre_chdir_cwd = getcwd();
+	
+	chdir($kraken_dir) or die;  
+
+	my $cmd_classify = qq(/usr/bin/time -v ${kraken_binPrefix} --preload --db DB $simulatedReads > reads_classified);
+	system($cmd_classify) and die "Could not execute command: $cmd_classify";
+	
+	my $cmd_report = qq(/usr/bin/time -v ${kraken_binPrefix}-report --db DB reads_classified > reads_classified_report);
+	system($cmd_report) and die "Could not execute command: $cmd_report";
+		
 	
 	foreach my $L (qw/S G F/)
 	{
@@ -88,28 +115,53 @@ sub doKraken
 	}
 	
 	create_compatible_file_from_kraken(
-		$jobDir_abs . '/results_kraken.txt',
+		$outputDir . '/results_kraken.txt',
 		'DB/taxonomy',
 		'reads_classified_report',
 	);
 	
-	
 	create_compatible_reads_file_from_kraken(
-		$jobDir_abs . '/results_kraken.txt.reads2Taxon',
+		$outputDir . '/results_kraken.txt.reads2Taxon',
 		'DB/taxonomy',
 		'reads_classified',
 	);
 		
-		
 	create_compatible_file_from_kraken_bracken(
-		$jobDir_abs . '/results_bracken.txt',
+		$outputDir . '/results_bracken.txt',
 		'DB/taxonomy',
 		'reads_classified_report',
 		'reads_classified_report_bracken_S',
 		'reads_classified_report_bracken_G',
 		'reads_classified_report_bracken_F');
 		
-	chdir($pre_chdir_cwd) or die;
+	chdir($pre_chdir_cwd) or die;			
+}
+
+sub doKraken
+{
+	my $jobDir = shift;
+	my $dbDir = shift;
+	my $reads_fastq = shift;
+	
+	my $krakenDBTemplate = shift;
+	my $kraken_binPrefix = shift;
+	my $Bracken_dir = shift;
+	
+	die unless(defined $Bracken_dir);
+	
+	
+	my $kraken_dir = $jobDir . '/kraken/';
+	my $jobDir_abs = abs_path($jobDir);
+
+	translateMetaMapToKraken($kraken_dir, $dbDir, $krakenDBTemplate, $kraken_binPrefix, $Bracken_dir);
+
+	
+	my $simulatedReads = abs_path($reads_fastq);
+	die unless(-e $simulatedReads);
+	
+	my $outputPrefix = '';
+	doKrakenOnExistingDB($kraken_dir, $simulatedReads, $jobDir_abs, $kraken_binPrefix, $Bracken_dir);
+	
 }
 
 sub create_compatible_file_from_kraken

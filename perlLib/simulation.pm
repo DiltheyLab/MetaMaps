@@ -18,22 +18,31 @@ sub truthFileFromReadCounts
 	foreach my $taxonID (keys %$readCounts_href)
 	{
 		my %thisTaxon_levels;
-		$thisTaxon_levels{'EqualCoverageUnit'} = $taxonID;
-	
-		my @relevantNodes = ($taxonID, taxTree::get_ancestors($taxonomy_href, $taxonID));
-		
-		
-		foreach my $n (@relevantNodes)
+		if($taxonID eq 0)
 		{
-			my $rank = $taxonomy_href->{$n}{rank};
-			die unless(defined $rank);
-			if(exists $relevantLevels{$rank})
+			foreach my $l ('EqualCoverageUnit', keys %relevantLevels)
 			{
-				die if(defined $thisTaxon_levels{$rank});
-				$thisTaxon_levels{$rank} = $n;
+				$thisTaxon_levels{$l} = 0;		
 			}
 		}
+		else
+		{
+			$thisTaxon_levels{'EqualCoverageUnit'} = $taxonID;
 		
+			my @relevantNodes = ($taxonID, taxTree::get_ancestors($taxonomy_href, $taxonID));
+			
+			
+			foreach my $n (@relevantNodes)
+			{
+				my $rank = $taxonomy_href->{$n}{rank};
+				die unless(defined $rank);
+				if(exists $relevantLevels{$rank})
+				{
+					die if(defined $thisTaxon_levels{$rank});
+					$thisTaxon_levels{$rank} = $n;
+				}
+			}
+		}
 		foreach my $l ('EqualCoverageUnit', keys %relevantLevels)
 		{
 			if(not defined $thisTaxon_levels{$l})

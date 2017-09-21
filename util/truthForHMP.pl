@@ -16,6 +16,9 @@ my $fn_out_distribution = $prefix_out . '.distribution';
 
 my $targetDB = '../databases/miniSeq';
 
+my $HMP_fastQ = '/scratch/tmp/hmp_set7_combined.fastq';
+my $HMP_readIDs_href = getReadIDs($HMP_fastQ);
+
 my $masterTaxonomy_dir = '/data/projects/phillippy/projects/MetaMap/downloads/taxonomy';
 my $MetaMap_taxonomy = taxTree::readTaxonomy($masterTaxonomy_dir);
 my $MetaMap_taxonomy_merged = taxTree::readMerged($masterTaxonomy_dir);
@@ -25,12 +28,29 @@ my %alignments_per_readID;
 my %read_2_gis;
 my $n_read_blasr = 0;
 open(BLASRTRUTH, '<', '/data/projects/phillippy/projects/mash_map/Jobs/blasr/hmp/targetAll/all.m4') or die;
+my %haveReadInFastQ;
+my %noReadInFastQ;
+
 while(<BLASRTRUTH>)
 {
 	my $line = $_;
 	chomp($line);
 	my @fields = split(/\s+/, $line);
-	my $readID = $fields[0];
+	my $longReadID = $fields[0];
+	die "Can't parse read ID $longReadID" unless($longReadID =~ /(^.+)\/\d+_\d+$/);
+	my $readID = $1;
+	if(exists $HMP_readIDs_href->{$readID})
+	{
+		#next;
+		#die "Read ID $readID not in HMP FASTQ $HMP_fastQ";
+		$haveReadInFastQ{$readID}++;
+	}
+	else
+	{
+		$noReadInFastQ{$readID}++;
+		next;
+	}
+	# print join("\t", $longReadID, $readID), "\n";
 	my $contigID = $fields[1];
 	my $identity = $fields[3];
 	die unless($identity >= 2); die unless($identity <= 100);
@@ -51,10 +71,13 @@ while(<BLASRTRUTH>)
 	my $gi = $1;
 	push(@{$read_2_gis{$readID}}, [$gi, $alignment_read_length * ($identity/100)]);
 	
-	last if($n_read_blasr > 1000);
 	$n_read_blasr++;
 }
 close(BLASRTRUTH);
+
+print "haveReadInFastQ:", scalar(keys %haveReadInFastQ), "\n";
+print "noReadInFastQ: ", scalar(keys %noReadInFastQ), "\n";
+
 
 
 # statistics
@@ -77,9 +100,21 @@ my %gis_present;
 foreach my $readID (keys %read_2_gis)
 {
 	my @alignments = @{$read_2_gis{$readID}};
+	my $sortAlignments = sub {
+		my $a = shift;
+		my $b = shift;
+		if($a->[1] == $b->[1])
+		{
+			return ($a->[0] cmp $b->[0]);
+		}
+		else
+		{
+			return ($a->[1] <=> $b->[1]);
+		}
+	};	
 	if(scalar(@alignments) > 1)
 	{
-		@alignments = sort {$a->[1] <=> $b->[1]} @alignments;
+		@alignments = sort {$sortAlignments->($a, $b)} @alignments;
 		@alignments = reverse @alignments;
 		die unless($alignments[0][1] >= $alignments[1][1]);
 		
@@ -93,7 +128,6 @@ foreach my $readID (keys %read_2_gis)
 # gi 2 taxon ID
 
 print "Reading gi-2-taxon...\n";
-my %gi_2_taxon;
 unless(-e '/data/projects/phillippy/projects/mashsim/db/gi_taxid_nucl.dmp.HMP')
 {
 	open(GI2TAXON, '<', '/data/projects/phillippy/projects/mashsim/db/gi_taxid_nucl.dmp') or die;
@@ -117,6 +151,7 @@ unless(-e '/data/projects/phillippy/projects/mashsim/db/gi_taxid_nucl.dmp.HMP')
 	print "\n";
 }
 
+my %gi_2_taxon;
 open(GI2TAXON, '<', '/data/projects/phillippy/projects/mashsim/db/gi_taxid_nucl.dmp.HMP') or die;
 while(<GI2TAXON>)
 {
@@ -131,6 +166,8 @@ close(GI2TAXON);
 $gi_2_taxon{126640115} = '400667';
 $gi_2_taxon{126640097} = '400667';
 $gi_2_taxon{126640109} = '400667';
+$gi_2_taxon{161510924} = '451516';
+$gi_2_taxon{32470532} = '176280';
 			
 open(OUT_PERREAD, '>', $fn_out_reads) or die;
 my %read_2_taxonID;
@@ -145,10 +182,40 @@ foreach my $readID (keys %read_2_gis)
 	$read_2_taxonID{$readID} = $taxonID_current;
 	$taxonID_read_counts{$taxonID_current}++;
 }	
-close(OUT_PERREAD);
+
+foreach my $readID (keys %$HMP_readIDs_href)
+{
+	next if(defined $read_2_taxonID{$readID});
+	print OUT_PERREAD join("\t", $readID, 0), "\n";
+	$taxonID_read_counts{0}++;
+}
 
 simulation::truthFileFromReadCounts($fn_out_distribution, \%taxonID_read_counts, $MetaMap_taxonomy);
+close(OUT_PERREAD);
 
 print "\n\nDone. Produced files:\n";
 print "\t - $fn_out_reads \n";
 print "\t - $fn_out_distribution \n";
+
+sub getReadIDs
+{
+	my $fn = shift;
+	
+	my %forReturn;
+	open(F, '<', $fn) or die;
+	while(<F>)
+	{
+		chomp;
+		next unless($_);
+		my $readID = $_;
+		die unless(substr($readID, 0, 1) eq '@');
+		substr($readID, 0, 1) = '';
+		<F>;
+		my $plus = <F>;
+		die unless(substr($plus, 0, 1) eq '+');
+		<F>;
+		$forReturn{$readID}++;
+	}
+	close(F);
+	return \%forReturn;
+}

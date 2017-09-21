@@ -3,7 +3,7 @@
 use strict;
 use warnings;
 use Data::Dumper;
-use List::Util qw/all any shuffle/;
+use List::Util qw/all any shuffle sum/;
 use List::MoreUtils qw/mesh/;
 use Getopt::Long;   
 use File::Path qw(make_path remove_tree);
@@ -52,11 +52,12 @@ my $masterTaxonomy_merged;
 my $PBsim_cmd = qq(/data/projects/phillippy/projects/mashsim/PBSIM-PacBio-Simulator/src/pbsim --model_qc /data/projects/phillippy/projects/mashsim/PBSIM-PacBio-Simulator/data/model_qc_clr --data-type CLR --depth DEPTH --prefix --length-mean $simulation_read_length --accuracy-mean 0.88 REF);
 
 my $metamap_bin = './mashmap';
-my $kraken_binPrefix = qq(/data/projects/phillippy/software/kraken-0.10.5-beta/bin/kraken);
-my $Bracken_dir = qq(/data/projects/phillippy/software/Bracken/);
 my $metaPalette_installation_dir = qq(/data/projects/phillippy/software/MetaPalette/);
 my $jellyfish_2_bin = qq(/data/projects/phillippy/software/jellyfish-2.2.6/bin/jellyfish);
-my $krakenDBTemplate = '/data/projects/phillippy/projects/mashsim/src/krakenDBTemplate/'; # make sure this is current!
+
+my $kraken_binPrefix = SimulationsKraken::getKrakenBinPrefix();
+my $Bracken_dir = SimulationsKraken::getBrackenDir();
+my $krakenDBTemplate = SimulationsKraken::getKrakenDBTemplate();
 
 die unless(-e $metamap_bin);
 
@@ -260,7 +261,7 @@ elsif($action eq 'analyzeAll')
 	my %freq_byVariety_byLevel;
 	
 	# for(my $jobI = 0; $jobI < $realizedN; $jobI++)
-	for(my $jobI = 0; $jobI < 1; $jobI++)  
+	for(my $jobI = 0; $jobI < $realizedN; $jobI++)  
 	{
 		my $simulation_href_fn = $globalOutputDir . '/' . $jobI . '/simulationStore';
 		my $simulation_href = retrieve $simulation_href_fn;
@@ -460,7 +461,7 @@ elsif($action eq 'analyzeAll')
 			my $hf2_before = $#header_fields_2_freqCorrect;
 			foreach my $method (@methods)
 			{
-				push(@header_fields_2_freqCorrect, $method);		
+				push(@header_fields_2_freqCorrect, $method, '', '');		
 			}
 			my $hf2_after = $#header_fields_2_freqCorrect;
 			my $requiredFields = $hf2_after - $hf2_before;
@@ -482,10 +483,14 @@ elsif($action eq 'analyzeAll')
 				foreach my $methodName (@methods)
 				{				
 					my $freqOK = 'NA';
+					my $M_AVGRE = 'NA';
+					my $M_RRMSE = 'NA';
 					
 					if(exists $freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel})
 					{
 						$freqOK = $freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{correct}/$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{total};
+						$M_AVGRE = sum(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{AVGRE}}) / scalar(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{AVGRE}});
+						$M_RRMSE = sum(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{RRMSE}}) / scalar(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{RRMSE}});
 					}
 					
 					push(@output_fields_freqCorrect, $freqOK);
@@ -700,6 +705,11 @@ sub evaluateOneSimulation
 			if($evaluationType eq 'reads')
 			{
 				my $inferred_reads = validation::readInferredFileReads($specificTaxonomy, $extendedMaster_merged, $f);
+				unless(all {exists $truth_raw_reads_href->{$_}} keys %$inferred_reads)
+				{
+					my @missing_readIDs = grep {not exists $truth_raw_reads_href->{$_}} keys %$inferred_reads;
+					die Dumper("Missing some reads in truth file $truth_fn (inference file $f)", @missing_readIDs[0  .. 5]);
+				}
 				validation::readLevelComparison($extendedMaster, $truth_raw_reads_href, $truth_mappingDatabase_reads, $inferred_reads, $methodName, $n_reads_correct_byVariety->{$varietyName}, $n_reads_correct_byVariety_byLevel->{$varietyName});
 			}
 			else

@@ -13,6 +13,36 @@
 #include <iostream>
 #include <assert.h>
 
+template<typename T>
+void printSorted(const std::map<std::string, T>& in, std::string title = "")
+{
+	std::vector<std::string> keys;
+	for(const auto& e : in)
+	{
+		keys.push_back(e.first);
+	}
+	
+	std::sort(keys.begin(), keys.end(), [&](const std::string& a, const std::string& b){
+		return (in.at(a) < in.at(b));
+	});
+	
+	std::reverse(keys.begin(), keys.end());
+	
+	if(title.length())
+		std::cout << title << "\n";
+	
+	for(std::string k : keys)
+	{
+		if(title.length())
+			std::cout << "\t";
+		
+		std::cout << k << ": " << in.at(k) << "\n";
+	}
+	
+	std::cout << std::flush;
+	
+}
+
 void errEx(const std::string& s)
 {
 	std::cerr << s << std::endl;
