@@ -67,7 +67,7 @@ my $outputDir_results = $outputDir . '/results';
 my $outputFn_jobs = $outputDir . '/jobs';
 my $outputFn_jobs_fromTemplate = $outputDir . '/jobs.fromTemplate';
 my $outputFn_qsub = $outputDir . '/jobs.qsub';
-my $outputFn_reads_results_many = $outputDir . '/results.reads.many.byNode';
+my $outputFn_reads_results_many = $outputDir . '/results.reads.many.byNode'
 my $finalResultsFile = $DB . '/selfSimilarities.txt';
 
 my $outputDir_templateDB = ($templateDB // '') . '/selfSimilarity';
@@ -1249,6 +1249,8 @@ sub doCollect
 		
 		my $results_reads_many_fn = get_results_file_for_jobI($jobI);
 		$total_jobs++; 
+		
+		# next unless($jobI == 2607); # todo remove
 		
 		if(-e $results_reads_many_fn)
 		{

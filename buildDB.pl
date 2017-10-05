@@ -146,13 +146,16 @@ for(my $fileI = 0; $fileI <= $#FASTAfiles; $fileI++)
 			
 			my $taxonID = Util::extractTaxonID($contigID, $fileN, $.);
 
-			unless(exists $taxonomy_href->{$taxonID})
-			{
-				die "Taxon ID $taxonID - from file $fileN, line $. - not found in taxonomy -- consider updating your taxonomy directory.";
-			}			
 			if($updateTaxonomy)
 			{
 				taxTree::findCurrentNodeID($new_taxonomy_href, $new_taxonomy_href_merged, $taxonID);
+			}
+			else
+			{
+				unless(exists $taxonomy_href->{$taxonID})
+				{
+					die "Taxon ID $taxonID - from file $fileN, line $. - not found in taxonomy -- consider updating your taxonomy directory.";
+				}			
 			}
 
 			push(@{$taxonID_2_contig{$taxonID}}, substr($contigID, 1));

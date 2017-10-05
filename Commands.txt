@@ -1,0 +1,164 @@
+# miniSeq
+
+perl buildDB.pl --DB databases/miniSeq --FASTAs /data/projects/phillippy/projects/mashsim/db/refseq/ref.fa --taxonomy /data/projects/phillippy/projects/mashsim/NCBI/refseq/taxonomy/
+
+perl buildDB.pl --DB databases/miniSeq --FASTAs /data/projects/phillippy/projects/mashsim/db/refseq/ref.fa --taxonomy /data/projects/phillippy/projects/mashsim/src/krakenDBTemplate/taxonomy --oldTaxonomy /data/projects/phillippy/projects/mashsim/NCBI/refseq/taxonomy/ --updateTaxonomy 1
+
+
+# miniSeq plus human
+
+perl util/addTaxonIDToFasta.pl --inputFA /data/projects/phillippy/references/h_sapiens/hg38/hg38.primary.fna --outputFA /data/projects/phillippy/references/h_sapiens/hg38/hg38.primary.fna.with9606 --taxonID 9606
+
+perl buildDB.pl --DB databases/miniSeq+H --FASTAs /data/projects/phillippy/projects/mashsim/db/refseq/ref.fa,/data/projects/phillippy/references/h_sapiens/hg38/hg38.primary.fna.with9606 --taxonomy /data/projects/phillippy/projects/MetaMap/downloads/taxonomy --oldTaxonomy /data/projects/phillippy/projects/mashsim/NCBI/refseq/taxonomy/
+
+
+perl buildDB.pl --DB databases/miniSeq_100 --FASTAs /data/projects/phillippy/projects/mashsim/db/refseq/ref.fa --taxonomy /data/projects/phillippy/projects/mashsim/src/krakenDBTemplate/taxonomy --maxSpecies 100 --oldTaxonomy /data/projects/phillippy/projects/mashsim/NCBI/refseq/taxonomy/ --updateTaxonomy 1
+
+
+# smallSeq
+
+perl annotateRefSeqSequencesWithUniqueTaxonIDs.pl --refSeqDirectory /data/projects/phillippy/projects/mashsim/NCBI/refseq/ --taxonomyInDirectory /data/projects/phillippy/projects/MetaMap/downloads/taxonomy --taxonomyOutDirectory /data/projects/phillippy/projects/mashsim/NCBI_taxonomy_modified
+
+perl buildDB.pl --DB databases/smallSeq --FASTAs /data/projects/phillippy/projects/mashsim/NCBI/refseq/ --taxonomy /data/projects/phillippy/projects/mashsim/NCBI_taxonomy_modified
+
+# complete DB
+
+perl downloadRefSeq.pl --seqencesOutDirectory downloads/refseq --taxonomyOutDirectory downloads/taxonomy
+
+perl annotateRefSeqSequencesWithUniqueTaxonIDs.pl --refSeqDirectory downloads/refseq --taxonomyInDirectory downloads/taxonomy --taxonomyOutDirectory downloads/taxonomy_uniqueIDs
+
+perl buildDB.pl --DB databases/completeSeq --FASTAs /data/projects/phillippy/projects/mashsim/NCBI/refseq/ --taxonomy /data/projects/phillippy/projects/mashsim/NCBI_taxonomy_modified
+
+perl buildDB.pl --DB databases/refseq --FASTAs downloads/refseq_download_test --taxonomy downloads/taxonomy_download_test_annotated
+
+
+
+// manual mapping of HMP7
+
+/usr/bin/time -v ./mashmap mapDirectly --all -r databases/miniSeq/DB.fa -q /scratch/tmp/hmp_set7_combined.fastq -m 2000 --pi 80 -o tmp/hmp7_2_miniSeq &> tests/resources/hmp7_2_miniseq
+
+
+
+// for testing of equivalence
+
+
+
+
+// map directly with / without memory limitation
+
+./mashmap mapDirectly -r /data/projects/phillippy/projects/rDNA/alignGenome2/modified_references/GRCh38_1000G/hs38DH.fa -q /data/projects/phillippy/seq/NA12878/NA12878_nanopore/rev3_and_4/combined.fastq.short -m 2000 --pi 80 -o tests/np_rev34_short_newMashMap_noLimit > tests/np_rev34_short_newMashMap_noLimit.resources
+
+/usr/bin/time -v ./mashmap mapDirectly -r /data/projects/phillippy/projects/rDNA/alignGenome2/modified_references/GRCh38_1000G/hs38DH.fa -q /data/projects/phillippy/seq/NA12878/NA12878_nanopore/rev3_and_4/combined.fastq.short --all -m 2000 --pi 80 --mm 2 -o tests/np_rev34_short_newMashMap_2G &> tests/np_rev34_short_newMashMap_2G.resources
+
+// index and map without memory limitation
+
+/usr/bin/time -v /data/projects/phillippy/software/mashmap/mashmap -s /data/projects/phillippy/projects/rDNA/alignGenome2/modified_references/GRCh38_1000G/hs38DH.fa -q /data/projects/phillippy/seq/NA12878/NA12878_nanopore/rev3_and_4/combined.fastq.short -m 2000 --pi 80 --all -o tests/np_rev34_short_classicalMashMap &>  tests/resources/old_indexAndMap;\
+/usr/bin/time -v ./mashmap mapDirectly --all -r /data/projects/phillippy/projects/rDNA/alignGenome2/modified_references/GRCh38_1000G/hs38DH.fa -q /data/projects/phillippy/seq/NA12878/NA12878_nanopore/rev3_and_4/combined.fastq.short -m 2000 --pi 80 -o tests/np_rev34_short_newMashMap_noLimit &> tests/resources/new_doMapWithoutIndex;\
+/usr/bin/time -v ./mashmap index -r /data/projects/phillippy/projects/rDNA/alignGenome2/modified_references/GRCh38_1000G/hs38DH.fa -i tests/np_rev34_short_newMashMap_INDEX -m 2000 --pi 80 &> tests/resources/new_doIndex;\
+/usr/bin/time -v ./mashmap mapAgainstIndex --all -i tests/np_rev34_short_newMashMap_INDEX -q /data/projects/phillippy/seq/NA12878/NA12878_nanopore/rev3_and_4/combined.fastq.short  -o tests/mapWithIndex  &> tests/resources/new_doMapAgainstIndex;\
+/usr/bin/time -v ./mashmap index -r /data/projects/phillippy/projects/rDNA/alignGenome2/modified_references/GRCh38_1000G/hs38DH.fa -i tests/np_rev34_short_newMashMap_INDEX2G --mm 2 -m 2000 --pi 80 &> tests/resources/new_doIndex_2G;\
+/usr/bin/time -v ./mashmap mapAgainstIndex --all -i tests/np_rev34_short_newMashMap_INDEX2G -q /data/projects/phillippy/seq/NA12878/NA12878_nanopore/rev3_and_4/combined.fastq.short  -o tests/mapWithIndex  &> tests/resources/new_doMapAgainstIndex_2G
+
+
+// Comparison
+
+
+
+./mashmap mapDirectly -r /data/projects/phillippy/projects/rDNA/potentialNewReferenceSequence.fa -q /data/projects/phillippy/projects/rDNA/testFa.fa -o t1
+
+./mashmap index -r /data/projects/phillippy/projects/rDNA/potentialNewReferenceSequence.fa -i id1
+
+./mashmap mapAgainstIndex -i id1 -q /data/projects/phillippy/projects/rDNA/testFa.fa -o t3
+
+
+/data/projects/phillippy/projects/rDNA/potentialNewReferenceSequence.fa
+
+// Check new vs old mappings, no memory limit
+
+perl util/compareMappings.pl tests/np_rev34_short_classicalMashMap tests/np_rev34_short_newMashMap_noLimit 
+
+
+
+// On miniSeq
+
+
+
+/usr/bin/time -v /data/projects/phillippy/software/mashmap/mashmap -s databases/miniSeq/DB.fa -q /scratch/tmp/hmp_set7_combined.fastq -m 2000 --pi 80 --all -o tmp/hmp7_miniSeq_classicalMashMap &>  tests/resources/hmp7_miniseq_classical &
+
+
+/usr/bin/time -v ./mashmap mapDirectly --all -r databases/miniSeq/DB.fa -q /scratch/tmp/hmp_set7_combined.fastq -m 2000 --pi 80 -o tmp/hmp7_miniSeq &> tests/resources/hmp7_miniseq & 
+/usr/bin/time -v ./mashmap mapDirectly --mm 20 --all -r databases/miniSeq/DB.fa -q /scratch/tmp/hmp_set7_combined.fastq -m 2000 --pi 80 -o tmp/hmp7_20Gdirect_miniSeq &> tests/resources/hmp7_20Gdirect_miniseq &
+
+/usr/bin/time -v ./mashmap index -r databases/miniSeq/DB.fa -i databases/miniSeq/DB.fa.index --mm 20 -m 2000 --pi 80 &> tests/resources/hmp7_20Gindex_miniseq; /usr/bin/time -v ./mashmap mapAgainstIndex --all -i databases/miniSeq/DB.fa.index -q /scratch/tmp/hmp_set7_combined.fastq -o tmp/hmp7_againstIndex_miniSeq  &> tests/resources/hmp7_againstIndex_miniSeq
+
+
+// classification
+
+./mashmap classify --mappings tmp/hmp7_miniSeq --DB databases/miniSeq 
+
+// download testing
+
+perl downloadRefSeq.pl --seqencesOutDirectory downloads/refseq_download_test --taxonomyOutDirectory downloads/taxonomy_download_test
+
+// some self-similariy tests
+
+
+// get clean copies of simulations
+ 
+cp -r /data/projects/phillippy/projects/MetaMap/new_simulations/0/DB_removeOne_species/ /data/projects/phillippy/projects/MetaMap/new_simulations/0/DB_removeOne_species_2
+cp -r /data/projects/phillippy/projects/MetaMap/new_simulations/0/DB_removeOne_self /data/projects/phillippy/projects/MetaMap/new_simulations/0/DB_removeOne_species_self_2
+cp -r /data/projects/phillippy/projects/MetaMap/new_simulations/0/DB_removeOne_genus /data/projects/phillippy/projects/MetaMap/new_simulations/0/DB_removeOne_genus_2
+
+
+// carry out prepation
+
+perl estimateSelfSimilarity.pl --DB databases/miniSeq --mode prepareFromScratch
+perl estimateSelfSimilarity.pl --DB databases/miniSeq --mode collect
+
+
+perl estimateSelfSimilarity.pl --DB databases/miniSeq_100 --mode prepareFromScratch
+perl estimateSelfSimilarity.pl --DB new_simulations/0/DB_removeOne_self --mode prepareFromScratch
+perl estimateSelfSimilarity.pl --DB new_simulations/0/DB_removeOne_species --mode prepareFromScratch
+perl estimateSelfSimilarity.pl --DB new_simulations/0/DB_removeOne_genus --mode prepareFromScratch
+
+qsub databases/miniSeq_100//selfSimilarity/jobs.qsub
+qsub new_simulations/0/DB_removeOne_self/selfSimilarity/jobs.qsub
+qsub new_simulations/0/DB_removeOne_species/selfSimilarity/jobs.qsub
+qsub new_simulations/0/DB_removeOne_genus/selfSimilarity/jobs.qsub
+
+
+perl estimateSelfSimilarity.pl --DB databases/miniSeq_100 --mode collect
+perl estimateSelfSimilarity.pl --DB new_simulations/0/DB_removeOne_self --mode collect
+perl estimateSelfSimilarity.pl --DB new_simulations/0/DB_removeOne_species --mode collect
+perl estimateSelfSimilarity.pl --DB new_simulations/0/DB_removeOne_genus --mode collect
+
+
+perl estimateSelfSimilarity.pl --DB new_simulations/0/DB_removeOne_self_2 --template databases/miniSeq_100 --mode prepareFromTemplate
+perl estimateSelfSimilarity.pl --DB new_simulations/0/DB_removeOne_species_2 --template databases/miniSeq_100 --mode prepareFromTemplate
+perl estimateSelfSimilarity.pl --DB new_simulations/0/DB_removeOne_genus2 --template databases/miniSeq_100 --mode prepareFromTemplate
+
+
+// HMP7
+
+
+
+/usr/bin/time -v ./mashmap mapDirectly -r databases/miniSeq/DB.fa -q /scratch/tmp/hmp_set7_combined.fastq --all -o /scratch/tmp/MetaMap/hmp_set7 &> runtime_HMP7_miniSeq.txt
+./mashmap classify --mappings /scratch/tmp/MetaMap/hmp_set7 --DB databases/miniSeq 
+
+/usr/bin/time -v ./mashmap mapDirectly -r databases/miniSeq/DB.fa -q /scratch/tmp/hmp_set7_combined.fastq --all -o /scratch/tmp/MetaMap/hmp_set7_limitedMemory --mm 20 &> runtime_HMP7_miniSeq_mm20.txt
+./mashmap classify --mappings /scratch/tmp/MetaMap/hmp_set7_limitedMemory --DB databases/miniSeq 
+
+
+/usr/bin/time -v ./mashmap mapDirectly -r databases/refseq/DB.fa -q /scratch/tmp/hmp_set7_combined.fastq --all -o /scratch/tmp/MetaMap/hmp_set7_limitedMemory --mm 80 &> runtime_HMP7_refSeq.txt
+
+// benchmark
+
+perl benchmarkInference.pl --mappings /scratch/tmp/MetaMap/hmp_set7.EM --DB databases/miniSeq --truth tmp/truthHMP7
+
+// benchmark against Kraken
+
+perl convertMetaMapToKraken.pl databases/miniSeq
+perl callKrakenOnConvertedDB.pl databases/miniSeq /scratch/tmp/hmp_set7_combined.fastq /scratch/tmp/hmp_set7_combined_kraken_results
+
+// HMP7 classical mapping
+

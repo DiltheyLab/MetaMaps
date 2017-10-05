@@ -14,7 +14,7 @@
 #include <assert.h>
 
 template<typename T>
-void printSorted(const std::map<std::string, T>& in, std::string title = "")
+void printSorted(const std::map<std::string, T>& in, std::string title = "", double threshold = 0)
 {
 	std::vector<std::string> keys;
 	for(const auto& e : in)
@@ -33,10 +33,13 @@ void printSorted(const std::map<std::string, T>& in, std::string title = "")
 	
 	for(std::string k : keys)
 	{
-		if(title.length())
-			std::cout << "\t";
-		
-		std::cout << k << ": " << in.at(k) << "\n";
+		if((threshold == 0) || (in.at(k) >= threshold))
+		{
+			if(title.length())
+				std::cout << "\t";
+			
+			std::cout << k << ": " << in.at(k) << "\n";
+		}
 	}
 	
 	std::cout << std::flush;

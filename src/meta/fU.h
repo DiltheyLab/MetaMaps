@@ -72,6 +72,55 @@ void produceShiftedHistograms(std::string output_shifted_frequencies_file, ident
 
 }
 
+void printGenusLevelSummary(const taxonomy& T, std::pair<std::map<std::string, double>, std::map<std::string, double>> frequencies)
+{
+	std::map<std::string, double> combinedF;
+	
+	for(auto fE : frequencies.first)
+	{
+		std::map<std::string, std::string> upwardByLevel = T.getUpwardNodesByRanks(fE.first, {"genus"});
+		std::string fE_genus = upwardByLevel.at("genus");
+		std::string fE_genus_name = (fE_genus != "Undefined") ? T.getNode(fE_genus).name.scientific_name : fE_genus;
+		
+		if(combinedF.count(fE_genus_name) == 0)
+		{
+			combinedF[fE_genus_name] = 0;
+		}
+		combinedF.at(fE_genus_name) += fE.second;
+	}
+	
+	for(auto fE : frequencies.second)
+	{
+		std::map<std::string, std::string> upwardByLevel = T.getUpwardNodesByRanks(fE.first, {"genus"});
+		std::string fE_genus = upwardByLevel.at("genus");
+		std::string fE_genus_name = (fE_genus != "Undefined") ? T.getNode(fE_genus).name.scientific_name : fE_genus;
+		
+		if(combinedF.count(fE_genus_name) == 0)
+		{
+			combinedF[fE_genus_name] = 0;
+		}
+		combinedF.at(fE_genus_name) += fE.second;
+	}
+	
+	std::vector<std::string> f_keys;
+	for(auto fE : combinedF)
+	{
+			f_keys.push_back(fE.first);
+	}
+	std::sort(f_keys.begin(), f_keys.end());
+	
+	std::cout << "Genus-level summary:\n";
+	for(auto fK : f_keys)
+	{		
+		double f = combinedF.at(fK);
+		if(f >= 0.001)
+		{
+			std::cout << fK << "\t" << f << "\n";
+		}
+	}
+	std::cout << "\n\n";
+}
+
 void producePotFile_U(std::string outputFN, const taxonomy& T, std::pair<std::map<std::string, double>, std::map<std::string, double>> frequencies, std::pair<std::map<std::string, size_t>, std::map<std::string, size_t>> readCount, size_t mappableReads)
 {
 	double initial_f_sum = 0;
@@ -241,7 +290,6 @@ std::vector<oneMappingLocation_U> getMappingLocations_U(identityManager& iM, con
 {
 	assert(readLines.size() > 0);
 
-
 	bool verbose = false;
 	std::set<std::string> directMappingsTaxonIDs;
 	for(auto line : readLines)
@@ -321,7 +369,7 @@ std::vector<oneMappingLocation_U> getMappingLocations_U(identityManager& iM, con
 		l.direct = true;
 		l.l = f.first.at(contig_taxonID) * iM.getIdentityP(identityInt, contig_taxonID, readLength, true);
 
-		if((bestDirectMappings.count(contig_taxonID) == 0) || (bestDirectMappings.at(contig_taxonID).l < l.l))
+		if((bestDirectMappings.count(contig_taxonID) == 0) || (bestDirectMappings.at(contig_taxonID).identity < l.identity))
 		{
 			bestDirectMappings[contig_taxonID] = l;
 		}
@@ -344,7 +392,7 @@ std::vector<oneMappingLocation_U> getMappingLocations_U(identityManager& iM, con
 			lI.direct = false;
 			lI.l = f.second.at(indirectTaxon) * iM.getIdentityP(identityInt, indirectTaxon, readLength, false);
 			
-			if((bestInDirectMappings.count(indirectTaxon) == 0) || (bestInDirectMappings.at(indirectTaxon).l < lI.l))
+			if((bestInDirectMappings.count(indirectTaxon) == 0) || (bestInDirectMappings.at(indirectTaxon).identity < lI.identity))
 			{
 				bestInDirectMappings[indirectTaxon] = lI;
 			}
@@ -454,8 +502,9 @@ std::pair<int, int> getMinMaxIdentities(std::string mappedFile)
 	{
 		for(const auto& line : readLines)
 		{
-			std::vector<std::string> line_fields = split(line, " ");		
-			double identity = std::stod(line_fields.at(12))/100.0;
+			std::vector<std::string> line_fields = split(line, " ");
+			// todo consider 12
+			double identity = std::stod(line_fields.at(9))/100.0;
 			assert(identity >= 0);
 			assert(identity <= 1);
 			int identityInt = int((identity * 100) + 0.5);
@@ -515,8 +564,12 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 	
 	std::vector<size_t> unmappedReadsLengths = getUnmappedReadsStats(mappedFile);
 	assert(unmappedReadsLengths.size() == nUnmapped); // can remove later
-	std::cout << "Unmapped reads: " << nUnmapped << "\n" << std::flush;
-	std::cout << "nTotalReads: " << nTotalReads << "\n" << std::flush;
+	
+	// Todo consider removing the following
+	std::cout << "\nnTotalReads: " << nTotalReads << "\n" << std::flush;	
+	std::cout << "Reads too short: " << nTooShort << "\n" << std::flush;	
+	std::cout << "Reads mappable: " << nReadsMappable << "\n" << std::flush;	
+	std::cout << "Unmapped (but long enough) reads: " << nUnmapped << "\n\n" << std::flush;
 	
 	// set up nodes to map to
 
@@ -574,6 +627,9 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 			f_sum += tF.second;
 		}
 
+		// todo remove
+		std::cout << "f_sum: " << f_sum << "\n" << std::flush;
+		
 		for(auto& tF : fToN.first)
 		{
 			tF.second /= f_sum;
@@ -615,8 +671,10 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 		std::map<std::string, size_t> bestMappings_perTaxonID;
 
 		size_t allReads_has_1654 = 0;
+		size_t allReads_has_209 = 0;
 		size_t allReads_has_1654_and_1301 = 0;
-		size_t processedRead = 0;		
+		size_t processedRead = 0;
+		int printedReads = 0;
 		std::function<void(const std::vector<std::string>&)> processOneRead = [&](const std::vector<std::string>& readLines) -> void
 		{
 			processedRead++;
@@ -637,7 +695,7 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 			std::set<std::string> observedTaxonIDs_indirect;
 			
 			bool has_1654 = false;
-			bool has_1301 = false;
+			bool has_209 = false;
 			double l_read = 0;
 			double p_read = 0;
 			for(const auto& mL : mappingLocations)
@@ -661,19 +719,40 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 					if(mL.taxonID == "1654")
 						has_1654 = true;
 					
-					if(mL.taxonID == "1301")
-						has_1301 = true;					
+					if(mL.taxonID == "209")
+						has_209 = true;
 				}
 			}
 			
 			if(has_1654)
 			{
+				// assert(EMiteration == 0);
+				
 				allReads_has_1654++;
-				if(has_1301)
+				if(has_209)
 				{
-					allReads_has_1654_and_1301++;
+					//allReads_has_1654_and_1301++;
 				}
 			}
+			
+			
+			if(has_209)
+			{
+				allReads_has_209++;
+				
+				/// todo
+				if(printedReads < 15)
+				{
+					std::cout << "Round " << EMiteration << " read ID " << getReadIDFromReadLines(readLines) << "\n";
+					for(const auto& mL : mappingLocations)
+					{
+						std::cout << "\t" << mL.taxonID << " " << mL.p << " " << mL.identity << "\n";
+					}
+					std::cout << "\n" << std::flush;
+					printedReads++;
+				}				
+			}
+			
 			assert(abs(1 - p_read) <= 1e-3);
 			ll_thisIteration_mapped += log(l_read);
 		};
@@ -681,12 +760,20 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 		callBackForAllReads(mappedFile, processOneRead);
 		std::cout << "\n";
 		
+		// todo
 		std::cout << "allReads_has_1654" << "\t" << allReads_has_1654 << "\n";
+		std::cout << "allReads_has_209" << "\t" << allReads_has_209 << "\n";
 		std::cout << "allReads_has_1654_and_1301" << "\t" << allReads_has_1654_and_1301 << "\n" << std::flush;
 		// assert(2 == 3);
 			
 		std::string taxonID_print = "1654";
 
+		// todo
+		std::cout << "Intermediate stats round " << EMiteration << "\n";
+		std::cout << "1654 pre unmapped: " << f_nextIteration.second.at("1654") << "\n";
+		std::cout << "209 pre unmapped: " << f_nextIteration.second.at("209") << "\n";
+		std::cout << "52773 pre unmapped: " << f_nextIteration.first.at("52773") << "\n";
+		
 		double ll_thisIteration_unmapped = 0;
 		if(EMiteration >= round_first_unknown)
 		{
@@ -727,7 +814,7 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 					{		
 						if(tID.second > 0.001)
 						{
-							std::cout << "\t" << tID.first << " " << tID.second << "\n";
+							std::cout << "\t" << tID.first << " " << tID.second << " [" << f.second.at(tID.first) << " x " << iM.getIdentityP(0, tID.first, oneUnmappedReadLength, false) << "]\n";
 						}
 						if((maxP.length() == 0) || (maxP_value < tID.second))
 						{
@@ -754,10 +841,18 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 				firstRead = false;
 			}
 			
-			printSorted(taxonIDs_assignedUnmapped, "Unmapped read assignment:");
+			printSorted(taxonIDs_assignedUnmapped, "Unmapped read assignment:", 10);
 		}
 
+		// todo remove
+		std::cout << "1654 post unmapped: " << f_nextIteration.second.at("1654") << "\n";
+		std::cout << "209 post unmapped: " << f_nextIteration.second.at("209") << "\n";
+		std::cout << "52773 post unmapped: " << f_nextIteration.first.at("52773") << "\n";
 		normalize_f(f_nextIteration);
+		std::cout << "1654: " << f_nextIteration.second.at("1654") << "\n" << std::flush;
+		std::cout << "209: " << f_nextIteration.second.at("209") << "\n" << std::flush;
+		std::cout << "52773: " << f_nextIteration.first.at("52773") << "\n" << std::flush;
+		std::cout << "\n";
 		
 		double ll_thisIteration = ll_thisIteration_mapped + ll_thisIteration_unmapped;
 
@@ -795,9 +890,11 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 		
 		if(EMiteration == (round_first_unknown - 1))
 		{
+			// todo
 			std::cout << "Before renormalization:\n";
 			for(auto& taxonIDf : f_nextIteration.second)
 			{
+				if(taxonIDf.second > 0.001)
 					std::cout << "\t" << taxonIDf.first << ": " << taxonIDf.second << "\n";
 			}
 			std::cout << "\n";
@@ -823,6 +920,7 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 			std::cout << "After renormalization:\n";
 			for(auto& taxonIDf : f_nextIteration.second)
 			{
+				if(taxonIDf.second > 0.001)				
 					std::cout << "\t" << taxonIDf.first << ": " << taxonIDf.second << "\n";
 			}
 			std::cout << "\n" << std::flush;			
@@ -838,6 +936,9 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 			f_sum_postNormalization += tF.second;
 		}	
 		assert(abs(1 - f_sum_postNormalization) <= 1e-3);
+		
+		std::cout << "For round " << EMiteration << "\n";
+		printGenusLevelSummary(T, f_nextIteration);
 		
 		f = f_nextIteration;
 		EMiteration++;
