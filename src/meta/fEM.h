@@ -19,6 +19,10 @@
 #include "util.h"
 #include "taxonomy.h"
 
+#include <boost/math/distributions/chi_squared.hpp>
+#include <boost/math/distributions/poisson.hpp>
+#include <boost/math/distributions/binomial.hpp>
+
 namespace meta
 {
 std::string extractTaxonId(std::string line);
@@ -27,6 +31,7 @@ std::set<std::string> getTaxonIDsFromMappingsFile(std::string mappedFile);
 void callBackForAllReads(std::string mappedFile, std::function<void(const std::vector<std::string>&)>& callbackFunction);
 std::set<std::string> getRelevantLevelNames();
 void cleanF(std::map<std::string, double>& f, const std::map<std::string, size_t>& reads_per_taxonID, size_t distributedReads);
+std::map<std::string, std::vector<size_t>> get_NS_per_window(std::string DBdir, size_t windowSize, const std::map<std::string, std::map<std::string, std::vector<size_t>>>& coverage_per_contigID);
 
 class oneMappingLocation
 {
@@ -270,7 +275,7 @@ std::vector<oneMappingLocation> getMappingLocations(const std::map<std::string, 
 			std::string contigID = possibleContig.first;
 			size_t contigLength = possibleContig.second;
 
-			if(contigLength >= readLength)
+			if((long long)contigLength >= readLength)
 			{
 				possibleMappingLocations += (contigLength - readLength + 1);
 			}
@@ -351,7 +356,7 @@ std::vector<size_t> getUnmappedReadsStats(std::string mappedFile)
 	return forReturn;
 }
 
-void doEM(std::string DBdir, std::string mappedFile)
+void doEM(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestContig)
 {
 	std::set<std::string> relevantTaxonIDs = getTaxonIDsFromMappingsFile(mappedFile);
 
@@ -472,6 +477,7 @@ void doEM(std::string DBdir, std::string mappedFile)
 	std::string output_assigned_reads_and_identities = mappedFile + ".EM.lengthAndIdentitiesPerMappingUnit";
 	std::string output_reads_taxonID = mappedFile + ".EM.reads2Taxon";
 	std::string output_contig_coverage = mappedFile + ".EM.contigCoverage";
+	std::string output_evidence_unknownSpecies = mappedFile + ".EM.evidenceUnknownSpecies";
 
 	std::ofstream strout_reads_identities(output_assigned_reads_and_identities);
 	assert(strout_reads_identities.is_open());
@@ -485,10 +491,12 @@ void doEM(std::string DBdir, std::string mappedFile)
 	
 	size_t coverage_windowSize = 1000;
 	std::map<std::string, std::map<std::string, std::vector<size_t>>> coverage_per_contigID;
+	std::map<std::string, std::map<std::string, std::vector<size_t>>> coverage_per_contigID_countReads;
 	std::map<std::string, std::map<std::string, size_t>> size_last_window;
 
 	std::map<std::string, size_t> reads_per_taxonID;
 	size_t runningReadI = 0;
+	std::map<std::string, std::vector<double>> identities_per_taxonID;
 	std::function<void(const std::vector<std::string>&)> processOneRead_final = [&](const std::vector<std::string>& readLines) -> void
 	{
 		assert(readLines.size() > 0);
@@ -509,7 +517,7 @@ void doEM(std::string DBdir, std::string mappedFile)
 
 		strout_reads_identities << "EqualCoverageUnit" << "\t" << bestMapping.contigID << "\t" << runningReadI << "\t" << bestMapping.identity << "\t" << bestMapping.readLength << "\n";
 		strout_reads_taxonIDs << readID << "\t" << bestMapping.taxonID << "\n";
-		
+		identities_per_taxonID[bestMapping.taxonID].push_back(bestMapping.identity);
 		
 		if(reads_per_taxonID.count(bestMapping.taxonID) == 0)
 		{
@@ -540,6 +548,7 @@ void doEM(std::string DBdir, std::string mappedFile)
 				}
 			}
 			coverage_per_contigID[bestMapping.taxonID][bestMapping.contigID].resize(n_windows, 0);
+			coverage_per_contigID_countReads[bestMapping.taxonID][bestMapping.contigID].resize(n_windows, 0);
 		}
 
 		size_t bestMappingStopPos = (bestMapping.stop >= taxonInfo.at(bestMapping.taxonID).at(bestMapping.contigID)) ? (taxonInfo.at(bestMapping.taxonID).at(bestMapping.contigID) - 1) : bestMapping.stop;
@@ -548,6 +557,7 @@ void doEM(std::string DBdir, std::string mappedFile)
 			size_t windowI = contigPos / coverage_windowSize;
 			assert(windowI >= 0);
 			assert(windowI < coverage_per_contigID.at(bestMapping.taxonID).at(bestMapping.contigID).size());
+			assert(windowI < coverage_per_contigID_countReads.at(bestMapping.taxonID).at(bestMapping.contigID).size());
 
 			size_t windowStart = windowI * coverage_windowSize;
 			size_t windowStop = (windowI+1) * coverage_windowSize - 1;
@@ -561,6 +571,7 @@ void doEM(std::string DBdir, std::string mappedFile)
 			assert(read_window_overlap > 0);
 			assert(read_window_overlap <= coverage_windowSize);
 			coverage_per_contigID.at(bestMapping.taxonID).at(bestMapping.contigID).at(windowI) += read_window_overlap;
+			coverage_per_contigID_countReads.at(bestMapping.taxonID).at(bestMapping.contigID).at(windowI)++;
 		}
 
 		runningReadI++;
@@ -577,6 +588,7 @@ void doEM(std::string DBdir, std::string mappedFile)
 	std::ofstream strout_coverage(output_contig_coverage);
 	strout_coverage << "taxonID" << "\t" << "equalCoverageUnitLabel" << "\t" << "contigID" << "\t" << "start" << "\t" << "stop" << "\t" << "nBases" << "\t" << "readCoverage" << "\n";
 
+	std::map<std::string, std::string> contigID_2_taxon;
 	for(auto taxonData : coverage_per_contigID)
 	{
 		for(auto contigData : taxonData.second)
@@ -596,7 +608,258 @@ void doEM(std::string DBdir, std::string mappedFile)
 						contigData.first << "\t" <<
 						nBases << "\t" <<
 						(double)nBases/(double)windowLength << "\n";
+
+				if(contigID_2_taxon.count(contigData.first))
+				{
+					assert(contigID_2_taxon.at(contigData.first) == taxonData.first);
+				}
+				else
+				{
+					contigID_2_taxon[contigData.first] = taxonData.first;
+				}
+
 			}
+		}
+	}
+
+	// find taxon ID with highest median identity
+	std::string taxonID_highestMedianIdentity;
+	double highestMedianIdentity;
+	double highestMedian_oneThird;
+	double highestMedian_twoThirds;
+	double highestMedian_oneThird_cumulativeP;
+	// double highestMedian_twoThirds_cumulativeP;
+
+	for(auto identitiesEntry : identities_per_taxonID)
+	{
+		std::string taxonID = identitiesEntry.first;
+		std::vector<double> identities = identitiesEntry.second;
+		if(identities.size() >= minimumReadsPerBestContig)
+		{
+			std::sort(identities.begin(), identities.end());
+			double medianIdentity = identities.at(identities.size()/2);
+			if((taxonID_highestMedianIdentity.length() == 0) || (medianIdentity > highestMedianIdentity))
+			{
+				highestMedianIdentity = medianIdentity;
+				taxonID_highestMedianIdentity = taxonID;
+
+				highestMedian_oneThird = identities.at(identities.size() * (1.0/3.0));
+				highestMedian_twoThirds = identities.at(identities.size() * (2.0/3.0));
+				assert(highestMedian_oneThird <= highestMedian_twoThirds);
+
+				size_t highestMedian_oneThird_cumulativeN = 0;
+				size_t highestMedian_twoThirds_cumulativeN = 0;
+
+				for(auto idty : identities)
+				{
+					if(idty <= highestMedian_oneThird)
+					{
+						highestMedian_oneThird_cumulativeN++;
+					}
+					if(idty <= highestMedian_twoThirds)
+					{
+						highestMedian_twoThirds_cumulativeN++;
+					}
+				}
+
+				assert(highestMedian_twoThirds_cumulativeN <= highestMedian_oneThird_cumulativeN);
+				highestMedian_oneThird_cumulativeP = (double)highestMedian_oneThird_cumulativeN / (double)identities.size();
+				// highestMedian_twoThirds_cumulativeP = (double)highestMedian_twoThirds_cumulativeN / (double)identities.size();
+			}
+		}
+	}
+
+	// todo
+	size_t minimum_notManyNs_eitherSide = -1;
+	std::map<std::string, std::vector<size_t>> Ns_per_genomeWindow = get_NS_per_window(DBdir, coverage_windowSize, coverage_per_contigID);
+	std::map<std::string, std::vector<bool>> use_genomeWindow;
+	std::map<std::string, size_t> genomeWindows;
+	std::map<std::string, size_t> genomeWindows_usable;
+	std::map<std::string, size_t> genomeWindows_usable_nReads;
+	std::map<std::string, double> genomeWindows_usable_coverageZero;
+
+	std::map<std::string, size_t> genomeWindows_coverageIsZero;
+	std::map<std::string, double> genomeWindows_coverageIsZero_expected;
+	std::map<std::string, double> genomeWindows_coverageIsZero_p;
+
+	for(auto contigData : Ns_per_genomeWindow)
+	{
+		std::string taxonID = contigID_2_taxon.at(contigData.first);
+
+		std::map<std::string, std::vector<size_t>> runningBases_notManyNs_forward;
+		std::map<std::string, std::vector<size_t>> runningBases_notManyNs_backward;
+
+		runningBases_notManyNs_forward[contigData.first].resize(contigData.second.size(), 0);
+		runningBases_notManyNs_backward[contigData.first].resize(contigData.second.size(), 0);
+
+		use_genomeWindow[contigData.first].resize(contigData.second.size(), false);
+
+		size_t running_forward = 0;
+		for(size_t windowI = 0; windowI < contigData.second.size(); windowI++)
+		{
+			runningBases_notManyNs_forward.at(contigData.first).at(windowI) = running_forward;
+			size_t windowI_Ns = contigData.second.at(windowI);
+			size_t windowI_length = coverage_windowSize;
+			if((windowI == (contigData.second.size()-1)))
+			{
+				windowI_length = size_last_window.at(taxonID).at(contigData.first);
+			}
+
+			double propN = (double)windowI_Ns/(double)windowI_length;
+
+			if(propN <= 0.02)
+			{
+				running_forward += windowI_length;
+			}
+			else
+			{
+				running_forward = 0;
+			}
+		}
+
+		size_t running_backward = 0;
+		for(long long windowI = (contigData.second.size() - 1); windowI >= 0; windowI--)
+		{
+			runningBases_notManyNs_backward.at(contigData.first).at(windowI) = running_backward;
+			size_t windowI_Ns = contigData.second.at(windowI);
+			size_t windowI_length = coverage_windowSize;
+			if((windowI == ((long long)contigData.second.size()-1)))
+			{
+				windowI_length = size_last_window.at(taxonID).at(contigData.first);
+			}
+
+			double propN = (double)windowI_Ns/(double)windowI_length;
+
+			if(propN <= 0.02)
+			{
+				running_backward += windowI_length;
+			}
+			else
+			{
+				running_backward = 0;
+			}
+		}
+
+		size_t use_windows = 0;
+		size_t use_windows_nReads = 0;
+		size_t use_windows_zeroCoverage = 0;
+		for(size_t windowI = 0; windowI < contigData.second.size(); windowI++)
+		{
+			if((runningBases_notManyNs_forward.at(contigData.first).at(windowI) >= minimum_notManyNs_eitherSide)
+				&& (runningBases_notManyNs_backward.at(contigData.first).at(windowI) >= minimum_notManyNs_eitherSide)
+			)
+			{
+				use_genomeWindow[contigData.first].at(windowI) = true;
+				use_windows++;
+				use_windows_nReads += coverage_per_contigID_countReads.at(taxonID).at(contigData.first).at(windowI);
+				if(coverage_per_contigID_countReads.at(taxonID).at(contigData.first).at(windowI) == 0)
+				{
+					use_windows_zeroCoverage++;
+				}
+			}
+		}
+
+		if(genomeWindows_usable.count(taxonID) == 0)
+		{
+			genomeWindows[taxonID] = 0;
+			genomeWindows_usable[taxonID] = 0;
+			genomeWindows_usable_nReads[taxonID] = 0;
+			genomeWindows_usable_coverageZero[taxonID] = 0;
+		}
+
+		genomeWindows.at(taxonID) += contigData.second.size();
+		genomeWindows_usable.at(taxonID) += use_windows;
+		genomeWindows_usable_nReads.at(taxonID) += use_windows_nReads;
+		genomeWindows_usable_coverageZero.at(taxonID) += use_windows_zeroCoverage;
+
+	}
+
+	{
+		double oneThird_p = highestMedian_oneThird_cumulativeP;
+		std::ofstream evidenceNewSpeciesStream(output_evidence_unknownSpecies);
+		evidenceNewSpeciesStream << "taxonID"
+				<< "\t" << "nReads"
+				<< "\t" << "propBottomThirdReadIdentities"
+				<< "\t" << "expectedPropBottomThirdReadIdentities"
+				<< "\t" << "pValue_BottomThirdReadIdentities"
+				<< "\t" << "coverageWindows_totalGenome"
+				<< "\t" << "coverageWindows_usable"
+				<< "\t" << "coverageWindows_usable_averageCoverage"
+				<< "\t" << "coverageWindows_usable_coverageIsZero"
+				<< "\t" << "coverageWindows_usable_coverageIsZero_expected"
+				<< "\t" << "coverageWindows_usable_coverageIsZero_P" << "\n";
+
+		boost::math::chi_squared chiSq_oneDf(1);
+
+		for(auto identitiesEntry : identities_per_taxonID)
+		{
+			std::string taxonID = identitiesEntry.first;
+
+			// identities p-value
+			std::string propBottomThirdReadIdentities_str = "NA";
+			std::string pValue_identities_str = "NA";
+			std::string oneThird_p_str = "NA";
+			std::vector<double> identities = identitiesEntry.second;
+			if(taxonID_highestMedianIdentity.length())
+			{
+				size_t observed_n_OneThird = 0;
+				for(auto idty : identities)
+				{
+					if(idty <= highestMedian_oneThird)
+					{
+						observed_n_OneThird++;
+					}
+				}
+				assert(identities.size());
+
+				size_t observed_n_nonOneThird = identities.size() - observed_n_OneThird;
+
+				double expected_n_oneThird =  oneThird_p * identities.size();
+				double expected_n_nonOneThird = identities.size() - expected_n_oneThird;
+
+				oneThird_p_str = std::to_string(oneThird_p);
+				double testStatistic = pow(observed_n_OneThird - expected_n_oneThird, 2)/expected_n_oneThird
+						+ pow(observed_n_nonOneThird - expected_n_nonOneThird, 2)/expected_n_nonOneThird;
+
+				propBottomThirdReadIdentities_str = std::to_string(((double)observed_n_nonOneThird / (double)identities.size()));
+				pValue_identities_str = std::to_string(boost::math::cdf(chiSq_oneDf, testStatistic));
+			}
+
+			// coverage p-value
+			std::string usableWindows_averageCoverage_str = "NA";
+			std::string usableWindows_coverageZero_expected_str = "NA";
+			std::string usableWindows_coverageZero_p_str = "NA";
+
+			if(genomeWindows_usable.at(taxonID) > 0)
+			{
+				double usableWindows_averageCoverage = (double)genomeWindows_usable_nReads.at(taxonID)/(double)genomeWindows_usable.at(taxonID);
+				usableWindows_averageCoverage_str = std::to_string(usableWindows_averageCoverage);
+
+				double windows_0_probability = boost::math::pdf(boost::math::poisson_distribution<>(usableWindows_averageCoverage), 0);
+
+				usableWindows_coverageZero_expected_str = std::to_string(genomeWindows_usable.at(taxonID) * windows_0_probability);
+				double windows_0_pValue = 1;
+				if(genomeWindows_usable_coverageZero.at(taxonID) > 0)
+				{
+					double p_belowObservedValue = boost::math::cdf(boost::math::binomial_distribution<>(genomeWindows_usable.at(taxonID), windows_0_probability), genomeWindows_usable_coverageZero.at(taxonID) - 1);
+					assert((p_belowObservedValue >= 0) && (p_belowObservedValue <= 1));
+					windows_0_pValue = 1 - p_belowObservedValue;
+				}
+
+				usableWindows_coverageZero_p_str = std::to_string(windows_0_pValue);
+			}
+
+			evidenceNewSpeciesStream << taxonID
+					<< "\t" << identities.size()
+					<< "\t" << propBottomThirdReadIdentities_str
+					<< "\t" << oneThird_p_str
+					<< "\t" << pValue_identities_str
+					<< "\t" << genomeWindows.at(taxonID)
+					<< "\t" << genomeWindows_usable.at(taxonID)
+					<< "\t" << usableWindows_averageCoverage_str
+					<< "\t" << genomeWindows_usable_coverageZero.at(taxonID)
+					<< "\t" << usableWindows_coverageZero_expected_str
+					<< "\t" << usableWindows_coverageZero_p_str << "\n";
 		}
 	}
 }
@@ -751,6 +1014,50 @@ std::string extractTaxonId(std::string line)
 std::set<std::string> getRelevantLevelNames()
 {
 	return std::set<std::string>({"species", "genus", "family", "order", "phylum", "superkingdom"});
+}
+
+std::map<std::string, std::vector<size_t>> get_NS_per_window(std::string DBdir, size_t windowSize, const std::map<std::string, std::map<std::string, std::vector<size_t>>>& coverage_per_contigID)
+{
+	std::map<std::string, std::vector<size_t>> forReturn;
+	std::string fn_windows = DBdir + "/contigNstats_windowSize_" + std::to_string(windowSize) + ".fa";
+	std::ifstream windowStream;
+	windowStream.open(fn_windows.c_str());
+	assert(windowStream.is_open());
+	std::string line;
+	while(windowStream.good())
+	{
+		std::getline(windowStream, line);
+		eraseNL(line);
+		if(line.length() != 0)
+		{
+			std::vector<std::string> line_fields = split(line, " ");
+			assert(line_fields.size() == 3);
+			std::string taxonID = line_fields.at(0);
+			std::string contigID = line_fields.at(1);
+			if(coverage_per_contigID.count(taxonID) && coverage_per_contigID.at(taxonID).count(contigID))
+			{
+				std::vector<std::string> n_fields = split(line_fields.at(2), ";");
+				assert(n_fields.size() == coverage_per_contigID.at(taxonID).at(contigID).size());
+				std::vector<size_t> n_fields_int;
+				for(auto e : n_fields)
+				{
+					n_fields_int.push_back(std::stoull(e));
+				}
+				assert(forReturn.count(contigID) == 0);
+				forReturn[contigID] = n_fields_int;
+			}
+		}
+	}
+
+	for(auto taxonEntries : coverage_per_contigID)
+	{
+		for(auto contigEntries : taxonEntries.second)
+		{
+			assert(forReturn.count(contigEntries.first));
+		}
+	}
+
+	return forReturn;
 }
 
 }

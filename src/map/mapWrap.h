@@ -234,7 +234,7 @@ protected:
 			{
 				identities_sum += idty;
 			}
-			double mean_identity = identities_sum / (double)identities.size();
+			//double mean_identity = identities_sum / (double)identities.size();
 
 			// convert to true max identity
 			assert(readIDs.size() == 1);

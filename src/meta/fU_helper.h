@@ -70,7 +70,7 @@ public:
 			std::cerr << "Requested idty " << idty << "\n";
 			std::cerr << "minimumIdentity " << minimumIdentity << "\n";
 			std::cerr << "maximumIdentity " << maximumIdentity << "\n";
-			std:cerr << std::endl;
+			std::cerr << std::endl;
 			
 			throw std::runtime_error("Invalid code branch.");
 			return 0;
@@ -111,7 +111,7 @@ public:
 			
 			std::string contigID = line_fields.at(1);
 			double identity = std::stod(line_fields.at(3));
-			int iI = int((identity*100) + 0.5);			
+			// int iI = int((identity*100) + 0.5);
 			
 			size_t length = std::stoull(line_fields.at(4));
 
