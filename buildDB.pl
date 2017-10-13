@@ -314,8 +314,12 @@ else
 }
 close(DB);
 
+my $countNs_windowSize = 1000;
+my $outputFN_contigWindows = $DB . '/' . 'contigNstats_windowSize_' . $countNs_windowSize . '.txt';
+
 my $outputFN = $DB . '/' . 'DB.fa';
 open(DB, '>', $outputFN) or die "Cannot open $outputFN - check whether I have write permissions";
+open(NSTATS, '>', $outputFN_contigWindows) or die "Cannot open $outputFN_contigWindows - check whether I have write permissions";
 for(my $contigI = 0; $contigI <= $#contigs; $contigI++)
 {
 	my $contigInfo = $contigs[$contigI];
@@ -325,9 +329,40 @@ for(my $contigI = 0; $contigI <= $#contigs; $contigI++)
 	{
 		my $contigSequence = $getContigSequence->($contigInfo);
 		print DB $contigSequence;
+		
+		my $contigID_noTrailing = substr($contigID, 1);
+		
+		die unless(substr($contigSequence, 0, 1) eq '>');
+		(my $contigSequence_contiguous = $contigSequence) =~ s/^(.+)//;
+		my $translatedContigID = $1;
+		die unless(substr($translatedContigID, 0, 1) eq '>');
+		$translatedContigID = substr($translatedContigID, 1);
+		$contigSequence_contiguous =~ s/[\n\r]//g;
+		
+		my $taxonID_fromTranslatedContigID = Util::extractTaxonID($translatedContigID, '?', '?');
+
+	
+		die Dumper("Length mismatch", $contigID, length($contigSequence_contiguous), $contig_2_length{$contigID_noTrailing}, substr($contigSequence_contiguous, 0, 200))  unless(length($contigSequence_contiguous) == $contig_2_length{$contigID_noTrailing});
+		
+		my @windows_Ns;
+		for(my $startWindow = 0; $startWindow < length($contigSequence_contiguous); $startWindow += $countNs_windowSize)
+		{
+			my $stopWindow = $startWindow + $countNs_windowSize  - 1;
+			$stopWindow = (length($contigSequence_contiguous) - 1) if ($stopWindow >= length($contigSequence_contiguous));
+			die unless($stopWindow >= $startWindow);
+			my $windowSequence = substr($contigSequence_contiguous, $startWindow, $stopWindow - $startWindow + 1);
+			
+			my $count_n = ($windowSequence =~ tr/n//);			
+			my $count_N = ($windowSequence =~ tr/N//);			
+			
+			push(@windows_Ns, $count_n + $count_N);
+		}
+		
+		print NSTATS join("\t", $taxonID_fromTranslatedContigID, $translatedContigID, join(";", @windows_Ns)), "\n";
 	}
 }
 close(DB);
+close(NSTATS);
 
 taxTree::trimTaxonomyInDir($dir_copy_taxonomy, \%_useTaxonIDs_afterUpdate);
 

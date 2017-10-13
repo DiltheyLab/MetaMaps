@@ -207,14 +207,14 @@ void producePotFile_U(std::string outputFN, const taxonomy& T, std::pair<std::ma
 		size_t levelReadSum = 0;
 		for(auto taxonID : l.second)
 		{
-			std::string taxonIDName = (taxonID != "Undefined") ? T.getNode(taxonID).name.scientific_name : taxonID;
+			std::string taxonIDName = (taxonID != "Undefined") ? T.getNode(taxonID).name.scientific_name : "NotLabelledAtLevel";
 			
 			size_t taxonID_combinedReads = (readCount_perLevel.at(levelName).first.at(taxonID) + readCount_perLevel.at(levelName).second.at(taxonID));
 			double taxonID_combinedFreq = (frequencies_perLevel.at(levelName).first.at(taxonID) + frequencies_perLevel.at(levelName).second.at(taxonID));
 			
 			strout_frequencies <<
 					levelName << "\t" <<
-					((taxonID != "Undefined") ? taxonID : "0") << "\t" <<
+					((taxonID != "Undefined") ? taxonID : "-1") << "\t" <<
 					taxonIDName << "\t" <<
 					readCount_perLevel.at(levelName).first.at(taxonID) << "\t" <<
 					readCount_perLevel.at(levelName).second.at(taxonID) << "\t" <<
@@ -237,6 +237,7 @@ void producePotFile_U(std::string outputFN, const taxonomy& T, std::pair<std::ma
 			levelFreqSum = 1;
 		
 		double levelFreqUnclassified = 1 - levelFreqSum;
+		levelFreqUnclassified = 0;
 		
 		strout_frequencies <<
 				levelName << "\t" <<
@@ -853,7 +854,9 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 		std::cout << "1654 post unmapped: " << f_nextIteration.second.at("1654") << "\n";
 		std::cout << "209 post unmapped: " << f_nextIteration.second.at("209") << "\n";
 		std::cout << "52773 post unmapped: " << f_nextIteration.first.at("52773") << "\n";
+		*/
 		normalize_f(f_nextIteration);
+		/*
 		std::cout << "1654: " << f_nextIteration.second.at("1654") << "\n" << std::flush;
 		std::cout << "209: " << f_nextIteration.second.at("209") << "\n" << std::flush;
 		std::cout << "52773: " << f_nextIteration.first.at("52773") << "\n" << std::flush;
@@ -876,13 +879,13 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 			std::cout << "\tImprovement: " << ll_diff << std::endl;
 			std::cout << "\tRelative   : " << ll_relative << std::endl;
 		
-			// todo
+			// todo 
 			if((ll_diff < 20) || (EMiteration > 30))
 			{
-				continueEM = false;
+				// continueEM = false;
 			}		
 			
-			if(ll_diff < 1)
+			if(ll_diff <= 1)
 			{
 				continueEM = false; 
 			}
@@ -945,10 +948,11 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 		{
 			f_sum_postNormalization += tF.second;
 		}	
+		//std::cerr << "f_sum_postNormalization: " << f_sum_postNormalization << "\n" << std::flush;
 		assert(abs(1 - f_sum_postNormalization) <= 1e-3);
 		
-		std::cout << "For round " << EMiteration << "\n";
-		printGenusLevelSummary(T, f_nextIteration);
+		// std::cout << "For round " << EMiteration << "\n";
+		// printGenusLevelSummary(T, f_nextIteration);
 		
 		f = f_nextIteration;
 		EMiteration++;

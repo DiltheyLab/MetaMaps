@@ -78,8 +78,19 @@ void producePotFile(std::string outputFN, const taxonomy& T, std::map<std::strin
 			f_per_level[uN.first][uN.second] += freq_per_node.second;
 			combinedKeys_perLevel[uN.first].insert(uN.second);
 
+			/*
+			if(!((f_per_level[uN.first][uN.second] >= 0) && (f_per_level[uN.first][uN.second] <= 1)))
+			{
+				std::cerr << "f_per_level[uN.first][uN.second] " << uN.first << " " << uN.second << ": " << f_per_level[uN.first][uN.second] << "\n" << std::flush;
+			}
+			*/
 			assert(f_per_level[uN.first][uN.second] >= 0);
-			assert(f_per_level[uN.first][uN.second] <= 1);
+			
+			assert((1 - f_per_level[uN.first][uN.second]) >= -1e-3);
+			if(f_per_level[uN.first][uN.second] > 1)
+			{
+				f_per_level[uN.first][uN.second] = 1;
+			}
 		}
 	}
 	std::map<std::string, std::map<std::string, size_t>> rC_per_level;
@@ -133,11 +144,12 @@ void producePotFile(std::string outputFN, const taxonomy& T, std::map<std::strin
 		if(sum_assigned_thisLevel > 1)
 			sum_assigned_thisLevel = 1;
 		
-		long long nReads_unassigned_level = nMapped - sum_reads_assigned_thisLevel;
+		long long nReads_unassigned_level = nMappable - sum_reads_assigned_thisLevel;
 		assert(nReads_unassigned_level >= 0);
+		assert(sum_reads_assigned_thisLevel == nMapped);
+		assert(nReads_unassigned_level >= nUnmapped);
 		
 		double additional_freq_unassigned = (1 - freq_unmapped) * (1 - sum_assigned_thisLevel);
-		
 		assert(additional_freq_unassigned >= 0);
 		assert(additional_freq_unassigned <= 1);
 		
@@ -157,14 +169,14 @@ void producePotFile(std::string outputFN, const taxonomy& T, std::map<std::strin
 		double l_freq_2 = 0;
 		for(auto taxonID : l.second)
 		{
-			std::string taxonIDName = (taxonID != "Undefined") ? T.getNode(taxonID).name.scientific_name : taxonID;
+			std::string taxonIDName = (taxonID != "Undefined") ? T.getNode(taxonID).name.scientific_name : "NotLabelledAtLevel";
 			double f = (f_per_level[levelName].count(taxonID)) ? f_per_level[levelName][taxonID] : 0;
 			size_t rC = (rC_per_level[levelName].count(taxonID)) ? rC_per_level[levelName][taxonID] : 0;
 
 			double taxonID_rescaled_f = (f * (1-total_thisLevel_freq_unassigned));
 			strout_frequencies <<
 				levelName << "\t" <<
-				((taxonID != "Undefined") ? taxonID : "0") << "\t" <<
+				((taxonID != "Undefined") ? taxonID : "-1") << "\t" <<
 				taxonIDName << "\t" <<
 				rC << "\t" <<
 				f << "\t" <<
@@ -174,9 +186,10 @@ void producePotFile(std::string outputFN, const taxonomy& T, std::map<std::strin
 			l_freq_2 += f;
 		}
 		
-		strout_frequencies << levelName << "\t" << 0 << "\t" <<  "Unclassified" << "\t" << nReads_unassigned_level << "\t" << 0 << "\t" << additional_freq_unassigned << "\n";
-		strout_frequencies << levelName << "\t" << 0 << "\t" <<  "Unmapped" << "\t" << nUnmapped << "\t" << 0 << "\t" << freq_unmapped << "\n";
-		strout_frequencies << levelName << "\t" << 0 << "\t" <<  "TooShort" << "\t" << nTooShort << "\t" << 0 << "\t" << 0 << "\n";
+		strout_frequencies << levelName << "\t" << 0 << "\t" <<  "Unclassified" << "\t" << nReads_unassigned_level << "\t" << 0 << "\t" << total_thisLevel_freq_unassigned << "\n";
+		strout_frequencies << levelName << "\t" << -2 << "\t" <<  "TooShort" << "\t" << nTooShort << "\t" << 0 << "\t" << 0 << "\n";
+		strout_frequencies << levelName << "\t" << -3 << "\t" <<  "TotalReads" << "\t" << nTotalReads << "\t" << 0 << "\t" << 0 << "\n";
+		strout_frequencies << levelName << "\t" << -4 << "\t" <<  "Unmapped" << "\t" << nUnmapped << "\t" << 0 << "\t" << 0 << "\n";
 		
 		l_freq += (freq_unmapped+additional_freq_unassigned);
 		
@@ -443,7 +456,7 @@ void doEM(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestC
 		{
 			sum_postNormalization += fNextIterationE.second;
 		}
-		assert(abs(1 - sum_postNormalization) <= 1e-3);
+		assert(abs(1 - sum_postNormalization) <= 1e-3); 
 		
 		if(EMiteration > 0) 
 		{
@@ -455,9 +468,14 @@ void doEM(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestC
 			std::cout << "\tImprovement: " << ll_diff << std::endl;
 			std::cout << "\tRelative   : " << ll_relative << std::endl;
 		
+			if(ll_diff <= 1)
+			{ 
+				continueEM = false;
+			}
+			
 			if((ll_diff < 20) || (EMiteration > 30))
 			{
-				continueEM = false;
+				// continueEM = false;
 			}
 		/*
 			if(abs(1-ll_relative) < 0.01)
@@ -497,6 +515,7 @@ void doEM(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestC
 	std::map<std::string, size_t> reads_per_taxonID;
 	size_t runningReadI = 0;
 	std::map<std::string, std::vector<double>> identities_per_taxonID;
+	long long maximumReadLength = -1;
 	std::function<void(const std::vector<std::string>&)> processOneRead_final = [&](const std::vector<std::string>& readLines) -> void
 	{
 		assert(readLines.size() > 0);
@@ -518,7 +537,10 @@ void doEM(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestC
 		strout_reads_identities << "EqualCoverageUnit" << "\t" << bestMapping.contigID << "\t" << runningReadI << "\t" << bestMapping.identity << "\t" << bestMapping.readLength << "\n";
 		strout_reads_taxonIDs << readID << "\t" << bestMapping.taxonID << "\n";
 		identities_per_taxonID[bestMapping.taxonID].push_back(bestMapping.identity);
-		
+		if((long long)bestMapping.readLength > maximumReadLength)
+		{
+			maximumReadLength = bestMapping.readLength;
+		}
 		if(reads_per_taxonID.count(bestMapping.taxonID) == 0)
 		{
 			reads_per_taxonID[bestMapping.taxonID] = 0;
@@ -581,6 +603,11 @@ void doEM(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestC
 	callBackForAllReads(mappedFile, processOneRead_final);
 	strout_reads_identities.close();
 	strout_reads_taxonIDs.close();
+	if(maximumReadLength <= 0)
+	{
+		std::cerr << "maximumReadLength: " << maximumReadLength << std::endl;
+	}
+	assert(maximumReadLength > 0);
 
 	cleanF(f, reads_per_taxonID, mappingStats.at("ReadsMapped"));
 	producePotFile(output_pot_frequencies, T, f, reads_per_taxonID, nTotalReads, nUnmapped, nTooShort);
@@ -662,15 +689,14 @@ void doEM(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestC
 					}
 				}
 
-				assert(highestMedian_twoThirds_cumulativeN <= highestMedian_oneThird_cumulativeN);
+				assert(highestMedian_twoThirds_cumulativeN >= highestMedian_oneThird_cumulativeN);
 				highestMedian_oneThird_cumulativeP = (double)highestMedian_oneThird_cumulativeN / (double)identities.size();
 				// highestMedian_twoThirds_cumulativeP = (double)highestMedian_twoThirds_cumulativeN / (double)identities.size();
 			}
 		}
 	}
 
-	// todo
-	size_t minimum_notManyNs_eitherSide = -1;
+	size_t minimum_notManyNs_eitherSide = maximumReadLength;
 	std::map<std::string, std::vector<size_t>> Ns_per_genomeWindow = get_NS_per_window(DBdir, coverage_windowSize, coverage_per_contigID);
 	std::map<std::string, std::vector<bool>> use_genomeWindow;
 	std::map<std::string, size_t> genomeWindows;
@@ -821,8 +847,13 @@ void doEM(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestC
 				double testStatistic = pow(observed_n_OneThird - expected_n_oneThird, 2)/expected_n_oneThird
 						+ pow(observed_n_nonOneThird - expected_n_nonOneThird, 2)/expected_n_nonOneThird;
 
-				propBottomThirdReadIdentities_str = std::to_string(((double)observed_n_nonOneThird / (double)identities.size()));
-				pValue_identities_str = std::to_string(boost::math::cdf(chiSq_oneDf, testStatistic));
+				propBottomThirdReadIdentities_str = std::to_string(((double)observed_n_OneThird / (double)identities.size()));
+				
+				double pValue = 1 - boost::math::cdf(chiSq_oneDf, testStatistic);
+				
+				// std::cerr << taxonID << "\t" << testStatistic << "\t" << pValue << "\n" << std::flush;
+				
+				pValue_identities_str = std::to_string(pValue);
 			}
 
 			// coverage p-value
@@ -835,18 +866,39 @@ void doEM(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestC
 				double usableWindows_averageCoverage = (double)genomeWindows_usable_nReads.at(taxonID)/(double)genomeWindows_usable.at(taxonID);
 				usableWindows_averageCoverage_str = std::to_string(usableWindows_averageCoverage);
 
-				double windows_0_probability = boost::math::pdf(boost::math::poisson_distribution<>(usableWindows_averageCoverage), 0);
-
-				usableWindows_coverageZero_expected_str = std::to_string(genomeWindows_usable.at(taxonID) * windows_0_probability);
-				double windows_0_pValue = 1;
-				if(genomeWindows_usable_coverageZero.at(taxonID) > 0)
+				if(usableWindows_averageCoverage == 0)
 				{
-					double p_belowObservedValue = boost::math::cdf(boost::math::binomial_distribution<>(genomeWindows_usable.at(taxonID), windows_0_probability), genomeWindows_usable_coverageZero.at(taxonID) - 1);
-					assert((p_belowObservedValue >= 0) && (p_belowObservedValue <= 1));
-					windows_0_pValue = 1 - p_belowObservedValue;
+					assert(genomeWindows_usable_coverageZero.at(taxonID) == genomeWindows_usable.at(taxonID));
+					double windows_0_probability = 1;					
+					usableWindows_coverageZero_expected_str = std::to_string(genomeWindows_usable.at(taxonID));
+					usableWindows_coverageZero_p_str = std::to_string(1);					
 				}
+				else
+				{
+					if(!(usableWindows_averageCoverage > 0))
+					{	
+						std::cout << std::flush;
+						std::cerr << "\n";
+						std::cerr << "taxonID" << ": " << taxonID << "\n";
+						std::cerr << "genomeWindows_usable.at(taxonID)" << ": " << genomeWindows_usable.at(taxonID) << "\n";
+						std::cerr << "genomeWindows_usable_coverageZero.at(taxonID)" << ": " << genomeWindows_usable_coverageZero.at(taxonID) << "\n";
+						std::cerr << "usableWindows_averageCoverage" << ": " << usableWindows_averageCoverage << "\n";
+						std::cerr << "genomeWindows_usable_nReads.at(taxonID)" << ": " << genomeWindows_usable_nReads.at(taxonID) << "\n\n";
+						std::cerr << std::flush;
+					}	 
+					double windows_0_probability = boost::math::pdf(boost::math::poisson_distribution<>(usableWindows_averageCoverage), 0);
 
-				usableWindows_coverageZero_p_str = std::to_string(windows_0_pValue);
+					usableWindows_coverageZero_expected_str = std::to_string(genomeWindows_usable.at(taxonID) * windows_0_probability);
+					double windows_0_pValue = 1;
+					if(genomeWindows_usable_coverageZero.at(taxonID) > 0)
+					{
+						double p_belowObservedValue = boost::math::cdf(boost::math::binomial_distribution<>(genomeWindows_usable.at(taxonID), windows_0_probability), genomeWindows_usable_coverageZero.at(taxonID) - 1);
+						assert((p_belowObservedValue >= 0) && (p_belowObservedValue <= 1));
+						windows_0_pValue = 1 - p_belowObservedValue;
+					}
+
+					usableWindows_coverageZero_p_str = std::to_string(windows_0_pValue);
+				}
 			}
 
 			evidenceNewSpeciesStream << taxonID
@@ -1019,7 +1071,7 @@ std::set<std::string> getRelevantLevelNames()
 std::map<std::string, std::vector<size_t>> get_NS_per_window(std::string DBdir, size_t windowSize, const std::map<std::string, std::map<std::string, std::vector<size_t>>>& coverage_per_contigID)
 {
 	std::map<std::string, std::vector<size_t>> forReturn;
-	std::string fn_windows = DBdir + "/contigNstats_windowSize_" + std::to_string(windowSize) + ".fa";
+	std::string fn_windows = DBdir + "/contigNstats_windowSize_" + std::to_string(windowSize) + ".txt";
 	std::ifstream windowStream;
 	windowStream.open(fn_windows.c_str());
 	assert(windowStream.is_open());
@@ -1030,7 +1082,11 @@ std::map<std::string, std::vector<size_t>> get_NS_per_window(std::string DBdir, 
 		eraseNL(line);
 		if(line.length() != 0)
 		{
-			std::vector<std::string> line_fields = split(line, " ");
+			std::vector<std::string> line_fields = split(line, "\t");
+			if(line_fields.size() != 3)
+			{
+				std::cerr << "Format error " << fn_windows << "; wrong number of fields:\n" << line << "\n" << std::flush;
+			}
 			assert(line_fields.size() == 3);
 			std::string taxonID = line_fields.at(0);
 			std::string contigID = line_fields.at(1);
@@ -1045,6 +1101,7 @@ std::map<std::string, std::vector<size_t>> get_NS_per_window(std::string DBdir, 
 				}
 				assert(forReturn.count(contigID) == 0);
 				forReturn[contigID] = n_fields_int;
+				// std::cerr << contigID << "\n" << std::flush;
 			}
 		}
 	}
@@ -1053,6 +1110,11 @@ std::map<std::string, std::vector<size_t>> get_NS_per_window(std::string DBdir, 
 	{
 		for(auto contigEntries : taxonEntries.second)
 		{
+			if(! forReturn.count(contigEntries.first))
+			{
+				std::cout << "\n" << std::flush;
+				std::cerr << "\nMissing entry " << contigEntries.first << " in " << fn_windows << "\n\n" << std::flush;
+			}
 			assert(forReturn.count(contigEntries.first));
 		}
 	}

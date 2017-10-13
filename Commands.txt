@@ -9,8 +9,7 @@ perl buildDB.pl --DB databases/miniSeq --FASTAs /data/projects/phillippy/project
 
 perl util/addTaxonIDToFasta.pl --inputFA /data/projects/phillippy/references/h_sapiens/hg38/hg38.primary.fna --outputFA /data/projects/phillippy/references/h_sapiens/hg38/hg38.primary.fna.with9606 --taxonID 9606
 
-perl buildDB.pl --DB databases/miniSeq+H --FASTAs /data/projects/phillippy/projects/mashsim/db/refseq/ref.fa,/data/projects/phillippy/references/h_sapiens/hg38/hg38.primary.fna.with9606 --taxonomy /data/projects/phillippy/projects/MetaMap/downloads/taxonomy --oldTaxonomy /data/projects/phillippy/projects/mashsim/NCBI/refseq/taxonomy/
-
+perl buildDB.pl --DB databases/miniSeq+H --FASTAs /data/projects/phillippy/projects/mashsim/db/refseq/ref.fa,/data/projects/phillippy/references/h_sapiens/hg38/hg38.primary.fna.with9606 --taxonomy /data/projects/phillippy/projects/MetaMap/downloads/taxonomy --oldTaxonomy /data/projects/phillippy/projects/mashsim/NCBI/refseq/taxonomy/ --updateTaxonomy 1
 
 perl buildDB.pl --DB databases/miniSeq_100 --FASTAs /data/projects/phillippy/projects/mashsim/db/refseq/ref.fa --taxonomy /data/projects/phillippy/projects/mashsim/src/krakenDBTemplate/taxonomy --maxSpecies 100 --oldTaxonomy /data/projects/phillippy/projects/mashsim/NCBI/refseq/taxonomy/ --updateTaxonomy 1
 
@@ -37,10 +36,10 @@ perl buildDB.pl --DB databases/refseq --FASTAs downloads/refseq_download_test --
 
 /usr/bin/time -v ./mashmap mapDirectly --all -r databases/miniSeq/DB.fa -q /scratch/tmp/hmp_set7_combined.fastq -m 2000 --pi 80 -o tmp/hmp7_2_miniSeq &> tests/resources/hmp7_2_miniseq
 
+/usr/bin/time -v ./mashmap mapDirectly --all -r databases/miniSeq+H/DB.fa -q /scratch/tmp/hmp_set7_combined.fastq -o tmp/hmp7_2_miniSeq+H &> tests/resources/hmp7_2_miniSeq
 
 
 // for testing of equivalence
-
 
 
 
@@ -149,6 +148,11 @@ perl estimateSelfSimilarity.pl --DB new_simulations/0/DB_removeOne_genus2 --temp
 ./mashmap classify --mappings /scratch/tmp/MetaMap/hmp_set7_limitedMemory --DB databases/miniSeq 
 
 
+/usr/bin/time -v ./mashmap mapDirectly --all -r databases/miniSeq+H/DB.fa -q /scratch/tmp/hmp_set7_combined.fastq -o tmp/hmp7_2_miniSeq+H &> tests/resources/hmp7_2_miniSeq
+./mashmap classify --mappings tmp/hmp7_2_miniSeq+H --DB databases/miniSeq+H
+
+
+
 /usr/bin/time -v ./mashmap mapDirectly -r databases/refseq/DB.fa -q /scratch/tmp/hmp_set7_combined.fastq --all -o /scratch/tmp/MetaMap/hmp_set7_limitedMemory --mm 80 &> runtime_HMP7_refSeq.txt
 
 // benchmark
@@ -160,5 +164,14 @@ perl benchmarkInference.pl --mappings /scratch/tmp/MetaMap/hmp_set7.EM --DB data
 perl convertMetaMapToKraken.pl databases/miniSeq
 perl callKrakenOnConvertedDB.pl databases/miniSeq /scratch/tmp/hmp_set7_combined.fastq /scratch/tmp/hmp_set7_combined_kraken_results
 
+// benchmark against Kraken
+
+perl convertMetaMapToKraken.pl databases/miniSeq+H
+perl callKrakenOnConvertedDB.pl databases/miniSeq+H /scratch/tmp/hmp_set7_combined.fastq /scratch/tmp/hmp_set7_combined_kraken_results
+
+
 // HMP7 classical mapping
+
+perl benchmarkInference.pl --mappings tmp/hmp7_2_miniSeq+H.EM --DB databases/miniSeq+H --truth tmp/truthHMP7
+
 

@@ -608,7 +608,8 @@ sub species_or_strain
 	if($node =~ /^x/)
 	{
 		my $parent_id = $tree_href->{$node}{parent};
-		die unless($tree_href->{$parent_id}{rank} eq 'species');
+		my $parent_rank = $tree_href->{$parent_id}{rank};
+		die Dumper("species_or_strain unexpected code path", $parent_id, $parent_rank) unless(($parent_rank eq 'species') or ($parent_rank eq 'subspecies'));			
 		return 'strain';
 	}
 	else
@@ -620,7 +621,8 @@ sub species_or_strain
 		else
 		{
 			my $parent_id = $tree_href->{$node}{parent};
-			die unless($tree_href->{$parent_id}{rank} eq 'species');			
+			my $parent_rank = $tree_href->{$parent_id}{rank};
+			die Dumper("species_or_strain unexpected code path", $parent_id, $parent_rank) unless(($parent_rank eq 'species') or ($parent_rank eq 'subspecies'));			
 			return 'strain';
 		}
 	}

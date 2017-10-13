@@ -5,6 +5,7 @@ use Data::Dumper;
 use Cwd qw/abs_path getcwd/;
 
 use taxTree;
+use validation;
 
 sub getKrakenBinPrefix
 {
@@ -100,13 +101,12 @@ sub doKrakenOnExistingDB
 	my $pre_chdir_cwd = getcwd();
 	
 	chdir($kraken_dir) or die;  
-
+	
 	my $cmd_classify = qq(/usr/bin/time -v ${kraken_binPrefix} --preload --db DB $simulatedReads > reads_classified);
 	system($cmd_classify) and die "Could not execute command: $cmd_classify";
 	
 	my $cmd_report = qq(/usr/bin/time -v ${kraken_binPrefix}-report --db DB reads_classified > reads_classified_report);
 	system($cmd_report) and die "Could not execute command: $cmd_report";
-		
 	
 	foreach my $L (qw/S G F/)
 	{
@@ -118,8 +118,9 @@ sub doKrakenOnExistingDB
 		$outputDir . '/results_kraken.txt',
 		'DB/taxonomy',
 		'reads_classified_report',
+		'reads_classified',		
 	);
-	
+
 	create_compatible_reads_file_from_kraken(
 		$outputDir . '/results_kraken.txt.reads2Taxon',
 		'DB/taxonomy',
@@ -152,9 +153,8 @@ sub doKraken
 	
 	my $kraken_dir = $jobDir . '/kraken/';
 	my $jobDir_abs = abs_path($jobDir);
-
+	
 	translateMetaMapToKraken($kraken_dir, $dbDir, $krakenDBTemplate, $kraken_binPrefix, $Bracken_dir);
-
 	
 	my $simulatedReads = abs_path($reads_fastq);
 	die unless(-e $simulatedReads);
@@ -169,6 +169,7 @@ sub create_compatible_file_from_kraken
 	my $output_fn = shift;
 	my $taxonomy_kraken_dir = shift;
 	my $f_K = shift;
+	my $f_reads = shift;
 	
 	my $taxonomy_kraken = taxTree::readTaxonomy($taxonomy_kraken_dir);
 	
@@ -194,61 +195,96 @@ sub create_compatible_file_from_kraken
 			$n_root = $f[1];
 			next;
 		}
-		
-		my $percentage = $f[0];
-		my $nReads = $f[1];
-		my $taxonID = $f[4];
-		die "Unknown taxonomy ID $taxonID" unless(exists $taxonomy_kraken->{$taxonID});
-		my $rank = $taxonomy_kraken->{$taxonID}{rank};
-		next unless(($rank eq 'species') or ($rank eq 'genus') or ($rank eq 'family'));
-		
-		$S_byLevel{$rank}{$taxonID}[0] += $nReads;
-		$S_byLevel{$rank}{$taxonID}[1] += ($percentage / 100);
 	}
-	close(KRAKEN);
+	
 	$n_unclassified = 0 unless(defined $n_unclassified);
 	my $n_total_reads = $n_unclassified + $n_root;
 	
-	foreach my $level (keys %S_byLevel)
-	{
-		my $reads_classified_at_level = 0;
-		foreach my $key (keys %{$S_byLevel{$level}})
+	my $n_unclassified_check = 0;
+	
+	my %_getLightning_cache;
+	my $getLightning = sub {
+		my $taxonID = shift;
+		if(exists $_getLightning_cache{$taxonID})
 		{
-			my $newFreq = $S_byLevel{$level}{$key}[0] / $n_total_reads;
-			$S_byLevel{$level}{$key}[1] = $newFreq;
-			$reads_classified_at_level += $S_byLevel{$level}{$key}[0];
+			return $_getLightning_cache{$taxonID};
 		}
-		my $reads_not_classified_at_level = $n_total_reads - $reads_classified_at_level;
-		die unless($reads_not_classified_at_level >= $n_unclassified);
-		$S_byLevel{$level}{'Unclassified'}[0] = $reads_not_classified_at_level;
-		$S_byLevel{$level}{'Unclassified'}[1] = $reads_not_classified_at_level / $n_total_reads;
+		else
+		{
+			my $lightning = validation::getAllRanksForTaxon_withUnclassified($taxonomy_kraken, $taxonID);
+			$_getLightning_cache{$taxonID} = $lightning;
+			return $lightning;
+		}
+	};
+	
+	my @evaluateAccuracyAtLevels = validation::getEvaluationLevels();
+	
+	my %reads_at_levels;
+	open(KRAKEN, '<', $f_reads) or die "Cannot open $f_reads";
+	while(<KRAKEN>)
+	{
+		my $line = $_;
+		chomp($line);
+		next unless($line);
+		my @f = split(/\t/, $line);
+		my $classified = $f[0];
+		my $readID = $f[1];
+		my $taxonID = $f[2];
+		die unless(($classified eq 'C') or ($classified eq 'U'));
+		if($classified eq 'C')
+		{
+			my $lightning = $getLightning->($taxonID);
+			RANK: foreach my $rank (@evaluateAccuracyAtLevels)
+			{
+				die unless(defined $lightning->{$rank});
+				$reads_at_levels{$rank}{$lightning->{$rank}}++;
+			}			
+		}
+		else
+		{
+			$n_unclassified_check++;
+		}
 	}
+	close(KRAKEN);
+	die unless($n_unclassified_check == $n_unclassified);
 	
 	open(OUTPUT, '>', $output_fn) or die "Cannot open $output_fn";
-	print OUTPUT join("\t", qw/AnalysisLevel ID Name Absolute PotFrequency/), "\n";	
-	foreach my $l (keys %S_byLevel)
+	print OUTPUT join("\t", qw/AnalysisLevel ID Name Absolute PotFrequency/), "\n";		
+	foreach my $level (@evaluateAccuracyAtLevels)
 	{
-		foreach my $taxonID (keys %{$S_byLevel{$l}})
+		$reads_at_levels{$level}{"Unclassified"} = 0 if(not exists $reads_at_levels{$level}{"Unclassified"});
+		$reads_at_levels{$level}{"Undefined"} = 0 if(not exists $reads_at_levels{$level}{"Undefined"});
+		
+		$reads_at_levels{$level}{"Unclassified"} += $n_unclassified;
+		my $reads_all_taxa = 0;
+		foreach my $taxonID (keys %{$reads_at_levels{$level}})
 		{
 			my $taxonID_for_print = $taxonID;
-			my $name;
+			my $name; 
 			if($taxonID eq 'Unclassified')
 			{
 				$name = 'Unclassified';
 				$taxonID_for_print = 0;
+			}
+			elsif($taxonID eq 'Undefined')
+			{
+				$name = 'NotLabelledAtLevel'; 
+				$taxonID_for_print = -1;				
 			}
 			else
 			{
 				$name = taxTree::taxon_id_get_name($taxonID, $taxonomy_kraken);
 			}
 			
-			print OUTPUT join("\t", $l, $taxonID_for_print, $name, $S_byLevel{$l}{$taxonID}[0], $S_byLevel{$l}{$taxonID}[1]), "\n";
+			my $nReads  = $reads_at_levels{$level}{$taxonID};
+			
+			print OUTPUT join("\t", $level, $taxonID_for_print, $name, $nReads, $nReads / $n_total_reads), "\n";
+			$reads_all_taxa += $nReads;
 		}
-
-		# print OUTPUT join("\t", $l, 'Unclassified', $n_unclassified, 0), "\n";
-	}	
+		
+		die unless($reads_all_taxa == $n_total_reads);
+	}
 	close(OUTPUT);
-	
 }
 
 sub create_compatible_reads_file_from_kraken
@@ -382,6 +418,11 @@ sub create_compatible_file_from_kraken_bracken
 			{
 				$name = 'Unclassified';
 				$taxonID_for_print = 0;
+			}
+			elsif($taxonID eq 'Undefined')
+			{
+				$name = 'NotLabelledAtLevel'; 
+				$taxonID_for_print = -1;				
 			}
 			else
 			{

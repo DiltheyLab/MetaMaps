@@ -9,7 +9,7 @@ use taxTree;
 
 sub get_metaMap_bin_and_enforce_mainDir
 {
-	my $metamap_bin = './mashmap';
+	my $metamap_bin = './metamap';
 	unless(-e $metamap_bin)
 	{
 		die "Please execute me from the main MetaMap directory";
@@ -71,7 +71,7 @@ sub copyMetaMapDB
 	my $source = shift;
 	my $target = shift;
 	
-	my @files_required = ('DB.fa', 'taxonInfo.txt');
+	my @files_required = ('DB.fa', 'taxonInfo.txt', 'contigNstats_windowSize_1000.txt');
 	my @files_optional = ('selfSimilarities.txt');
 	
 	unless(-d $target)

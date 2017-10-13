@@ -18,8 +18,9 @@ use Util;
 $| = 1;
 
 my $masterTaxonomy_dir = '/data/projects/phillippy/projects/MetaMap/downloads/taxonomy';
-my $DB = 'databases/miniSeq';
-my $MetaMap_results = '/scratch/tmp/MetaMap/hmp_set7';
+my $DB = 'databases/miniSeq+H';
+# my $MetaMap_results = '/scratch/tmp/MetaMap/hmp_set7';
+my $MetaMap_results = 'tmp/hmp7_2_miniSeq+H';
 my $kraken_results_dir = '/scratch/tmp/hmp_set7_combined_kraken_results';
 my $truth = 'tmp/truthHMP7';
 
@@ -37,7 +38,7 @@ my %results_distribution = (
 	'Bracken' => $kraken_results_dir . '/results_bracken.txt',
 );
 
-die unless(all {-e $_} values %results_readLevel);
+die Dumper("Missing files", [grep {not -e $_} values %results_readLevel]) unless(all {-e $_} values %results_readLevel);
 die unless(all {-e $_} values %results_distribution);
 
 

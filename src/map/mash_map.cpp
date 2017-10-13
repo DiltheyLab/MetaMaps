@@ -309,7 +309,7 @@ MetaMap v 0.1 \n\
 \n\
 Usage:\n\
 \n\
-  ./metamap index|map|classify\n\
+  ./metamap mapDirectly|classify|mapAgainstIndex|index\n\
 \n\
 Parameters:\n\
 \n\

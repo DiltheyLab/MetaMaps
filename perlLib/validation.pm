@@ -193,22 +193,26 @@ sub getAllRanksForTaxon_withUnclassified
 	die unless(defined $taxonID);
 	die Dumper("Undefined taxon ID $taxonID", $taxonID, ($taxonID eq '0'), ($taxonID == 0)) unless(defined $taxonomy->{$taxonID});
 	
-	
 	my @nodes_to_consider = ($taxonID, taxTree::get_ancestors($taxonomy, $taxonID));
 	
-	my $inTaxonomicAgreement = 0;
 	my $firstRankAssigned;
+	my $inDefinedRanks = 0;
+	my %sawRank;
 	foreach my $nodeID (@nodes_to_consider)
 	{
 		my $rank = $taxonomy->{$nodeID}{rank};
 		die unless(defined $rank);
+		$sawRank{$rank}++;
+		
+		
 		if(exists $forReturn{$rank})
 		{
 			$forReturn{$rank} = $nodeID;
-			$firstRankAssigned = $rank;
+			$firstRankAssigned = $rank if not(defined $firstRankAssigned);
 		}
 	}
-		
+	
+	die Dumper("Unexpected behaviour", $taxonID) if(($sawRank{'subspecies'} and not $sawRank{'species'}) or ($sawRank{'strain'} and not $sawRank{'species'}));
 	
 	if(defined $firstRankAssigned)
 	{
@@ -384,7 +388,6 @@ sub readLevelComparison
 	# my %taxonID_across_ranks;
 	foreach my $readID (@readIDs)
 	{
-		
 		my @read_categories = $get_read_categories->($readID);
 		
 		foreach my $category (@read_categories)
@@ -556,6 +559,22 @@ sub distributionLevelComparison
 			$S_AVGRE += ( abs($shouldBeFreq - $isFreq) / $shouldBeFreq);
 			$S_RRMSE += (($shouldBeFreq - $isFreq) / $shouldBeFreq)**2;
 		}
+		
+		my $L1_sum = 0;
+		my $L2_sum = 0;
+		my %joint_taxonIDs = map {$_ => 1} ((keys %{$distribution_inferred->{$level}}), (keys %{$distribution_truth->{$level}}));
+		foreach my $taxonID (keys %joint_taxonIDs)
+		{
+			my $isFreq = (exists $distribution_inferred->{$level}{$taxonID}) ? $distribution_inferred->{$level}{$taxonID}[1] : 0;
+			my $shouldBeFreq = (exists $distribution_truth->{$level}{$taxonID}) ? $distribution_truth->{$level}{$taxonID} : 0;
+			my $L1_diff = abs($isFreq - $shouldBeFreq);
+			my $L2_diff = ($isFreq - $shouldBeFreq)**2;
+			$L1_sum += $L1_diff;
+			$L2_sum += $L2_diff;
+		}
+		my $L1 = $L1_sum;
+		my $L2 = sqrt($L2_sum);
+		
 		my $AVGRE *= (1 / scalar(keys %{$distribution_inferred->{$level}}));
 		my $RRMSE *= (1 / scalar(keys %{$distribution_inferred->{$level}}));
 		$RRMSE = sqrt($RRMSE);
@@ -568,6 +587,8 @@ sub distributionLevelComparison
 			$external_comparison->{$label}{$level}{correct} += $totalFreqCorrect; 
 			push(@{$external_comparison->{$label}{$level}{AVGRE}}, $AVGRE);
 			push(@{$external_comparison->{$label}{$level}{RRMSE}}, $RRMSE);
+			push(@{$external_comparison->{$label}{$level}{L1}}, $L1);
+			push(@{$external_comparison->{$label}{$level}{L2}}, $L2);
 		}
 	}		
 }			

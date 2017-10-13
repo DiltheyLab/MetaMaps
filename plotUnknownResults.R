@@ -7,6 +7,7 @@ if(length(args) >= 1)
 } else
 {
 	file_prefix <- "/scratch/tmp/MetaMap/hmp_set7"
+	file_prefix <- "tmp/hmp7_2_miniSeq+H"
 }
 
 

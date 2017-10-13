@@ -26,6 +26,7 @@ use Util;
 use SimulationsKraken;
 use SimulationsMetaPalette;
 use validation;
+use simulation;
 
 Util::get_metaMap_bin_and_enforce_mainDir();
 die unless(-e 'estimateSelfSimilarity.pl');
@@ -51,7 +52,7 @@ my $masterTaxonomy_merged;
 
 my $PBsim_cmd = qq(/data/projects/phillippy/projects/mashsim/PBSIM-PacBio-Simulator/src/pbsim --model_qc /data/projects/phillippy/projects/mashsim/PBSIM-PacBio-Simulator/data/model_qc_clr --data-type CLR --depth DEPTH --prefix --length-mean $simulation_read_length --accuracy-mean 0.88 REF);
 
-my $metamap_bin = './mashmap';
+my $metamap_bin = './metamap';
 my $metaPalette_installation_dir = qq(/data/projects/phillippy/software/MetaPalette/);
 my $jellyfish_2_bin = qq(/data/projects/phillippy/software/jellyfish-2.2.6/bin/jellyfish);
 
@@ -130,7 +131,7 @@ my $DB = 'databases/miniSeq_100';
 my $jobI;
 my $really;
 my $jobIMethod = 'all';
-my $n_simulations = 1;
+my $n_simulations = 10;
 GetOptions (
 	'DB:s' => \$DB,
 	'action:s' => \$action,
@@ -363,7 +364,7 @@ elsif($action eq 'analyzeAll')
 		}
 		
 		{
-			open(READSABSOLUTELYCORRECT, '>', '_readsCorrectByLevel') or die;
+			open(READSCORRECTBYLEVEL, '>', '_readsCorrectByLevel') or die;
 			my @header_fields_1_byLevelCorrect = ('ReadLevel', 'EvaluationLevel');
 			my @header_fields_2_byLevelCorrect = ('', '');
 			my @header_fields_3_byLevelCorrect = ('', '');	
@@ -373,8 +374,8 @@ elsif($action eq 'analyzeAll')
 				my $hf2_before = $#header_fields_2_byLevelCorrect;
 				foreach my $method (@methods)
 				{
-					push(@header_fields_2_byLevelCorrect, $method, '', '');		
-					push(@header_fields_3_byLevelCorrect, 'OK', 'OK2', 'M');
+					push(@header_fields_2_byLevelCorrect, $method, '', '', '');		
+					push(@header_fields_3_byLevelCorrect, 'N', 'OK', 'OK2', 'M');
 				}
 				my $hf2_after = $#header_fields_2_byLevelCorrect;
 				my $requiredFields = $hf2_after - $hf2_before;
@@ -384,9 +385,9 @@ elsif($action eq 'analyzeAll')
 				push(@header_fields_1_byLevelCorrect, @addToHeader1);
 			}
 			
-			print READSABSOLUTELYCORRECT join("\t", @header_fields_1_byLevelCorrect), "\n";
-			print READSABSOLUTELYCORRECT join("\t", @header_fields_2_byLevelCorrect), "\n";
-			print READSABSOLUTELYCORRECT join("\t", @header_fields_3_byLevelCorrect), "\n";
+			print READSCORRECTBYLEVEL join("\t", @header_fields_1_byLevelCorrect), "\n";
+			print READSCORRECTBYLEVEL join("\t", @header_fields_2_byLevelCorrect), "\n";
+			print READSCORRECTBYLEVEL join("\t", @header_fields_3_byLevelCorrect), "\n";
 
 			foreach my $readLevel (@readLevels)
 			{
@@ -420,14 +421,14 @@ elsif($action eq 'analyzeAll')
 							$percOK_tD = sprintf("%.2f", ($correct_tD / $N_tD)) if($N_tD > 0);
 							$percMissing = sprintf("%.2f", ($missing / $N)) if($N > 0);
 							
-							push(@output_fields_byLevelCorrect, $percOK, $percOK_tD, $percMissing);
+							push(@output_fields_byLevelCorrect, $N, $percOK, $percOK_tD, $percMissing);
 						}
 					}
-					print READSABSOLUTELYCORRECT join("\t", @output_fields_byLevelCorrect), "\n";
+					print READSCORRECTBYLEVEL join("\t", @output_fields_byLevelCorrect), "\n";
 				}
 			}
 			
-			close(READSABSOLUTELYCORRECT);
+			close(READSCORRECTBYLEVEL);
 		}
 	}
 	{
@@ -455,14 +456,17 @@ elsif($action eq 'analyzeAll')
 		open(FREQEVALUATION, '>', '_frequenciesCorrectByLevel') or die;
 		my @header_fields_1_freqCorrect = ('EvaluationLevel');
 		my @header_fields_2_freqCorrect = ('');
+		my @header_fields_3_freqCorrect = ('');
 		
 		foreach my $variety (@varieties)
 		{
 			my $hf2_before = $#header_fields_2_freqCorrect;
 			foreach my $method (@methods)
 			{
-				push(@header_fields_2_freqCorrect, $method, '', '');		
+				push(@header_fields_2_freqCorrect, $method, '');	
+				push(@header_fields_3_freqCorrect, 'fCorrect', 'L1');					
 			}
+			
 			my $hf2_after = $#header_fields_2_freqCorrect;
 			my $requiredFields = $hf2_after - $hf2_before;
 			die unless($requiredFields > 0);
@@ -473,6 +477,7 @@ elsif($action eq 'analyzeAll')
 		
 		print FREQEVALUATION join("\t", @header_fields_1_freqCorrect), "\n";
 		print FREQEVALUATION join("\t", @header_fields_2_freqCorrect), "\n";
+		print FREQEVALUATION join("\t", @header_fields_3_freqCorrect), "\n";
 		 
 		foreach my $evaluationLevel (@evaluationLevels)
 		{		
@@ -481,19 +486,23 @@ elsif($action eq 'analyzeAll')
 			foreach my $variety (@varieties)
 			{				
 				foreach my $methodName (@methods)
-				{				
+				{				 
 					my $freqOK = 'NA';
 					my $M_AVGRE = 'NA';
 					my $M_RRMSE = 'NA';
+					my $M_L1 = 'NA';
+					my $M_L2 = 'NA';
 					
 					if(exists $freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel})
 					{
 						$freqOK = $freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{correct}/$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{total};
 						$M_AVGRE = sum(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{AVGRE}}) / scalar(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{AVGRE}});
 						$M_RRMSE = sum(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{RRMSE}}) / scalar(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{RRMSE}});
+						$M_L1 = sum(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{L1}}) / scalar(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{L1}});
+						$M_L2 = sum(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{L2}}) / scalar(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{L2}});
 					}
 					
-					push(@output_fields_freqCorrect, $freqOK);
+					push(@output_fields_freqCorrect, $freqOK, $M_L1);
 				}				
 			}	
 			
@@ -567,6 +576,7 @@ sub inferenceOneSimulation
 		(mkdir($inference_target_dir) or die "Cannot mkdir $inference_target_dir") unless(-d $inference_target_dir);
 		
 		print "Doing inference in $DB_target_dir\n";
+		 
 		doMetaMap($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq});
 		SimulationsKraken::doKraken($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $krakenDBTemplate, $kraken_binPrefix, $Bracken_dir);
 		if($simulation_href->{inferenceDBs}[$varietyI][2] eq 'fullDB')
@@ -836,7 +846,6 @@ sub executeSimulation
 	my $fh_log = shift;
 	my $fh_selfSimilarities = shift;
 	my $fh_selfSimilarities_collect = shift;
-	
 	
 	setup_directory_and_simulate_reads($simulation_href, $MetaMap_taxonomy, $fh_log);
 	prepareDBs($simulation_href, $fh_log, $fh_selfSimilarities, $fh_selfSimilarities_collect);
@@ -1172,6 +1181,9 @@ sub produceReducedDB
 	close(TAXONIN);
 	close(TAXONOUT);
 	
+	# copy taxon-windows file
+	copy($baseDB . '/contigNstats_windowSize_1000.txt', $targetDir . '/contigNstats_windowSize_1000.txt');
+
 	# create reduced FASTA
 	my $baseDB_fa = $baseDB . '/DB.fa';
 	my $reducedDB_fa = $targetDir . '/DB.fa';
