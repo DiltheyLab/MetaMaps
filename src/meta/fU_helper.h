@@ -418,6 +418,11 @@ public:
 		}
 
 		std::ifstream f (fn);
+		if(!f.is_open())
+		{
+			std::cerr << "File " << fn << " does not exist!\n" << std::flush;
+		}
+		
 		assert(f.is_open());
 
 		std::string line;

@@ -165,6 +165,10 @@ foreach my $level (keys %union_taxonIDs_byLevel)
 			{
 				$taxonLabel = 'Undefined';
 			}
+			elsif($taxonID eq 'NotLabelledAtLevel')
+			{
+				$taxonLabel = 'NotLabelledAtLevel';
+			}			
 			else
 			{
 				$taxonLabel = taxTree::taxon_id_get_name($taxonID, $master_taxonomy);			

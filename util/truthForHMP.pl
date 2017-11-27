@@ -79,7 +79,6 @@ print "haveReadInFastQ:", scalar(keys %haveReadInFastQ), "\n";
 print "noReadInFastQ: ", scalar(keys %noReadInFastQ), "\n";
 
 
-
 # statistics
 
 my %histogram_n_alignments;
@@ -169,7 +168,7 @@ $gi_2_taxon{126640109} = '400667';
 $gi_2_taxon{161510924} = '451516';
 $gi_2_taxon{32470532} = '176280';
 			
-open(OUT_PERREAD, '>', $fn_out_reads) or die;
+open(OUT_PERREAD, '>', $fn_out_reads) or die "Cannot open file $fn_out_reads";
 my %read_2_taxonID;
 my %taxonID_read_counts;
 foreach my $readID (keys %read_2_gis)

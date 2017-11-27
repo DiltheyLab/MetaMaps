@@ -47,7 +47,7 @@ sub truthFileFromReadCounts
 		{
 			if(not defined $thisTaxon_levels{$l})
 			{
-				$thisTaxon_levels{$l} = 'Undefined';
+				$thisTaxon_levels{$l} = 'NotLabelledAtLevel';
 			}
 			
 			$readCount_by_level{$l}{$thisTaxon_levels{$l}} += $readCounts_href->{$taxonID};
@@ -78,8 +78,18 @@ sub truthFileFromReadCounts
 		{
 			my $nReads = $readCount_by_level{$level}{$taxonID};
 			my $f = $nReads / $totalReads;
-			my $name = ($taxonID ne 'Undefined') ? taxTree::taxon_id_get_name($taxonID, $taxonomy_href) : 'Undefined';
-			print O join("\t", $level, $taxonID, $name, $nReads, $f), "\n";
+			my $name;
+			my $taxonIDForPrint = $taxonID;
+			if($taxonID eq 'NotLabelledAtLevel')
+			{
+				$name = $taxonID;
+				$taxonIDForPrint = -1;
+			}
+			else
+			{ 
+				$name = taxTree::taxon_id_get_name($taxonID, $taxonomy_href) 
+			}
+			print O join("\t", $level, $taxonIDForPrint, $name, $nReads, $f), "\n";
 		}
 		
 	}

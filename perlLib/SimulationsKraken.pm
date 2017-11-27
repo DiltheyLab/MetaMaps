@@ -271,6 +271,11 @@ sub create_compatible_file_from_kraken
 				$name = 'NotLabelledAtLevel'; 
 				$taxonID_for_print = -1;				
 			}
+			elsif($taxonID eq 'NotLabelledAtLevel')
+			{
+				$name = 'NotLabelledAtLevel'; 
+				$taxonID_for_print = -1;				
+			}			
 			else
 			{
 				$name = taxTree::taxon_id_get_name($taxonID, $taxonomy_kraken);
@@ -424,6 +429,11 @@ sub create_compatible_file_from_kraken_bracken
 				$name = 'NotLabelledAtLevel'; 
 				$taxonID_for_print = -1;				
 			}
+			elsif($taxonID eq 'NotLabelledAtLevel')
+			{
+				$name = 'NotLabelledAtLevel'; 
+				$taxonID_for_print = -1;				
+			}			
 			else
 			{
 				$name = taxTree::taxon_id_get_name($taxonID, $taxonomy_kraken);

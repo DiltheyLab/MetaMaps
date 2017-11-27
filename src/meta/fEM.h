@@ -661,7 +661,7 @@ void doEM(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestC
 	{
 		std::string taxonID = identitiesEntry.first;
 		std::vector<double> identities = identitiesEntry.second;
-		if(identities.size() >= minimumReadsPerBestContig)
+		if((identities.size() >= 3) && (identities.size() >= minimumReadsPerBestContig))
 		{
 			std::sort(identities.begin(), identities.end());
 			double medianIdentity = identities.at(identities.size()/2);
@@ -832,7 +832,7 @@ void doEM(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestC
 				for(auto idty : identities)
 				{
 					if(idty <= highestMedian_oneThird)
-					{
+					{ 
 						observed_n_OneThird++;
 					}
 				}
@@ -840,15 +840,31 @@ void doEM(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestC
 
 				size_t observed_n_nonOneThird = identities.size() - observed_n_OneThird;
 
+			
 				double expected_n_oneThird =  oneThird_p * identities.size();
 				double expected_n_nonOneThird = identities.size() - expected_n_oneThird;
 
+				/*
+				std::cerr << "identities.size(): " << identities.size() << "\n";
+				std::cerr << "observed_n_nonOneThird: " << observed_n_nonOneThird << "\n";
+				std::cerr << "oneThird_p: " << oneThird_p << "\n";
+				std::cerr << "observed_n_OneThird: " << observed_n_OneThird << "\n";
+				std::cerr << "expected_n_oneThird: " << expected_n_oneThird << "\n";
+				std::cerr << "expected_n_nonOneThird: " << expected_n_nonOneThird << "\n";
+				std::cerr << std::flush;
+				*/
+				
+				assert(expected_n_oneThird > 0);
+				assert(expected_n_nonOneThird > 0);
+				
 				oneThird_p_str = std::to_string(oneThird_p);
 				double testStatistic = pow(observed_n_OneThird - expected_n_oneThird, 2)/expected_n_oneThird
 						+ pow(observed_n_nonOneThird - expected_n_nonOneThird, 2)/expected_n_nonOneThird;
 
 				propBottomThirdReadIdentities_str = std::to_string(((double)observed_n_OneThird / (double)identities.size()));
 				
+				// std::cerr << taxonID << "\t" << testStatistic  << "\n" << std::flush;
+
 				double pValue = 1 - boost::math::cdf(chiSq_oneDf, testStatistic);
 				
 				// std::cerr << taxonID << "\t" << testStatistic << "\t" << pValue << "\n" << std::flush;

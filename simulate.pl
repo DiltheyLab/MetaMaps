@@ -132,6 +132,7 @@ my $jobI;
 my $really;
 my $jobIMethod = 'all';
 my $n_simulations = 10;
+my $useVarietyI;
 GetOptions (
 	'DB:s' => \$DB,
 	'action:s' => \$action,
@@ -139,11 +140,12 @@ GetOptions (
 	'really:s' => \$really,
 	'n_simulations:s' => \$n_simulations,
 	'jobIMethod:s' => \$jobIMethod,
+	'varietyI:s' => \$useVarietyI,
 );
 
 if(not defined $action)
 {
-	die "Please specify --action, e.g. prepare, inferenceJobI, analyzeJobI";
+	die "Please specify --action, e.g. prepare, prepareII, analyzeAll, inferenceJobI, analyzeJobI";
 }
 
 unless(defined $DB)
@@ -162,6 +164,8 @@ if($action eq 'prepare')
 	my $DB_fa = $DB . '/DB.fa';
 	my $existingSelfSimilarities = $DB . '/selfSimilarities.txt';
 	
+	die "Simulations in directory $globalOutputDir already prepared" if getFlag($globalOutputDir, 'simulated');
+
 	die unless(-e $DB_fa);
 	die unless(-e $existingSelfSimilarities);
 	
@@ -175,7 +179,9 @@ if($action eq 'prepare')
 	my $fn_log = $globalOutputDir. '/log.txt';	
 	my $fn_selfSimilarities = $globalOutputDir. '/selfSimilarities.txt';	
 	my $fn_selfSimilarities_collect = $globalOutputDir. '/selfSimilarities_collect.txt';	
-		
+	my $fn_selfSimilarities_fromTemplate = $globalOutputDir. '/selfSimilarities_fromTemplate.txt';	
+	my $fn_selfSimilarities_fromTemplate_asArray = $globalOutputDir. '/selfSimilarities_fromTemplate.txt.asArray';	
+
 		
 	my $fh_log;
 	open($fh_log, '>', $fn_log) or die "Cannot open $fn_log";
@@ -185,6 +191,9 @@ if($action eq 'prepare')
 
 	my $fh_selfSimilarities_collect;
 	open($fh_selfSimilarities_collect, '>', $fn_selfSimilarities_collect) or die "Cannot open $fn_selfSimilarities_collect";
+		
+	my $fh_selfSimilarities_prepareFromOthers;
+	open($fh_selfSimilarities_prepareFromOthers, '>', $fn_selfSimilarities_fromTemplate) or die "Cannot open $fn_selfSimilarities_fromTemplate";
 		
 	my @simulations_to_execute;
 	for(my $simulationI = 0; $simulationI < $n_simulations; $simulationI++)
@@ -209,7 +218,7 @@ if($action eq 'prepare')
 	{
 		print {$fh_log} "Executing outer simulation $simulationI\n";
 		my $oneSimulation_href = $simulations_to_execute[$simulationI];
-		executeSimulation($oneSimulation_href, \%taxonID_2_contigIDs, \%contig_2_length, $MetaMap_taxonomy, $fh_log, $fh_selfSimilarities, $fh_selfSimilarities_collect);
+		executeSimulation($oneSimulation_href, \%taxonID_2_contigIDs, \%contig_2_length, $MetaMap_taxonomy, $fh_log, $fh_selfSimilarities, $fh_selfSimilarities_collect, $fh_selfSimilarities_prepareFromOthers);
 	}
 	
 	my $simulations_qsub_file = $globalOutputDir. '/qsub.txt';	 
@@ -226,13 +235,66 @@ perl simulate.pl --action inferenceJobI --DB $DB --jobI \$jobID
 	close($fh_log);
 	close($fh_selfSimilarities);
 	close($fh_selfSimilarities_collect);
+	close($fh_selfSimilarities_prepareFromOthers);
 	
 	my $n_simulations_file = $globalOutputDir . '/n_simulations.txt';
 	open(N, '>', $n_simulations_file) or die "Cannot open $n_simulations_file";
 	print N $n_simulations, "\n";
 	close(N); 
 	
-	print "$n_simulations prepared on DB $DB -- if you're in an SGE environment, you can now\n\n\texecute the commands in $fn_selfSimilarities\n\tand later these in $fn_selfSimilarities_collect\n\n\tqsub $simulations_qsub_file\n\n";
+	createArrayJob($fn_selfSimilarities_fromTemplate, $fn_selfSimilarities_fromTemplate_asArray);
+	
+	# print "$n_simulations prepared on DB $DB -- if you're in an SGE environment, you can now\n\n\texecute the commands in $fn_selfSimilarities\n\tand later these in $fn_selfSimilarities_collect\n\n\tqsub $simulations_qsub_file\n\n";
+	print "$n_simulations prepared on DB $DB -- if you're in an SGE environment, you can now\n\n\tqsub $fn_selfSimilarities_fromTemplate_asArray\n\tand when all jobs are done call me with --mode prepareII";
+	
+	setFlag($globalOutputDir, 'simulated', 1);
+}
+elsif($action eq 'prepareII')
+{
+	die "Simulations in $globalOutputDir not prepared yet (--mode prepare)" unless getFlag($globalOutputDir, 'simulated');
+
+	my $n_simulations_file = $globalOutputDir . '/n_simulations.txt';
+	open(N, '<', $n_simulations_file) or die "Cannot open $n_simulations_file";
+	my $realizedN = <N>;
+	chomp($realizedN);
+	close(N);
+	die unless($realizedN =~ /^\d+$/);
+	
+	my %n_reads_correct_byVariety;
+	my %n_reads_correct_byVariety_byLevel;
+	my %freq_byVariety_byLevel;
+	
+	# for(my $jobI = 0; $jobI < $realizedN; $jobI++)
+	my @commands;
+	for(my $jobI = 0; $jobI < $realizedN; $jobI++)  
+	{
+		my $simulation_href_fn = $globalOutputDir . '/' . $jobI . '/simulationStore';
+		my $simulation_href = retrieve $simulation_href_fn;
+					
+		for(my $varietyI = 0; $varietyI <= $#{$simulation_href->{dbDirs_metamap}}; $varietyI++)
+		{			
+			my $DB_target_dir = $simulation_href->{outputDirectory} . '/DB_' . $simulation_href->{inferenceDBs}[$varietyI][2];
+			die unless($DB_target_dir eq $simulation_href->{dbDirs_metamap}[$varietyI]);
+		
+			my $fn_selfSimilarities = $DB_target_dir . '/selfSimilarities.txt';
+			die "File $fn_selfSimilarities missing" unless(-e $fn_selfSimilarities);
+			
+			my $cmd = qq(perl simulate.pl --action inferenceJobI --DB $DB --jobI $jobI --varietyI $varietyI);
+			
+			push(@commands, $cmd);
+		}	
+	}	
+	
+	my $fn_jobs_nonArray = $globalOutputDir . '/inferenceJobs.noArray';
+	open(F, '>', $fn_jobs_nonArray) or die;
+	print F join("\n", @commands), "\n";
+	close(F);
+	
+	my $fn_jobs_asArray = $globalOutputDir . '/inferenceJobs.asArray';
+
+	createArrayJob($fn_jobs_nonArray, $fn_jobs_asArray, 172, 'public.q');
+
+	print "\n", scalar(@commands), " individual jobs, now qsub $fn_jobs_asArray \n\n";
 }
 elsif($action eq 'inferenceJobI')
 {
@@ -266,13 +328,20 @@ elsif($action eq 'analyzeAll')
 	{
 		my $simulation_href_fn = $globalOutputDir . '/' . $jobI . '/simulationStore';
 		my $simulation_href = retrieve $simulation_href_fn;
-		evaluateOneSimulation($simulation_href, \%n_reads_correct_byVariety, \%n_reads_correct_byVariety_byLevel, \%freq_byVariety_byLevel);	
+		evaluateOneSimulation($simulation_href, \%n_reads_correct_byVariety, \%n_reads_correct_byVariety_byLevel, \%freq_byVariety_byLevel);
 	}
 	
 	my @varieties = qw/fullDB removeOne_self removeOne_species removeOne_genus/;
 	@varieties = grep {exists $n_reads_correct_byVariety{$_}} @varieties;
 	#die Dumper(\@varieties, \%n_reads_correct_byVariety) unless(scalar(@varieties) == scalar(keys %n_reads_correct_byVariety));
 	die Dumper(\@varieties, [keys %n_reads_correct_byVariety], "Issue I") unless(all {exists $n_reads_correct_byVariety{$_}} @varieties);
+	
+	my @levels_ordered = validation::getEvaluationLevels();
+	my %level_to_i;
+	for(my $levelI = 0; $levelI <= $#levels_ordered; $levelI++)
+	{
+		$level_to_i{$levels_ordered[$levelI]} = $levelI;
+	}
 	
 	{
 		my %_methods;
@@ -299,7 +368,22 @@ elsif($action eq 'analyzeAll')
 		}
 		die unless(all {$_methods{$_} == scalar(@varieties)} keys %_methods);
 		my @methods = sort keys %_methods;
-		my @readLevels = sort keys %_readStratification;
+		my @readLevels = sort {
+			if(($a =~ /novel_to/) and ($b =~ /novel_to/))
+			{
+				die unless($a =~ /novel_to_(.+)/);
+				my $a_level = $1;
+				die unless($b =~ /novel_to_(.+)/);
+				my $b_level = $1;
+				die "Undefined level $a_level" unless(defined $level_to_i{$a_level});				
+				die "Undefined level $b_level" unless(defined $level_to_i{$b_level});				
+				$level_to_i{$a_level} <=> $level_to_i{$b_level}
+			}
+			else
+			{
+				$a cmp $b
+			}
+		} keys %_readStratification;
 		# my @evaluationLevels = sort keys %_evaluationLevels;
 		my @evaluationLevels = qw/species genus family/;
 		die Dumper("Missing evaluation levels", \@evaluationLevels, \%_evaluationLevels) unless(all {exists $_evaluationLevels{$_}} @evaluationLevels);
@@ -315,8 +399,8 @@ elsif($action eq 'analyzeAll')
 				my $hf2_before = $#header_fields_2_absolutelyCorrect;
 				foreach my $method (@methods)
 				{
-					push(@header_fields_2_absolutelyCorrect, $method, '', '');		
-					push(@header_fields_3_absolutelyCorrect, 'N', 'OK', 'M');
+					push(@header_fields_2_absolutelyCorrect, $method, '', '', '', '');		
+					push(@header_fields_3_absolutelyCorrect, 'Ntotal', 'OKtotal', 'NmadeCall', 'OKmadeCall', 'noCall');
 				}
 				my $hf2_after = $#header_fields_2_absolutelyCorrect;
 				my $requiredFields = $hf2_after - $hf2_before;
@@ -339,20 +423,29 @@ elsif($action eq 'analyzeAll')
 					foreach my $methodName (@methods)
 					{
 						my $missing = 0;
-						my $N = 0;
+						my $NmadeCall = 0;
 						my $correct = 0;
-						my $percOK = 0;
+						
+						my $Ntotal = 0;
+						my $percOK_madeCall = 0;
+						my $percOK_total = 0;
+						my $perc_missing = 0;
 						
 						if(exists $n_reads_correct_byVariety{$variety}{$methodName}{$readLevel})
 						{
 							$missing =  $n_reads_correct_byVariety{$variety}{$methodName}{$readLevel}{missing};
-							$N =  $n_reads_correct_byVariety{$variety}{$methodName}{$readLevel}{N};
+							$NmadeCall =  $n_reads_correct_byVariety{$variety}{$methodName}{$readLevel}{N};
 							$correct =  $n_reads_correct_byVariety{$variety}{$methodName}{$readLevel}{correct};
+							
+							$Ntotal =  $missing + $NmadeCall;
+							
 						}
 
-						$percOK = sprintf("%.2f", ($correct / $N)) if($N > 0);
+						$percOK_madeCall = sprintf("%.2f", ($correct / $NmadeCall)) if($NmadeCall > 0);
+						$percOK_total = sprintf("%.2f", ($correct / $Ntotal)) if($Ntotal > 0);
+						$perc_missing = sprintf("%.2f", ($missing / ($Ntotal))) if($Ntotal > 0);
 						
-						push(@output_fields_absolutelyCorrect, $N, $percOK, $missing);
+						push(@output_fields_absolutelyCorrect, $Ntotal, $percOK_total, $NmadeCall, $percOK_madeCall, $perc_missing);
 					}
 				}
 			
@@ -374,8 +467,8 @@ elsif($action eq 'analyzeAll')
 				my $hf2_before = $#header_fields_2_byLevelCorrect;
 				foreach my $method (@methods)
 				{
-					push(@header_fields_2_byLevelCorrect, $method, '', '', '');		
-					push(@header_fields_3_byLevelCorrect, 'N', 'OK', 'OK2', 'M');
+					push(@header_fields_2_byLevelCorrect, $method, '', '', '', '');							
+					push(@header_fields_3_byLevelCorrect, 'Ntotal', 'OKtotal', 'NmadeCall', 'OKmadeCall', 'noCall');
 				}
 				my $hf2_after = $#header_fields_2_byLevelCorrect;
 				my $requiredFields = $hf2_after - $hf2_before;
@@ -399,29 +492,59 @@ elsif($action eq 'analyzeAll')
 						foreach my $methodName (@methods)
 						{				
 							my $missing = 0;
-							my $N = 0;
-							my $N_tD = 0;
+							
+							my $N_total = 0;
+							my $N_total_truthDefined = 0;
+							
+							my $N_madeCall = 0;
+							my $N_madeCall_truthDefined = 0;
+							
 							my $correct = 0;
-							my $correct_tD = 0;
-							my $percOK = 0;
-							my $percOK_tD = 0;
+							my $correct_truthDefined = 0;
+							
+							my $percOK_total = 0;
+							my $percOK_total_truthDefined = 0;							
+							my $percOK_madeCall = 0;
+							my $percOK_madeCall_truthDefined = 0;
 							my $percMissing = 0;
 							
-							print "N $N \n";
 							if(exists $n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$readLevel}{$evaluationLevel})
 							{
-								$missing = $n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$readLevel}{$evaluationLevel}{missing};
-								$N = $n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$readLevel}{$evaluationLevel}{N};
+								$N_madeCall = $n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$readLevel}{$evaluationLevel}{N};
+								$N_madeCall_truthDefined = $n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$readLevel}{$evaluationLevel}{N_truthDefined};
+								
 								$correct = $n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$readLevel}{$evaluationLevel}{correct};
-								$N_tD = $n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$readLevel}{$evaluationLevel}{N_truthDefined};
-								$correct_tD = $n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$readLevel}{$evaluationLevel}{correct_truthDefined};
-							}					
+								$correct_truthDefined = $n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$readLevel}{$evaluationLevel}{correct_truthDefined};
+								
+								$missing = $n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$readLevel}{$evaluationLevel}{missing};
+								
+								$N_total = $N_madeCall + $missing;
+								$N_total_truthDefined = $N_madeCall_truthDefined + $missing;
+							}		
+
+							print "N $N_total \n";
 							
-							$percOK = sprintf("%.2f", ($correct / $N)) if($N > 0);
-							$percOK_tD = sprintf("%.2f", ($correct_tD / $N_tD)) if($N_tD > 0);
-							$percMissing = sprintf("%.2f", ($missing / $N)) if($N > 0);
 							
-							push(@output_fields_byLevelCorrect, $N, $percOK, $percOK_tD, $percMissing);
+							# die Dumper("Weird - N is $N, but missing is $missing?", [$readLevel, $evaluationLevel, $variety, $methodName]) unless($missing <= $N);
+							
+							$percOK_total = sprintf("%.2f", ($correct / $N_total)) if($N_total > 0);
+							$percOK_total_truthDefined = sprintf("%.2f", ($correct_truthDefined / $N_total_truthDefined)) if($N_total_truthDefined > 0);
+							
+							$percOK_madeCall = sprintf("%.2f", ($correct / $N_total)) if($N_total > 0);
+							$percOK_madeCall_truthDefined = sprintf("%.2f", ($correct_truthDefined / $N_total_truthDefined)) if($N_total_truthDefined > 0);
+							
+							$percMissing = sprintf("%.2f", ($missing / $N_total)) if($N_total > 0);
+														
+							push(@header_fields_3_byLevelCorrect, 'Ntotal', 'OKtotal', 'NmadeCall', 'OKmadeCall', 'noCall');
+
+												
+							push(@output_fields_byLevelCorrect,
+								join(' / ', $N_total, $N_total_truthDefined),
+								join(' / ', $percOK_total, $percOK_total_truthDefined),
+								join(' / ', $N_madeCall, $N_madeCall_truthDefined),
+								join(' / ', $percOK_madeCall, $percOK_madeCall_truthDefined),
+								$percMissing
+							);
 						}
 					}
 					print READSCORRECTBYLEVEL join("\t", @output_fields_byLevelCorrect), "\n";
@@ -558,6 +681,59 @@ else
 	die "Unknown --action";
 }
 
+sub createArrayJob
+{
+	my $in = shift;
+	my $out = shift;
+	my $maxMem = shift;
+	my $queue = shift;
+	
+	if(not defined $maxMem)
+	{
+		$maxMem = 32;
+	}		
+	if(not defined $queue)
+	{
+		$queue = 'phillippy.q';
+	}		
+	
+	my @cmds;
+	open(IN, '<', $in) or die "Cannot open $in";
+	while(<IN>)
+	{
+		my $l = $_;
+		chomp($l);
+		push(@cmds, $l);
+	}
+	close(IN);
+	
+	my $nJobs = scalar(@cmds);
+	
+	my @cmds_switch;
+	for(my $cmdI = 0; $cmdI <= $#cmds; $cmdI++)
+	{
+		my $cmd = $cmds[$cmdI];
+		my $cmd_switch = 
+qq(if [ "\$jobID" == "$cmdI" ]
+then $cmd
+fi
+);
+		push(@cmds_switch, $cmd_switch);
+	}
+
+	open(OUT, '>', $out) or die "Cannot open $out";
+print OUT qq(#!/bin/bash
+#\$ -t 1-${nJobs}
+#\$ -q $queue
+#\$ -l mem_free=${maxMem}G
+jobID=\$(expr \$SGE_TASK_ID - 1)
+cd $FindBin::Bin
+);
+	print OUT join("\n", @cmds_switch);
+	
+	close(OUT);
+}
+
 sub inferenceOneSimulation
 {
 	my $simulation_href = shift;
@@ -565,9 +741,14 @@ sub inferenceOneSimulation
 	my $fullTaxonomy = taxTree::readTaxonomy($masterTaxonomy_dir);
 	
 	for(my $varietyI = 0; $varietyI <= $#{$simulation_href->{dbDirs_metamap}}; $varietyI++)
-	{
-		print "Inference $simulation_href->{inferenceDBs}[$varietyI][2] \n";
+	{		
+		if(defined $useVarietyI)
+		{
+			next unless($varietyI eq $useVarietyI);
+		}
 		
+		print "Inference $simulation_href->{inferenceDBs}[$varietyI][2] \n";
+			
 		my $DB_target_dir = $simulation_href->{outputDirectory} . '/DB_' . $simulation_href->{inferenceDBs}[$varietyI][2];
 		die unless($DB_target_dir eq $simulation_href->{dbDirs_metamap}[$varietyI]);
 		
@@ -846,9 +1027,10 @@ sub executeSimulation
 	my $fh_log = shift;
 	my $fh_selfSimilarities = shift;
 	my $fh_selfSimilarities_collect = shift;
+	my $fh_selfSimilarities_prepareFromOthers = shift;
 	
 	setup_directory_and_simulate_reads($simulation_href, $MetaMap_taxonomy, $fh_log);
-	prepareDBs($simulation_href, $fh_log, $fh_selfSimilarities, $fh_selfSimilarities_collect);
+	prepareDBs($simulation_href, $fh_log, $fh_selfSimilarities, $fh_selfSimilarities_collect, $fh_selfSimilarities_prepareFromOthers);
 	
 	die unless($simulation_href->{dbDirs_metamap});
 	die unless($simulation_href->{readsFastq});
@@ -894,8 +1076,8 @@ sub doMetaMap
 	die "No MetaMap mappings -- $file_mappings" unless(-e $file_mappings);
 		
 	# todo perhaps reconsider minreads
-	my $cmd_classify = qq(/usr/bin/time -v $metamap_bin classify --DB $DB --mappings $file_mappings --minreads 1 &> file_res_classification);
-	$cmd_classify = qq(/usr/bin/time -v $metamap_bin classify --DB $DB --mappings $file_mappings --minreads 1); 
+	my $cmd_classify = qq(/usr/bin/time -v $metamap_bin classify --DB $DB --mappings $file_mappings --minreads 1000 &> file_res_classification);
+	$cmd_classify = qq(/usr/bin/time -v $metamap_bin classify --DB $DB --mappings $file_mappings --minreads 1000); 
 	system($cmd_classify) and die "Cannot execute $cmd_classify";
 	
 
@@ -921,6 +1103,7 @@ sub prepareDBs
 	my $fh_log = shift;
 	my $fh_selfSimilarities = shift;
 	my $fh_selfSimilarities_collect = shift;
+	my $fh_selfSimilarities_prepareFromOthers = shift;
 	
 	foreach my $inference_variety (@{$simulation_href->{inferenceDBs}})
 	{
@@ -944,7 +1127,7 @@ sub prepareDBs
 		else
 		{
 			die unless($inference_variety->[0] eq 'remove');
-			produceReducedDB($simulation_href->{DB_simulation}, $inference_variety->[1], $DB_target_dir, $fh_selfSimilarities, $fh_selfSimilarities_collect);	
+			produceReducedDB($simulation_href->{DB_simulation}, $inference_variety->[1], $DB_target_dir, $fh_selfSimilarities, $fh_selfSimilarities_collect, $fh_selfSimilarities_prepareFromOthers);	
 			
 			# perhaps reconsider
 			# truthFileForReducedInferenceDB();
@@ -1141,6 +1324,7 @@ sub produceReducedDB
 	my $targetDir = shift;
 	my $fh_selfSimilarities = shift;
 	my $fh_selfSimilarities_collect = shift;
+	my $fh_selfSimilarities_prepareFromOthers = shift;
 	
 	print "produceReducedDB(..)\n";
 	print "\tBase  : ", $baseDB, "\n";
@@ -1221,15 +1405,16 @@ sub produceReducedDB
 	die unless(-e 'estimateSelfSimilarity.pl');
 	
 
-	# my $cmd_self_similarity = qq(perl estimateSelfSimilarity.pl --DB $targetDir --templateDB $baseDB --mode prepareFromTemplate);
-	my $cmd_self_similarity = qq(perl estimateSelfSimilarity.pl --DB $targetDir --mode prepareFromScratch --autoSubmit 1);
+	my $cmd_self_similarity = qq(perl estimateSelfSimilarity.pl --DB $targetDir --templateDB $baseDB --mode prepareFromTemplate);
+	my $cmd_self_similarity_qsub = qq(perl estimateSelfSimilarity.pl --DB $targetDir --mode prepareFromScratch --autoSubmit 1);
 	my $cmd_self_similarity_collect = qq(perl estimateSelfSimilarity.pl --DB $targetDir --mode collect);
 	
 	# warn  "Check command:\n$cmd_self_similarity\n\n";
 	# system($cmd_self_similarity) and die "Command $cmd_self_similarity failed";
 
-	print {$fh_selfSimilarities} $cmd_self_similarity, "\n";	
-	print {$fh_selfSimilarities_collect} $cmd_self_similarity_collect, "\n";	
+	# print {$fh_selfSimilarities} $cmd_self_similarity_qsub, "\n";	
+	# print {$fh_selfSimilarities_collect} $cmd_self_similarity_collect, "\n";	
+	print {$fh_selfSimilarities_prepareFromOthers} $cmd_self_similarity, "\n";	
 	
 	print "\t\tCreated reduced DB ", $targetDir, " with ", scalar(keys %$reducedTaxonomy), " nodes instead of ", scalar(keys %$taxonomy_base), " nodes\n";
 
@@ -1443,6 +1628,45 @@ sub fill_contigID_taxonID
 		}	
 	}
 	close(TAXA);	
+}
+
+sub flagFn
+{
+	my $directory = shift;
+	my $flagName = shift;
+	my $fn = $directory . '/flag_' . $flagName . '.txt';
+	return $fn;
+}
+
+sub getFlag
+{
+	my $directory = shift;
+	my $flagName = shift;
+	my $fn = flagFn($directory, $flagName);
+	if(-e $fn)
+	{
+		open(F, '<', $fn) or die;
+		my $line = <F>;
+		chomp($line);
+		close(F);
+		return $line;
+	}
+	else
+	{
+		return 0;
+	}
+}
+
+sub setFlag
+{
+	my $directory = shift;
+	my $flagName = shift;
+	my $value = shift;
+	
+	my $fn = flagFn($directory, $flagName);
+	open(F, '>', $fn) or die;
+	print F $value;
+	close(F);
 }
 
 

@@ -229,7 +229,7 @@ sub getAllRanksForTaxon_withUnclassified
 			{
 				if($setToUndefined and ($forReturn{$rank} eq 'Unclassified'))
 				{
-					$forReturn{$rank} = 'Undefined';
+					$forReturn{$rank} = 'NotLabelledAtLevel';
 				}
 			}
 		}
@@ -463,9 +463,12 @@ sub readLevelComparison
 			foreach my $category (@read_categories)
 			{
 				$n_reads_correct{$category}{missing}++;
+				die unless($n_reads_correct{$category}{missing} <= scalar(@readIDs));
 				foreach my $level (@evaluateAccuracyAtLevels)
 				{
 					$n_reads_correct_byLevel{$category}{$level}{missing}++;
+					die unless($n_reads_correct_byLevel{$category}{$level}{missing} <= scalar(@readIDs));
+					
 				}
 			}
 		}
@@ -493,7 +496,7 @@ sub readLevelComparison
 			}
 		}
 	}
-	
+
 	if(defined $external_reads_correct_byLevel)
 	{
 		foreach my $category (keys %n_reads_correct_byLevel)
@@ -503,6 +506,11 @@ sub readLevelComparison
 				foreach my $key (keys %{$n_reads_correct_byLevel{$category}{$level}})
 				{
 					$external_reads_correct_byLevel->{$label}{$category}{$level}{$key} += $n_reads_correct_byLevel{$category}{$level}{$key};
+				}
+				
+				if(exists $external_reads_correct_byLevel->{$label}{$category}{$level}{missing})
+				{
+					#die unless($external_reads_correct_byLevel->{$label}{$category}{$level}{missing} <= $external_reads_correct_byLevel->{$label}{$category}{$level}{N});
 				}
 			}
 		}
@@ -620,8 +628,9 @@ sub readInferredDistribution
 
 		next if($line{Name} eq 'TooShort');
 		next if($line{Name} eq 'Unmapped');
+		next if($line{Name} eq 'TotalReads');
 
-		if(($taxonID_nonMaster eq '0') and (($line{Name} eq 'Undefined') or ($line{Name} eq 'Unclassified')))
+		if(((substr($taxonID_nonMaster, 0, 1) ne 'x') and ($taxonID_nonMaster <= 0)) and (($line{Name} eq 'Undefined') or ($line{Name} eq 'Unclassified') or ($line{Name} eq 'NotLabelledAtLevel')))
 		{
 			$taxonID_nonMaster = $line{Name};
 		}
@@ -629,11 +638,11 @@ sub readInferredDistribution
 		{
 			Dumper($line, $f);
 		}
-
+		
 		my $taxonID_master = taxTree::findCurrentNodeID($taxonomy, $taxonomy_merged, $taxonID_nonMaster);
 				
 		die Dumper(\%line) unless(defined $taxonID_master);
-		die Dumper("Unknown taxon ID $taxonID_master in file $f", $taxonomy->{$taxonID_master}) unless(($taxonID_master eq 'Undefined') or ($taxonID_master eq 'Unclassified') or (defined $taxonomy->{$taxonID_master}));
+		die Dumper("Unknown taxon ID $taxonID_master in file $f", $taxonomy->{$taxonID_master}, $taxonID_nonMaster, \%line) unless(($taxonID_master eq 'Undefined') or ($taxonID_master eq 'Unclassified') or ($taxonID_master eq 'NotLabelledAtLevel') or (defined $taxonomy->{$taxonID_master}));
 		die unless(defined $line{Absolute});
 		die unless(defined $line{PotFrequency});
 		$inference{$line{AnalysisLevel}}{$taxonID_master}[0] += $line{Absolute};
