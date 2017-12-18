@@ -530,8 +530,8 @@ elsif($action eq 'analyzeAll')
 							$percOK_total = sprintf("%.2f", ($correct / $N_total)) if($N_total > 0);
 							$percOK_total_truthDefined = sprintf("%.2f", ($correct_truthDefined / $N_total_truthDefined)) if($N_total_truthDefined > 0);
 							
-							$percOK_madeCall = sprintf("%.2f", ($correct / $N_total)) if($N_total > 0);
-							$percOK_madeCall_truthDefined = sprintf("%.2f", ($correct_truthDefined / $N_total_truthDefined)) if($N_total_truthDefined > 0);
+							$percOK_madeCall = sprintf("%.2f", ($correct / $N_madeCall)) if($N_madeCall > 0);
+							$percOK_madeCall_truthDefined = sprintf("%.2f", ($correct_truthDefined / $N_madeCall_truthDefined)) if($N_madeCall_truthDefined > 0);
 							
 							$percMissing = sprintf("%.2f", ($missing / $N_total)) if($N_total > 0);
 														
@@ -539,10 +539,10 @@ elsif($action eq 'analyzeAll')
 
 												
 							push(@output_fields_byLevelCorrect,
-								join(' / ', $N_total, $N_total_truthDefined),
-								join(' / ', $percOK_total, $percOK_total_truthDefined),
-								join(' / ', $N_madeCall, $N_madeCall_truthDefined),
-								join(' / ', $percOK_madeCall, $percOK_madeCall_truthDefined),
+								($N_total ne $N_total_truthDefined) ? join(' / ', $N_total, $N_total_truthDefined) : $N_total,
+								($percOK_total ne $percOK_total_truthDefined) ? join(' / ', $percOK_total, $percOK_total_truthDefined) : $percOK_total, 
+								($N_madeCall ne $N_madeCall_truthDefined) ? join(' / ', $N_madeCall, $N_madeCall_truthDefined) : $N_madeCall,
+								($percOK_madeCall ne $percOK_madeCall_truthDefined) ? join(' / ', $percOK_madeCall, $percOK_madeCall_truthDefined) : $percOK_madeCall,
 								$percMissing
 							);
 						}

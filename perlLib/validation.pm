@@ -442,11 +442,11 @@ sub readLevelComparison
 				foreach my $category (@read_categories)
 				{					
 					$n_reads_correct_byLevel{$category}{$level}{N}++;
-					$n_reads_correct_byLevel{$category}{$level}{N_truthDefined}++ if($lightning_truth->{$level} ne 'Undefined');
+					$n_reads_correct_byLevel{$category}{$level}{N_truthDefined}++ if($lightning_truth->{$level} ne 'NotLabelledAtLevel');
 					if($lightning_truth->{$level} eq $lightning_inferred->{$level})
 					{
 						$n_reads_correct_byLevel{$category}{$level}{correct}++;
-						$n_reads_correct_byLevel{$category}{$level}{correct_truthDefined}++ if($lightning_truth->{$level} ne 'Undefined');
+						$n_reads_correct_byLevel{$category}{$level}{correct_truthDefined}++ if($lightning_truth->{$level} ne 'NotLabelledAtLevel');
 					}		
 					else
 					{
