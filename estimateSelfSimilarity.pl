@@ -69,6 +69,7 @@ my $outputFn_jobs_fromTemplate = $outputDir . '/jobs.fromTemplate';
 my $outputFn_qsub = $outputDir . '/jobs.qsub';
 my $outputFn_reads_results_many = $outputDir . '/results.reads.many.byNode';
 my $finalResultsFile = $DB . '/selfSimilarities.txt';
+my $finalResultsFile_expectedGenomeSizes = $DB . '/selfSimilarities.txt.expectedGenomeSizes';
 
 my $outputDir_templateDB = ($templateDB // '') . '/selfSimilarity';
 my $outputDir_results_templateDB = $outputDir_templateDB . '/results';
@@ -1230,6 +1231,7 @@ sub doCollect
 	taxTree::removeUnmappableParts($taxonomy, \%taxonID_2_contigs);
 	
 	my %results_reads_many_per_node;
+	my %results_genomeLengths_perNode;
 	my $total_jobs = 0;
 	my $total_jobs_reads_many_ok = 0;	
 	my $jobs_fn = ($collectFromTemplate) ? $outputFn_jobs_fromTemplate : $outputFn_jobs;
@@ -1240,7 +1242,8 @@ sub doCollect
 		my $line = $_;
 		chomp($line);
 		my @fields = split(/\t/, $line);
-		my $nodeID = $fields[0];
+		my $nodeID = $fields[0]; 
+		my $whatWeveMapped_taxonID = $fields[4]; 
 		my $contigs_A = $fields[10];
 		my $contigs_B = $fields[11];		
 		
@@ -1251,6 +1254,9 @@ sub doCollect
 		$total_jobs++; 
 		
 		# next unless($jobI == 2607); # todo remove
+		
+		my $genomeLength_whatWeveMapped = Util::getGenomeLength($whatWeveMapped_taxonID, \%taxonID_2_contigs, \%contigLength);
+		$results_genomeLengths_perNode{$nodeID}{$whatWeveMapped_taxonID} = $genomeLength_whatWeveMapped;
 		
 		if(-e $results_reads_many_fn)
 		{
@@ -1342,8 +1348,24 @@ sub doCollect
 
 	copy($outputFn_reads_results_many, $finalResultsFile) or die "Cannot copy $outputFn_reads_results_many -> $finalResultsFile";
 
+	open(GENOMESIZES, '>', $finalResultsFile_expectedGenomeSizes) or die "Cannot open $finalResultsFile_expectedGenomeSizes";
+	print GENOMESIZES join("\t", "targetNode", "expectedGenomeSize", "sourceNodes", "sourceGenomeSizes"), "\n";
+	foreach my $nodeID (keys %results_genomeLengths_perNode)
+	{
+		my @lengths;
+		my @lengths_sources;
+		foreach my $sourceID (keys %{$results_genomeLengths_perNode{$nodeID}})
+		{
+			push(@lengths, $results_genomeLengths_perNode{$nodeID}{$sourceID});
+			push(@lengths_sources, $sourceID);
+		}
+		print GENOMESIZES join("\t", $nodeID, Util::mean(@lengths), join(';', @lengths_sources), join(';', @lengths)), "\n";
+	}
+	close(GENOMESIZES);
+	
 	print "\n\nProduced results file:\n";
-	print " - $finalResultsFile \n\n";
+	print " - $finalResultsFile \n";
+	print " - $finalResultsFile_expectedGenomeSizes \n\n";
 }
 __END__
 
