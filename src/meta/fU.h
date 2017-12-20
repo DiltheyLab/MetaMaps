@@ -121,32 +121,38 @@ void printGenusLevelSummary(const taxonomy& T, std::pair<std::map<std::string, d
 	std::cout << "\n\n";
 }
 
-void producePotFile_U(std::string outputFN, const taxonomy& T, std::pair<std::map<std::string, double>, std::map<std::string, double>> frequencies, std::pair<std::map<std::string, size_t>, std::map<std::string, size_t>> readCount, size_t mappableReads)
+void producePotFile_U(std::string outputFN, const taxonomy& T, std::tuple<std::map<std::string, double>, std::map<std::string, double>, std::map<std::string, double>> frequencies, std::tuple<std::map<std::string, size_t>, std::map<std::string, size_t>> readCount, size_t mappableReads)
 {
 	double initial_f_sum = 0;
 	std::set<std::string> combinedKeys;
-	for(auto f : frequencies.first)
+	for(auto f : std::get<0>(frequencies))
 	{
 		combinedKeys.insert(f.first);
 		initial_f_sum += f.second;
 	}
-	for(auto f : frequencies.second)
+	for(auto f : std::get<1>(frequencies))
 	{
 		combinedKeys.insert(f.first);
 		initial_f_sum += f.second;		
 	}
+	for(auto f : std::get<2>(frequencies))
+	{
+		combinedKeys.insert(f.first);
+		initial_f_sum += f.second;
+	}
+
 	assert(abs(1 - initial_f_sum) <= 1e-3);
 	
-	for(auto f : readCount.first)
+	for(auto f : std::get<0>(readCount))
 	{
 		combinedKeys.insert(f.first);
 	}
-	for(auto f : readCount.second)
+	for(auto f : std::get<1>(readCount))
 	{
 		combinedKeys.insert(f.first);
 	}
 
-	std::map<std::string, std::pair<std::map<std::string, double>, std::map<std::string, double>>> frequencies_perLevel;
+	std::map<std::string, std::tuple<std::map<std::string, double>, std::map<std::string, double>, std::map<std::string, double>>> frequencies_perLevel;
 	std::map<std::string, std::pair<std::map<std::string, size_t>, std::map<std::string, size_t>>> readCount_perLevel;
 
 	std::map<std::string, std::set<std::string>> combinedKeys_perLevel;
@@ -164,32 +170,39 @@ void producePotFile_U(std::string outputFN, const taxonomy& T, std::pair<std::ma
 			std::string levelValue = uN.second;
 			combinedKeys_perLevel[level].insert(levelValue);
 
-			if(frequencies_perLevel[level].first.count(levelValue) == 0)
+			if(std::get<0>(frequencies_perLevel[level]).count(levelValue) == 0)
 			{
-				frequencies_perLevel[level].first[levelValue] = 0;
-				frequencies_perLevel[level].second[levelValue] = 0;
+				std::get<0>(frequencies_perLevel[level])[levelValue] = 0;
+				std::get<1>(frequencies_perLevel[level])[levelValue] = 0;
+				std::get<2>(frequencies_perLevel[level])[levelValue] = 0;
 				readCount_perLevel[level].first[levelValue] = 0;
 				readCount_perLevel[level].second[levelValue] = 0;
 			}
 
-			if(frequencies.first.count(taxonID))
+			if(std::get<0>(frequencies).count(taxonID))
 			{
-				frequencies_perLevel.at(level).first.at(levelValue) += frequencies.first.at(taxonID);
+				std::get<0>(frequencies_perLevel.at(level)).at(levelValue) += std::get<0>(frequencies).at(taxonID);
 			}
 
-			if(frequencies.second.count(taxonID))
+			if(std::get<1>(frequencies).count(taxonID))
 			{
-				frequencies_perLevel.at(level).second.at(levelValue) += frequencies.second.at(taxonID);
+				std::get<1>(frequencies_perLevel.at(level)).at(levelValue) += std::get<1>(frequencies).at(taxonID);
 			}
 
-			if(readCount.first.count(taxonID))
+			if(std::get<2>(frequencies).count(taxonID))
 			{
-				readCount_perLevel.at(level).first.at(levelValue) += readCount.first.at(taxonID);
+				std::get<2>(frequencies_perLevel.at(level)).at(levelValue) += std::get<2>(frequencies).at(taxonID);
 			}
 
-			if(readCount.second.count(taxonID))
+
+			if(std::get<0>(readCount).count(taxonID))
 			{
-				readCount_perLevel.at(level).second.at(levelValue) += readCount.second.at(taxonID);
+				readCount_perLevel.at(level).first.at(levelValue) += std::get<0>(readCount).at(taxonID);
+			}
+
+			if(std::get<1>(readCount).count(taxonID))
+			{
+				readCount_perLevel.at(level).second.at(levelValue) += std::get<1>(readCount).at(taxonID);
 			}
 		}
 	}
@@ -198,7 +211,7 @@ void producePotFile_U(std::string outputFN, const taxonomy& T, std::pair<std::ma
 	std::ofstream strout_frequencies(outputFN);
 	assert(strout_frequencies.is_open());
 
-	strout_frequencies << "AnalysisLevel" << "\t" <<  "taxonID" << "\t" << "Name" << "\t" << "Absolute_direct" << "\t" << "Absolute_indirect" << "\t" << "EMFrequency_direct" << "\t" << "EMfrequency_indirect" << "\t" <<  "Absolute" << "\t" << "EMFrequency" << "\t" << "PotFrequency" << "\n";
+	strout_frequencies << "AnalysisLevel" << "\t" <<  "taxonID" << "\t" << "Name" << "\t" << "readsDirectlyAssigned_inDB" << "\t" << "readsDirectlyAssigned_potentiallyNovel" << "\t" << "frDirect" << "\t" << "frIndirect" << "\t" <<  "frFromUnmapped" << "\t" << "totalReads" << "\t" << "PotFrequency" << "\n";
 
 	for(auto l : combinedKeys_perLevel)
 	{
@@ -210,7 +223,7 @@ void producePotFile_U(std::string outputFN, const taxonomy& T, std::pair<std::ma
 			std::string taxonIDName = (taxonID != "Undefined") ? T.getNode(taxonID).name.scientific_name : "NotLabelledAtLevel";
 			
 			size_t taxonID_combinedReads = (readCount_perLevel.at(levelName).first.at(taxonID) + readCount_perLevel.at(levelName).second.at(taxonID));
-			double taxonID_combinedFreq = (frequencies_perLevel.at(levelName).first.at(taxonID) + frequencies_perLevel.at(levelName).second.at(taxonID));
+			double taxonID_combinedFreq = (std::get<0>(frequencies_perLevel.at(levelName)).at(taxonID) + std::get<1>(frequencies_perLevel.at(levelName)).at(taxonID) + std::get<2>(frequencies_perLevel.at(levelName)).at(taxonID));
 			
 			strout_frequencies <<
 					levelName << "\t" <<
@@ -218,10 +231,10 @@ void producePotFile_U(std::string outputFN, const taxonomy& T, std::pair<std::ma
 					taxonIDName << "\t" <<
 					readCount_perLevel.at(levelName).first.at(taxonID) << "\t" <<
 					readCount_perLevel.at(levelName).second.at(taxonID) << "\t" <<
-					frequencies_perLevel.at(levelName).first.at(taxonID) << "\t" <<
-					frequencies_perLevel.at(levelName).second.at(taxonID) << "\t" <<
+					std::get<0>(frequencies_perLevel.at(levelName)).at(taxonID) << "\t" <<
+					std::get<1>(frequencies_perLevel.at(levelName)).at(taxonID) << "\t" <<
+					std::get<2>(frequencies_perLevel.at(levelName)).at(taxonID) << "\t" <<
 					taxonID_combinedReads << "\t" <<
-					taxonID_combinedFreq << "\t" << 
 					taxonID_combinedFreq << "\n";
 
 			levelReadSum += taxonID_combinedReads;					
@@ -244,11 +257,11 @@ void producePotFile_U(std::string outputFN, const taxonomy& T, std::pair<std::ma
 				0 << "\t" <<
 				"Unclassified" << "\t" <<
 				0 << "\t" <<
-				levelReadsUnclassified << "\t" <<
 				0 << "\t" <<
-				levelFreqUnclassified << "\t" <<
+				0 << "\t" <<
+				0 << "\t" <<
+				0 << "\t" <<
 				levelReadsUnclassified << "\t" <<
-				levelFreqUnclassified << "\t" << 
 				levelFreqUnclassified << "\n";		
 	}
 
@@ -559,6 +572,8 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 	size_t nTotalReads = mappingStats.at("TotalReads");	
 	size_t nTooShort = mappingStats.at("ReadsTooShort");
 	size_t nUnmapped = mappingStats.at("ReadsNotMapped");
+	size_t nMapped = mappingStats.at("ReadsMapped");
+	assert(nTotalReads == (nTooShort + nUnmapped + nMapped));
 	
 	size_t nReadsMappable = nTotalReads - nTooShort;
 	assert(nReadsMappable <= nTotalReads);
@@ -652,7 +667,55 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 		assert(abs(1 - f_sum_after) <= 1e-3);
 	};
 	
-	std::cout << "Starting EM..." << std::endl;	
+	auto normalize_f_triplet = [](std::tuple<std::map<std::string, double>, std::map<std::string, double>, std::map<std::string, double>>& fToN)
+	{
+		double f_sum = 0;
+		for(auto tF : std::get<0>(fToN))
+		{
+			f_sum += tF.second;
+		}
+		for(auto tF : std::get<1>(fToN))
+		{
+			f_sum += tF.second;
+		}
+		for(auto tF : std::get<2>(fToN))
+		{
+			f_sum += tF.second;
+		}
+
+		// todo remove
+		std::cout << "f_sum: " << f_sum << "\n" << std::flush;
+
+		for(auto& tF : std::get<0>(fToN))
+		{
+			tF.second /= f_sum;
+		}
+		for(auto& tF : std::get<1>(fToN))
+		{
+			tF.second /= f_sum;
+		}
+		for(auto& tF : std::get<2>(fToN))
+		{
+			tF.second /= f_sum;
+		}
+
+		double f_sum_after = 0;
+		for(auto tF : std::get<0>(fToN))
+		{
+			f_sum_after += tF.second;
+		}
+		for(auto tF : std::get<1>(fToN))
+		{
+			f_sum_after += tF.second;
+		}
+		for(auto tF : std::get<2>(fToN))
+		{
+			f_sum_after += tF.second;
+		}
+		assert(abs(1 - f_sum_after) <= 1e-3);
+	};
+
+	std::cout << "Starting EM-U..." << std::endl;
 	double ll_lastIteration;
 	size_t EMiteration = 0;
 	bool continueEM = true;
@@ -762,6 +825,17 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 		callBackForAllReads(mappedFile, processOneRead);
 		std::cout << "\n";
 		
+		double f_sum_preNormalization = 0;
+		for(auto tF : f.first)
+		{
+			f_sum_preNormalization += tF.second;
+		}
+		for(auto tF : f.second)
+		{
+			f_sum_preNormalization += tF.second;
+		}
+		assert(abs(nMapped - f_sum_preNormalization) <= 1e-2);
+
 		// todo
 		/*
 		std::cout << "allReads_has_1654" << "\t" << allReads_has_1654 << "\n";
@@ -778,7 +852,7 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 		*/
 		
 		double ll_thisIteration_unmapped = 0;
-		if(EMiteration >= round_first_unknown)
+		if(0 && EMiteration >= round_first_unknown)
 		{
 			if(EMiteration > round_first_unknown)
 			{
@@ -869,7 +943,8 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 		std::cout << "\t\tcontribution mapped reads  : " << ll_thisIteration_mapped << std::endl;
 		std::cout << "\t\tcontribution unmapped reads: " << ll_thisIteration_unmapped << std::endl;
 		
-		if((EMiteration > 0) && (EMiteration != round_first_unknown))
+		//if((EMiteration > 0) && (EMiteration != round_first_unknown))
+		if(EMiteration > 0)
 		{
 			double ll_diff = ll_thisIteration - ll_lastIteration;
 			assert(ll_diff >= 0);
@@ -897,7 +972,7 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 		*/
 		}
 		
-		if(EMiteration == (round_first_unknown - 1))
+		if(0 && (EMiteration == (round_first_unknown - 1)))
 		{
 			// todo
 			/*
@@ -975,7 +1050,6 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 	std::string output_reads_taxonID = mappedFile + ".U.reads2Taxon";
 	std::string output_shifted_frequencies_file = mappedFile + ".U.shiftedHistogramsPerTaxonID";
 
-
 	std::ofstream strout_reads_identities(output_assigned_reads_and_identities);
 	assert(strout_reads_identities.is_open());
 	strout_reads_identities << "taxonID" << "\t" << "directIndirect" << "\t" << "taxonName" << "\t" << "Identity" << "\t" << "Length" << "\n";
@@ -1017,6 +1091,119 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 	strout_reads_identities.close();
 	strout_reads_taxonIDs.close();
 	
+	cleanF_U(f, assignedReads, mappingStats.at("ReadsMapped"));
+
+	std::tuple<std::map<std::string, double>, std::map<std::string, double>, std::map<std::string, double>> frequencies_triplet;
+	if(unmappedReadsLengths.size())
+	{
+		double proportion_mapped = (double)nMapped / (double)nReadsMappable;
+		double proportion_toDistribute = (double)nUnmapped / (double)nReadsMappable;
+		assert(abs((proportion_mapped + proportion_toDistribute) - 1) <= 1e-3);
+
+		// find average proportion of expected unmapped reads, at given unmapped read lengths
+		std::map<std::string, double> proportion_unmapped_averagedEmpiricalReadLengths;
+		for(auto tF : f.second)
+		{
+			double proportion_unmapped_sum = 0;
+			for(auto oneUnmappedReadLength : unmappedReadsLengths)
+			{
+				proportion_unmapped_sum += iM.getIdentityP(0, tF.first, oneUnmappedReadLength, false);
+			}
+			double proportion_unmapped_average = proportion_unmapped_sum / (double)unmappedReadsLengths.size();
+			assert((proportion_unmapped_average >= 0) && (proportion_unmapped_average <= 1));
+			proportion_unmapped_averagedEmpiricalReadLengths[tF.first] = proportion_unmapped_average;
+		}
+
+		// find how many unmapped reads we might want to add
+		double allTaxa_wantAdditionalReads = 0;
+		std::map<std::string, double> perTaxon_wantAdditionalReads;
+		for(auto tF : f.second)
+		{
+			double currentIndirectFrequency = tF.second;
+			assert((currentIndirectFrequency >= 0) && (currentIndirectFrequency <= 1));
+			double approximate_read_number = nMapped * currentIndirectFrequency;
+			double expected_proportion_mapped = 1 - proportion_unmapped_averagedEmpiricalReadLengths.at(tF.first);
+			double wouldLikeToAdd = 1.0/expected_proportion_mapped * approximate_read_number;
+			allTaxa_wantAdditionalReads += wouldLikeToAdd;
+			perTaxon_wantAdditionalReads[tF.first] = wouldLikeToAdd;
+		}
+
+		// scale the number of reads we can add
+		double addReads_scalingFactor = 1;
+		if(allTaxa_wantAdditionalReads > nUnmapped)
+		{
+			addReads_scalingFactor = nUnmapped /  allTaxa_wantAdditionalReads;
+		}
+		double leaveUnasssigned = nUnmapped - (allTaxa_wantAdditionalReads * addReads_scalingFactor);
+		assert(leaveUnasssigned >= 0);
+		double leaveUnassignedProp = leaveUnasssigned / nReadsMappable;
+		assert((leaveUnassignedProp >= 0) && (leaveUnassignedProp <= 1));
+
+		// now re-assign reads across taxa
+		for(auto& tF : f.first)
+		{
+			std::get<0>(frequencies_triplet)[tF.first] = tF.second * nMapped;
+		}
+
+		for(auto& tF : f.second)
+		{
+			std::get<1>(frequencies_triplet)[tF.first] = tF.second * nMapped;
+			std::get<2>(frequencies_triplet)[tF.first] = addReads_scalingFactor * perTaxon_wantAdditionalReads.at(tF.first);
+		}
+
+		// check that the total number of reads is OK
+		double total_reads_post_unmapped = 0;
+		for(auto tF : std::get<0>(frequencies_triplet))
+		{
+			total_reads_post_unmapped += tF.second;
+		}
+		for(auto tF : std::get<1>(frequencies_triplet))
+		{
+			total_reads_post_unmapped += tF.second;
+		}
+		for(auto tF : std::get<2>(frequencies_triplet))
+		{
+			total_reads_post_unmapped += tF.second;
+		}
+
+		assert(abs((total_reads_post_unmapped + leaveUnasssigned) - nReadsMappable ) <= 1e-3);
+
+		normalize_f_triplet(frequencies_triplet);
+
+		double checkSum_postUnassignedRemoval = 0;
+		for(auto& tF : std::get<0>(frequencies_triplet))
+		{
+			tF.second *= (1 - leaveUnassignedProp);
+			checkSum_postUnassignedRemoval += tF.second;
+		}
+		for(auto& tF : std::get<1>(frequencies_triplet))
+		{
+			tF.second *= (1 - leaveUnassignedProp);
+			checkSum_postUnassignedRemoval += tF.second;
+		}
+		for(auto& tF : std::get<2>(frequencies_triplet))
+		{
+			tF.second *= (1 - leaveUnassignedProp);
+			checkSum_postUnassignedRemoval += tF.second;
+		}
+		assert(abs(1 - (checkSum_postUnassignedRemoval + leaveUnassignedProp)) <= 1e-3);
+	}
+	else
+	{
+		for(auto tF : f.first)
+		{
+			std::get<0>(frequencies_triplet)[tF.first] = tF.second;
+		}
+		for(auto tF : f.second)
+		{
+			std::get<1>(frequencies_triplet)[tF.first] = tF.second;
+		}
+
+		normalize_f_triplet(frequencies_triplet);
+	}
+
+
+	/*
 	for(auto oneUnmappedReadLength : unmappedReadsLengths)
 	{
 		std::map<std::string, double> unmapped_p;
@@ -1036,10 +1223,11 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 
 		assignedReads.second[best_unmapped_P_which]++;
 	}
+	*/
 
-	cleanF_U(f, assignedReads, mappingStats.at("ReadsMapped"));
 
-	producePotFile_U(output_pot_frequencies, T, f, assignedReads, nReadsMappable);
+
+	producePotFile_U(output_pot_frequencies, T, frequencies_triplet, assignedReads, nReadsMappable);
 	
 	produceShiftedHistograms(output_shifted_frequencies_file, iM, f);
 }

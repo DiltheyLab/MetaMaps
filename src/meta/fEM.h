@@ -154,7 +154,7 @@ void producePotFile(std::string outputFN, const taxonomy& T, std::map<std::strin
 			}
 
 			long long nReads_unassigned_level = nMappable - sum_reads_assigned_thisLevel;
-			assert(nReads_unassigned_level == nUnmapped);
+			assert(nReads_unassigned_level == (long long)nUnmapped);
 		}
 
 		double propMapped = nMapped/nMappable;
