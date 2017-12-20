@@ -157,8 +157,8 @@ void producePotFile(std::string outputFN, const taxonomy& T, std::map<std::strin
 			assert(nReads_unassigned_level == nUnmapped);
 		}
 
-		double propMapped = nMapped/nMappable;
-		double propNotMapped = nUnmapped/nMappable;
+		double propMapped = (double)nMapped/nMappable;
+		double propNotMapped = (double)nUnmapped/nMappable;
 		assert(abs((propMapped + propNotMapped) - 1) <= 1e-5);
 		
 		for(auto taxonID : l.second)

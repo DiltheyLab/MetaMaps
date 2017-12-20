@@ -174,4 +174,22 @@ perl callKrakenOnConvertedDB.pl databases/miniSeq+H /scratch/tmp/hmp_set7_combin
 
 perl benchmarkInference.pl --mappings tmp/hmp7_2_miniSeq+H.EM --DB databases/miniSeq+H --truth tmp/truthHMP7
 
+// BWA comparion
+
+bwa mem -x pacbio -t 16 /data/projects/phillippy/projects/mash_map/Jobs/blasr/hmp/targetAll/mock.all.genome.fa /scratch/tmp/hmp_set7_combined.fastq | samtools view -bo /data/projects/phillippy/projects/mash_map/Jobs/blasr/hmp/targetAll/mock.all.genome.fa.pacbioReads.bam - ; samtools sort /data/projects/phillippy/projects/mash_map/Jobs/blasr/hmp/targetAll/mock.all.genome.fa.pacbioReads.bam > /data/projects/phillippy/projects/mash_map/Jobs/blasr/hmp/targetAll/mock.all.genome.fa.pacbioReads.sorted.bam; samtools index /data/projects/phillippy/projects/mash_map/Jobs/blasr/hmp/targetAll/mock.all.genome.fa.pacbioReads.sorted.bam
+
+
+perl simulate.pl --DB databases/miniSeq_100 --action prepare --n_simulations 2 --suffix logNormal --equalCoverage 0
+
+perl simulate.pl --DB databases/miniSeq+H --action prepareFromFile --desiredTaxa tmp/simulationDesiredTaxonIDs --suffix manualSpecies
+
+// Test run on small dataset:
+
+./metamap mapDirectly --all -r databases/miniSeq_100/DB.fa -q /data/projects/phillippy/projects/MetaMap/databases/miniSeq_100/simulations_logNormal/0/reads.fastq -o /data/projects/phillippy/projects/MetaMap/databases/miniSeq_100/simulations_logNormal/0/reads.fastq.mapped
+./metamap classify --mappings /data/projects/phillippy/projects/MetaMap/databases/miniSeq_100/simulations_logNormal/0/reads.fastq.mapped --DB databases/miniSeq_100
+
+// Test on large dataset:
+
+./metamap classify --mappings tmp/hmp7_2_miniSeq+H --DB databases/miniSeq+H
+
 

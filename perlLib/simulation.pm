@@ -6,7 +6,7 @@ use List::Util qw/all/;
 use List::MoreUtils qw/mesh/;
 use taxTree;
 
-sub truthFileFromReadCounts
+sub truthReadFrequenciesFromReadCounts
 {
 	my $outputFn = shift;
 	my $readCounts_href = shift;
@@ -97,4 +97,39 @@ sub truthFileFromReadCounts
 	
 }
 
+
+sub truthGenomeFrequenciesFromReadCounts
+{
+	my $outputFn = shift;
+	my $taxonID_2_bases_href = shift;
+	my $readCounts_href = shift;
+	my $taxa_genome_lengths_href = shift;
+	my $taxonomy_href = shift;
+	
+	open(O, '>', $outputFn) or die "Cannot open $outputFn";
+	print O join("\t", qw/taxonID Name Bases nReads Genomes genomesProportion/), "\n";
+	
+	my $sum_genomes = 0;
+	foreach my $taxonID (keys %$taxonID_2_bases_href)
+	{
+		$sum_genomes += ($taxonID_2_bases_href->{$taxonID} / $taxa_genome_lengths_href->{$taxonID});
+	}
+	foreach my $taxonID (keys %$taxonID_2_bases_href)
+	{
+		die unless(defined $taxa_genome_lengths_href->{$taxonID});
+		die unless($taxa_genome_lengths_href->{$taxonID});
+
+		my $n_genomes = $taxonID_2_bases_href->{$taxonID} / $taxa_genome_lengths_href->{$taxonID};
+		print O join("\t",
+			$taxonID, 
+			taxTree::taxon_id_get_name($taxonID, $taxonomy_href),
+			$taxonID_2_bases_href->{$taxonID},
+			$readCounts_href->{$taxonID},
+			$n_genomes,
+			$n_genomes / $sum_genomes,
+		), "\n";		
+	}
+	
+	close(O);
+}
 1;
