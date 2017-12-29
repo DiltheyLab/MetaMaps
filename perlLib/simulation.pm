@@ -114,7 +114,7 @@ sub truthGenomeFrequenciesFromReadCounts
 	{
 		$sum_genomes += ($taxonID_2_bases_href->{$taxonID} / $taxa_genome_lengths_href->{$taxonID});
 	}
-	foreach my $taxonID (keys %$taxonID_2_bases_href)
+	foreach my $taxonID (sort keys %$taxonID_2_bases_href)
 	{
 		die unless(defined $taxa_genome_lengths_href->{$taxonID});
 		die unless($taxa_genome_lengths_href->{$taxonID});

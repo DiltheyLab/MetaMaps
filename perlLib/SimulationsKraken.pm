@@ -173,6 +173,7 @@ sub create_compatible_file_from_kraken
 	
 	my $taxonomy_kraken = taxTree::readTaxonomy($taxonomy_kraken_dir);
 	
+	my $output_fn_2 = $output_fn . '.ignoreUnclassified';
 	my %S_byLevel;
 	my $n_unclassified;
 	my $n_root;
@@ -230,7 +231,7 @@ sub create_compatible_file_from_kraken
 		my $classified = $f[0];
 		my $readID = $f[1];
 		my $taxonID = $f[2];
-		die unless(($classified eq 'C') or ($classified eq 'U'));
+		die "Weird classification symbol in $f_reads: '$classified'" unless(($classified eq 'C') or ($classified eq 'U'));
 		if($classified eq 'C')
 		{
 			my $lightning = $getLightning->($taxonID);
@@ -249,7 +250,10 @@ sub create_compatible_file_from_kraken
 	die unless($n_unclassified_check == $n_unclassified);
 	
 	open(OUTPUT, '>', $output_fn) or die "Cannot open $output_fn";
+	open(OUTPUT2, '>', $output_fn_2) or die "Cannot open $output_fn_2";
 	print OUTPUT join("\t", qw/AnalysisLevel ID Name Absolute PotFrequency/), "\n";		
+	print OUTPUT2 join("\t", qw/AnalysisLevel ID Name Absolute PotFrequency/), "\n";		
+	
 	foreach my $level (@evaluateAccuracyAtLevels)
 	{
 		$reads_at_levels{$level}{"Unclassified"} = 0 if(not exists $reads_at_levels{$level}{"Unclassified"});
@@ -257,6 +261,7 @@ sub create_compatible_file_from_kraken
 		
 		$reads_at_levels{$level}{"Unclassified"} += $n_unclassified;
 		my $reads_all_taxa = 0;
+		my $reads_all_taxa_ignoreUnclassified = 0;
 		foreach my $taxonID (keys %{$reads_at_levels{$level}})
 		{
 			my $taxonID_for_print = $taxonID;
@@ -284,12 +289,17 @@ sub create_compatible_file_from_kraken
 			my $nReads  = $reads_at_levels{$level}{$taxonID};
 			
 			print OUTPUT join("\t", $level, $taxonID_for_print, $name, $nReads, $nReads / $n_total_reads), "\n";
+			print OUTPUT2 join("\t", $level, $taxonID_for_print, $name, ($taxonID eq 'Unclassified') ? ($nReads - $n_unclassified): $nReads, $nReads / $n_root), "\n";
+			
 			$reads_all_taxa += $nReads;
+			$reads_all_taxa_ignoreUnclassified += (($taxonID eq 'Unclassified') ? ($nReads - $n_unclassified): $nReads);
 		}
 		
 		die unless($reads_all_taxa == $n_total_reads);
+		die unless($reads_all_taxa_ignoreUnclassified == $n_root);
 	}
 	close(OUTPUT);
+	close(OUTPUT2);
 }
 
 sub create_compatible_reads_file_from_kraken
@@ -318,7 +328,7 @@ sub create_compatible_reads_file_from_kraken
 		}
 		else
 		{
-			print OUTPUT $readID, "\t", 'Unclassified', "\n";		
+			# print OUTPUT $readID, "\t", 'Unclassified', "\n";		
 		}
 	}
 	close(KRAKEN);
@@ -337,6 +347,8 @@ sub create_compatible_file_from_kraken_bracken
 	my $f_F = shift;	
 	
 	my $taxonomy_kraken = taxTree::readTaxonomy($taxonomy_kraken_dir);
+
+	my $output_fn_2 = $output_fn . '.ignoreUnclassified';
 
 	my $n_unclassified;
 	my $n_root;
@@ -368,7 +380,8 @@ sub create_compatible_file_from_kraken_bracken
 	my $read_S = sub {
 		my $fn = shift;
 		my $rank = shift;
-	
+		my $ignoreUnclassfied = shift;
+
 		my $n_reads_classified_level = 0;
 		my %S;
 		open(S, '<', $fn) or die "Cannot open $fn";
@@ -390,18 +403,26 @@ sub create_compatible_file_from_kraken_bracken
 			die "Unknown taxonomy ID $taxonID" unless(exists $taxonomy_kraken->{$taxonID});
 			die "Weird rank for taxonomy ID $taxonID" unless($taxonomy_kraken->{$taxonID}{rank} eq $rank);
 			
-			$S{$taxonID}[0] += $nReads;
-			$S{$taxonID}[1] += ($nReads / $n_total_reads);
+			if($ignoreUnclassfied)
+			{
+				$S{$taxonID}[0] += $nReads;
+				$S{$taxonID}[1] += ($nReads / $n_root);
+			}
+			else
+			{
+				$S{$taxonID}[0] += $nReads;
+				$S{$taxonID}[1] += ($nReads / $n_total_reads);			
+			}
 			$n_reads_classified_level += $nReads;
 		}
 		close(S);
 		
-		my $n_reads_unclassified_level = $n_total_reads - $n_reads_classified_level;
-		die unless($n_reads_classified_level >= $n_unclassified);
-		
+		my $n_reads_unclassified_level = ($ignoreUnclassfied) ? ($n_root - $n_reads_classified_level) : ($n_total_reads - $n_reads_classified_level);
+		# die unless($n_reads_classified_level >= $n_unclassified);
+
 		$S{'Unclassified'}[0] = $n_reads_unclassified_level;
-		$S{'Unclassified'}[1] = $n_reads_unclassified_level / $n_total_reads;
-				
+		$S{'Unclassified'}[1] = ($ignoreUnclassfied) ? ($n_reads_unclassified_level / $n_root) : ($n_reads_unclassified_level / $n_total_reads);
+		
 		return \%S;
 	};
 	
@@ -409,12 +430,21 @@ sub create_compatible_file_from_kraken_bracken
 	my $results_genus = $read_S->($f_G, 'genus');
 	my $results_family = $read_S->($f_F, 'family');
 	
+	my $results_species_ignoreUnclassified = $read_S->($f_S, 'species', 1);
+	my $results_genus_ignoreUnclassified = $read_S->($f_G, 'genus', 1);
+	my $results_family_ignoreUnclassified = $read_S->($f_F, 'family', 1);
+	
 	open(OUTPUT, '>', $output_fn) or die "Cannot open $output_fn";
+	open(OUTPUT2, '>', $output_fn_2) or die "Cannot open $output_fn_2";
+	
 	print OUTPUT join("\t", qw/AnalysisLevel ID Name Absolute PotFrequency/), "\n";
+	print OUTPUT2 join("\t", qw/AnalysisLevel ID Name Absolute PotFrequency/), "\n";
 	
 	my $print_S = sub {
 		my $S_href = shift;
 		my $level = shift;
+		my $printToOutput2 = shift;
+		
 		foreach my $taxonID (keys %$S_href)
 		{
 			my $taxonID_for_print = $taxonID;
@@ -438,8 +468,15 @@ sub create_compatible_file_from_kraken_bracken
 			{
 				$name = taxTree::taxon_id_get_name($taxonID, $taxonomy_kraken);
 			}
-						
-			print OUTPUT join("\t", $level, $taxonID_for_print, $name, $S_href->{$taxonID}[0], $S_href->{$taxonID}[1]), "\n";
+				
+			if($printToOutput2)
+			{
+				print OUTPUT2 join("\t", $level, $taxonID_for_print, $name, $S_href->{$taxonID}[0], $S_href->{$taxonID}[1]), "\n";
+			}
+			else
+			{
+				print OUTPUT join("\t", $level, $taxonID_for_print, $name, $S_href->{$taxonID}[0], $S_href->{$taxonID}[1]), "\n";
+			}
 		}
 	};
 	
@@ -447,7 +484,12 @@ sub create_compatible_file_from_kraken_bracken
 	$print_S->($results_genus, 'genus');
 	$print_S->($results_family, 'family');
 
+	$print_S->($results_species_ignoreUnclassified, 'species', 1);
+	$print_S->($results_genus_ignoreUnclassified, 'genus', 1);
+	$print_S->($results_family_ignoreUnclassified, 'family', 1);
+	
 	close(OUTPUT);
+	close(OUTPUT2);
 	
 	print "\nCreated file $output_fn \n\n";
 }

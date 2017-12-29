@@ -613,7 +613,7 @@ sub species_or_strain
 		my $parent_rank = $tree_href->{$parent_id}{rank};
 		unless($noWarnings)
 		{
-			die Dumper("species_or_strain unexpected code path -- called species_or_strain on node $node", $parent_id, $parent_rank) unless(($parent_rank eq 'species') or ($parent_rank eq 'subspecies'));			
+			die Dumper("species_or_strain unexpected code path (I)  -- called species_or_strain on node $node", $parent_id, $parent_rank) unless(($parent_rank eq 'species') or ($parent_rank eq 'subspecies'));			
 		}
 		return 'strain';
 	}
@@ -629,7 +629,7 @@ sub species_or_strain
 			my $parent_rank = $tree_href->{$parent_id}{rank};
 			unless($noWarnings)
 			{
-				die Dumper("species_or_strain unexpected code path -- called species_or_strain on node $node", $parent_id, $parent_rank) unless(($parent_rank eq 'species') or ($parent_rank eq 'subspecies'));			
+				die Dumper("species_or_strain unexpected code path (II) -- called species_or_strain on node $node", $parent_id, $parent_rank) unless(($parent_rank eq 'species') or ($parent_rank eq 'subspecies'));			
 			}
 			return 'strain';
 		}

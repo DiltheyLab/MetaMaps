@@ -123,25 +123,26 @@ void printGenusLevelSummary(const taxonomy& T, std::pair<std::map<std::string, d
 
 void producePotFile_U(std::string outputFN, const taxonomy& T, std::tuple<std::map<std::string, double>, std::map<std::string, double>, std::map<std::string, double>> frequencies, std::tuple<std::map<std::string, size_t>, std::map<std::string, size_t>> readCount, size_t mappableReads)
 {
-	double initial_f_sum = 0;
+		
+	//double initial_f_sum = 0;
 	std::set<std::string> combinedKeys;
 	for(auto f : std::get<0>(frequencies))
 	{
 		combinedKeys.insert(f.first);
-		initial_f_sum += f.second;
+		//initial_f_sum += f.second;
 	}
 	for(auto f : std::get<1>(frequencies))
 	{
 		combinedKeys.insert(f.first);
-		initial_f_sum += f.second;		
+		//initial_f_sum += f.second;		
 	}
 	for(auto f : std::get<2>(frequencies))
 	{
 		combinedKeys.insert(f.first);
-		initial_f_sum += f.second;
+		//initial_f_sum += f.second;
 	}
 
-	assert(abs(1 - initial_f_sum) <= 1e-3);
+	//assert(abs(1 - initial_f_sum) <= 1e-3);
 	
 	for(auto f : std::get<0>(readCount))
 	{
@@ -211,7 +212,7 @@ void producePotFile_U(std::string outputFN, const taxonomy& T, std::tuple<std::m
 	std::ofstream strout_frequencies(outputFN);
 	assert(strout_frequencies.is_open());
 
-	strout_frequencies << "AnalysisLevel" << "\t" <<  "taxonID" << "\t" << "Name" << "\t" << "readsDirectlyAssigned_inDB" << "\t" << "readsDirectlyAssigned_potentiallyNovel" << "\t" << "frDirect" << "\t" << "frIndirect" << "\t" <<  "frFromUnmapped" << "\t" << "totalReads" << "\t" << "PotFrequency" << "\n";
+	strout_frequencies << "AnalysisLevel" << "\t" <<  "taxonID" << "\t" << "Name" << "\t" << "readsDirectlyAssigned_inDB" << "\t" << "readsDirectlyAssigned_potentiallyNovel" << "\t" << "frDirect" << "\t" << "frIndirect" << "\t" <<  "frFromUnmapped" << "\t" << "Absolute" << "\t" << "PotFrequency" << "\n";
 
 	for(auto l : combinedKeys_perLevel)
 	{
@@ -250,7 +251,7 @@ void producePotFile_U(std::string outputFN, const taxonomy& T, std::tuple<std::m
 			levelFreqSum = 1;
 		
 		double levelFreqUnclassified = 1 - levelFreqSum;
-		levelFreqUnclassified = 0;
+		//levelFreqUnclassified = 0;
 		
 		strout_frequencies <<
 				levelName << "\t" <<
@@ -826,13 +827,19 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 		std::cout << "\n";
 		
 		double f_sum_preNormalization = 0;
-		for(auto tF : f.first)
+		for(auto tF : f_nextIteration.first)
 		{
 			f_sum_preNormalization += tF.second;
 		}
-		for(auto tF : f.second)
+		for(auto tF : f_nextIteration.second)
 		{
 			f_sum_preNormalization += tF.second;
+		}
+		if(!abs(nMapped - f_sum_preNormalization) <= 1e-2)
+		{
+			std::cerr << "nMapped: " << nMapped << "\n";
+			std::cerr << "f_sum_preNormalization: " << f_sum_preNormalization << "\n";
+			std::cerr << std::flush;
 		}
 		assert(abs(nMapped - f_sum_preNormalization) <= 1e-2);
 

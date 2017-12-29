@@ -136,7 +136,7 @@ my $n_simulations = 10;
 my $useVarietyI;
 my $suffix;
 my $n_species = 10;
-my $equalCoverage = 1;
+my $coverageMode = "equal";
 my $desiredTaxa;
 GetOptions (
 	'DB:s' => \$DB,
@@ -149,7 +149,10 @@ GetOptions (
 	'suffix:s' => \$suffix,
 	'n_species:s' => \$n_species,
 	'desiredTaxa:s' => \$desiredTaxa,
+	'coverageMode:s' => \$coverageMode,
 );
+
+die unless(($coverageMode eq 'equal') or ($coverageMode eq 'logNormal') or ($coverageMode eq 'file'));
 
 if(not defined $action)
 {
@@ -218,6 +221,8 @@ if($action eq 'prepare')
 		my $oneSimulation_href;
 		if($simulationI < $n_simulations)
 		{
+			die unless(($coverageMode eq 'equal') or ($coverageMode eq 'logNormal'));
+			my $equalCoverage = ($coverageMode eq 'equal');
 			$oneSimulation_href = returnOneSimulation_noUnknown($DB, \%taxonID_2_contigIDs, \%taxon_2_genomeLength, $n_species, $thisSimulation_outputDirectory, $equalCoverage, $MetaMap_taxonomy, $fh_log);
 		}
 		
@@ -241,7 +246,7 @@ print QSUB qq(#!/bin/bash
 #\$ -l mem_free=172G
 jobID=\$(expr \$SGE_TASK_ID - 1)
 cd $FindBin::Bin
-perl simulate.pl --action inferenceJobI --DB $DB --jobI \$jobID
+perl simulate.pl --action inferenceJobI --DB $DB --suffix $suffix --jobI \$jobID
 );	
 	close(QSUB);
 	close($fh_log);
@@ -270,6 +275,7 @@ elsif($action eq 'prepareFromFile')
 
 	die unless(-e $DB_fa);
 	die unless(-e $existingSelfSimilarities);
+	die "Please set --n_simulations to 1 if doing --mode prepareFromFile" unless($n_simulations == 1);
 	
 	my $MetaMap_taxonomy = {};
 	my %contigID_2_taxonID;
@@ -303,9 +309,12 @@ elsif($action eq 'prepareFromFile')
 		my $thisSimulation_outputDirectory = $globalOutputDir . '/' . 0;
 		(mkdir($thisSimulation_outputDirectory) or die "Cannot mkdir $thisSimulation_outputDirectory") unless(-e $thisSimulation_outputDirectory);
 		
-		my $oneSimulation_href = returnOneSimulation_fromFile($DB, \%taxonID_2_contigIDs, \%taxon_2_genomeLength, $thisSimulation_outputDirectory, $equalCoverage, $MetaMap_taxonomy, $fh_log, $desiredTaxa);
+		my $oneSimulation_href = returnOneSimulation_fromFile($DB, \%taxonID_2_contigIDs, \%taxon_2_genomeLength, $thisSimulation_outputDirectory, $coverageMode, $MetaMap_taxonomy, $fh_log, $desiredTaxa);
 		
-		addInferenceRoundsWithReducedDBs_allSpecies($oneSimulation_href, $MetaMap_taxonomy, $fh_log);
+		if($coverageMode ne 'file')
+		{
+			addInferenceRoundsWithReducedDBs_allSpecies($oneSimulation_href, $MetaMap_taxonomy, $fh_log);
+		}
 		
 		push(@simulations_to_execute, $oneSimulation_href);
 	}
@@ -339,10 +348,17 @@ elsif($action eq 'prepareFromFile')
 	print N $n_simulations, "\n";
 	close(N); 
 	
-	createArrayJob($fn_selfSimilarities_fromTemplate, $fn_selfSimilarities_fromTemplate_asArray);
+	my $n_arrayJobs = createArrayJob($fn_selfSimilarities_fromTemplate, $fn_selfSimilarities_fromTemplate_asArray);
 	
 	# print "$n_simulations prepared on DB $DB -- if you're in an SGE environment, you can now\n\n\texecute the commands in $fn_selfSimilarities\n\tand later these in $fn_selfSimilarities_collect\n\n\tqsub $simulations_qsub_file\n\n";
-	print "$n_simulations prepared on DB $DB -- if you're in an SGE environment, you can now\n\n\tqsub $fn_selfSimilarities_fromTemplate_asArray\n\tand when all jobs are done call me with --mode prepareII\n\n";
+	if($n_arrayJobs)
+	{
+		print "$n_simulations prepared on DB $DB -- if you're in an SGE environment, you can now\n\n\tqsub $fn_selfSimilarities_fromTemplate_asArray\n\tand when all jobs are done call me with --mode prepareII\n\n";
+	}
+	else
+	{
+		print "$n_simulations prepared on DB $DB -- call me with --mode prepareII\n\n";
+	}
 	
 	setFlag($globalOutputDir, 'simulated', 1);
 }
@@ -376,7 +392,7 @@ elsif($action eq 'prepareII')
 			my $fn_selfSimilarities = $DB_target_dir . '/selfSimilarities.txt';
 			die "File $fn_selfSimilarities missing" unless(-e $fn_selfSimilarities);
 			
-			my $cmd = qq(perl simulate.pl --action inferenceJobI --DB $DB --jobI $jobI --varietyI $varietyI);
+			my $cmd = qq(perl simulate.pl --action inferenceJobI --DB $DB --jobI $jobI --suffix $suffix --varietyI $varietyI);
 			
 			push(@commands, $cmd);
 		}	
@@ -415,18 +431,132 @@ elsif($action eq 'analyzeAll')
 	chomp($realizedN);
 	close(N);
 	die unless($realizedN =~ /^\d+$/);
+
+	my @n_reads_correct_byVariety_bySimulation;
+	my @n_reads_correct_byVariety_byLevel_bySimulation;;
+	my @freq_byVariety_byLevel_bySimulation;;
 	
 	my %n_reads_correct_byVariety;
 	my %n_reads_correct_byVariety_byLevel;
 	my %freq_byVariety_byLevel;
+	my @frequencyComparisons_bySimulation;
 	
+	my $fullTaxonomy_simulation = taxTree::readTaxonomy($DB . '/taxonomy');
+	
+	my @highLevel_stats_keptSeparate_bySimulation;
+	my %callRate_and_accuracy_byReadCategory;
 	# for(my $jobI = 0; $jobI < $realizedN; $jobI++)
 	for(my $jobI = 0; $jobI < $realizedN; $jobI++)  
 	{
 		my $simulation_href_fn = $globalOutputDir . '/' . $jobI . '/simulationStore';
 		my $simulation_href = retrieve $simulation_href_fn;
-		evaluateOneSimulation($simulation_href, \%n_reads_correct_byVariety, \%n_reads_correct_byVariety_byLevel, \%freq_byVariety_byLevel);
+		my $frequencyComparison = {};
+		my %n_reads_correct_byVariety_local;
+		my %n_reads_correct_byVariety_byLevel_local;		
+		my %freq_byVariety_byLevel_local;		
+		evaluateOneSimulation($simulation_href, \%n_reads_correct_byVariety_local, \%n_reads_correct_byVariety_byLevel_local, \%freq_byVariety_byLevel_local, $frequencyComparison);
+		push(@frequencyComparisons_bySimulation, $frequencyComparison);
+
+		# variety = fullDB/removeOne_genus ...
+		# label = MetaMap / Kraken ...
+		# category = read category ...
+		foreach my $variety (keys %n_reads_correct_byVariety_local)
+		{		
+			foreach my $label (keys %{$n_reads_correct_byVariety_local{$variety}})
+			{
+				foreach my $category (keys %{$n_reads_correct_byVariety_local{$variety}{$label}})
+				{
+					foreach my $key (keys %{$n_reads_correct_byVariety_local{$variety}{$label}{$category}})
+					{
+						my $value = $n_reads_correct_byVariety_local{$variety}{$label}{$category}{$key};
+						die unless(not ref($value));
+						$n_reads_correct_byVariety{$variety}{$label}{$category}{$key} += $value;
+					}
+					
+					my $d = $n_reads_correct_byVariety_local{$variety}{$label}{$category};
+					die unless(exists $d->{N});
+					die unless(exists $d->{missing});
+					die unless(exists $d->{correct});
+					my $N = $d->{N} + $d->{missing};
+					die unless($N > 0);
+					die unless($d->{N} > 0);
+				
+					my $CR = $d->{N} / $N; die unless(($CR >= 0) and ($CR <= 1));
+					my $accuracy = $d->{correct} / $d->{N}; die unless(($accuracy >= 0) and ($accuracy <= 1));
+					
+					$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety}{$label}{$category}{mappingTarget}{CR} = $CR;
+					$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety}{$label}{$category}{mappingTarget}{Accuracy} = $accuracy;
+					push(@{$callRate_and_accuracy_byReadCategory{$category}{$label}{mappingTarget}}, [$CR, $accuracy]);
+				}
+			}
+		}
+		
+
+		foreach my $variety (keys %n_reads_correct_byVariety_byLevel_local)
+		{		
+			foreach my $label (keys %{$n_reads_correct_byVariety_byLevel_local{$variety}})
+			{		
+				foreach my $category (keys %{$n_reads_correct_byVariety_byLevel_local{$variety}{$label}})
+				{
+					foreach my $level (keys %{$n_reads_correct_byVariety_byLevel_local{$variety}{$label}{$category}})
+					{
+						foreach my $key (keys %{$n_reads_correct_byVariety_byLevel_local{$variety}{$label}{$category}{$level}})
+						{
+							my $value = $n_reads_correct_byVariety_byLevel_local{$variety}{$label}{$category}{$level}{$key};
+							die unless(not ref($value));
+							$n_reads_correct_byVariety_byLevel{$variety}{$label}{$category}{$level}{$key} += $value;
+						}
+						
+
+						my $d = $n_reads_correct_byVariety_byLevel_local{$variety}{$label}{$category}{$level};
+						die unless(exists $d->{N});
+						die unless(exists $d->{missing});
+						die unless(exists $d->{correct});
+						my $N = $d->{N} + $d->{missing};
+						die unless($N > 0);
+						die unless($d->{N} > 0);
+						
+						my $CR = $d->{N} / $N; die unless(($CR >= 0) and ($CR <= 1));
+						my $accuracy = $d->{correct} / $d->{N}; die unless(($accuracy >= 0) and ($accuracy <= 1));
+						
+						$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety}{$label}{$category}{$level}{CR} = $CR;
+						$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety}{$label}{$category}{$level}{Accuracy} = $accuracy;						
+						push(@{$callRate_and_accuracy_byReadCategory{$category}{$label}{$level}}, [$CR, $accuracy]);						
+					}
+				}
+			}
+		}
+		
+		foreach my $variety (keys %freq_byVariety_byLevel_local)
+		{			
+			foreach my $label (keys %{$freq_byVariety_byLevel_local{$variety}})
+			{		
+				foreach my $level (keys %{$freq_byVariety_byLevel_local{$variety}{$label}})
+				{
+					foreach my $key (keys %{$freq_byVariety_byLevel_local{$variety}{$label}{$level}})
+					{
+						my $value = $freq_byVariety_byLevel_local{$variety}{$label}{$level}{$key};
+						die unless(defined $value);
+						die unless((not ref($value)) or (ref($value) eq 'ARRAY'));
+						if(not ref($value))
+						{
+							$freq_byVariety_byLevel{$variety}{$label}{$level}{$key} += $value;
+						}
+						else
+						{
+							push(@{$freq_byVariety_byLevel{$variety}{$label}{$level}{$key}}, @$value);
+						}
+					}
+				}
+			}
+		}				
+
+		push(@n_reads_correct_byVariety_bySimulation, \%n_reads_correct_byVariety_local);
+		push(@n_reads_correct_byVariety_byLevel_bySimulation, \%n_reads_correct_byVariety_byLevel_local);
+		push(@freq_byVariety_byLevel_bySimulation, \%freq_byVariety_byLevel_local);		
 	}
+	
+
 	
 	my @varieties = qw/fullDB removeOne_self removeOne_species removeOne_genus/;
 	@varieties = grep {exists $n_reads_correct_byVariety{$_}} @varieties;
@@ -440,6 +570,36 @@ elsif($action eq 'analyzeAll')
 		$level_to_i{$levels_ordered[$levelI]} = $levelI;
 	}
 	
+	{
+		open(BARPLOTSREADCAT, '>', '_forPlot_barplots_readCategory') or die;
+		print BARPLOTSREADCAT join("\t", qw/readCategory evaluationLevel method callRateAvg accuracyAvg callRate_raw accuracy_raw/), "\n";
+		
+		foreach my $readCategory (keys %callRate_and_accuracy_byReadCategory)
+		{
+			foreach my $label (keys %{$callRate_and_accuracy_byReadCategory{$readCategory}})
+			{
+				foreach my $level (keys %{$callRate_and_accuracy_byReadCategory{$readCategory}{$label}})
+				{
+					my $v = $callRate_and_accuracy_byReadCategory{$readCategory}{$label}{$level};
+					my @callRates;
+					my @accuracies;
+					foreach my $e (@$v)
+					{
+						push(@callRates, $e->[0]);
+						push(@accuracies, $e->[1]);
+					}	
+					die unless(scalar(@callRates));
+					die unless(scalar(@accuracies));
+					my $avg_callRate = Util::mean(@callRates);
+					my $avg_accuracy = Util::mean(@accuracies);
+					print BARPLOTSREADCAT join("\t", $readCategory, $level, $label, $avg_callRate, $avg_accuracy, join(';', @callRates), join(';', @accuracies)), "\n";
+				}
+			}
+		}
+		close(BARPLOTSREADCAT);
+				
+	}
+
 	{
 		my %_methods;
 		my %_readStratification;
@@ -485,6 +645,9 @@ elsif($action eq 'analyzeAll')
 		my @evaluationLevels = qw/species genus family/;
 		die Dumper("Missing evaluation levels", \@evaluationLevels, \%_evaluationLevels) unless(all {exists $_evaluationLevels{$_}} @evaluationLevels);
 		
+		open(BARPLOTSFULLDB, '>', '_forPlot_barplots_fullDB') or die;
+		print BARPLOTSFULLDB join("\t", qw/readLevel variety method level callRate accuracy/), "\n";
+			
 		{
 			open(READSABSOLUTELYCORRECT, '>', '_readsAbsolutelyCorrect') or die;
 			my @header_fields_1_absolutelyCorrect = ('ReadLevel');
@@ -525,8 +688,10 @@ elsif($action eq 'analyzeAll')
 						
 						my $Ntotal = 0;
 						my $percOK_madeCall = 0;
+						my $percOK_madeCall_fullAccuracy = 0;
 						my $percOK_total = 0;
 						my $perc_missing = 0;
+						my $callRate = 'NA';
 						
 						if(exists $n_reads_correct_byVariety{$variety}{$methodName}{$readLevel})
 						{
@@ -539,10 +704,16 @@ elsif($action eq 'analyzeAll')
 						}
 
 						$percOK_madeCall = sprintf("%.2f", ($correct / $NmadeCall)) if($NmadeCall > 0);
+						$percOK_madeCall_fullAccuracy = ($correct / $NmadeCall) if($NmadeCall > 0);
 						$percOK_total = sprintf("%.2f", ($correct / $Ntotal)) if($Ntotal > 0);
 						$perc_missing = sprintf("%.2f", ($missing / ($Ntotal))) if($Ntotal > 0);
 						
+						$callRate = $NmadeCall / $Ntotal if($Ntotal > 0);
+						
 						push(@output_fields_absolutelyCorrect, $Ntotal, $percOK_total, $NmadeCall, $percOK_madeCall, $perc_missing);
+						
+						print BARPLOTSFULLDB join("\t", $readLevel, $variety, $methodName, 'mappingTarget', $callRate, $percOK_madeCall_fullAccuracy), "\n";
+
 					}
 				}
 			
@@ -598,8 +769,10 @@ elsif($action eq 'analyzeAll')
 							
 							my $correct = 0;
 							my $correct_truthDefined = 0;
+							my $callRate = 'NA';
 							
 							my $percOK_total = 0;
+							my $percOK_madeCall_fullAccuracy = 0;
 							my $percOK_total_truthDefined = 0;							
 							my $percOK_madeCall = 0;
 							my $percOK_madeCall_truthDefined = 0;
@@ -624,10 +797,12 @@ elsif($action eq 'analyzeAll')
 							
 							# die Dumper("Weird - N is $N, but missing is $missing?", [$readLevel, $evaluationLevel, $variety, $methodName]) unless($missing <= $N);
 							
+							$callRate = $N_madeCall / $N_total if($N_total > 0);
 							$percOK_total = sprintf("%.2f", ($correct / $N_total)) if($N_total > 0);
 							$percOK_total_truthDefined = sprintf("%.2f", ($correct_truthDefined / $N_total_truthDefined)) if($N_total_truthDefined > 0);
 							
 							$percOK_madeCall = sprintf("%.2f", ($correct / $N_madeCall)) if($N_madeCall > 0);
+							$percOK_madeCall_fullAccuracy = ($correct / $N_madeCall) if($N_madeCall > 0);
 							$percOK_madeCall_truthDefined = sprintf("%.2f", ($correct_truthDefined / $N_madeCall_truthDefined)) if($N_madeCall_truthDefined > 0);
 							
 							$percMissing = sprintf("%.2f", ($missing / $N_total)) if($N_total > 0);
@@ -642,6 +817,8 @@ elsif($action eq 'analyzeAll')
 								($percOK_madeCall ne $percOK_madeCall_truthDefined) ? join(' / ', $percOK_madeCall, $percOK_madeCall_truthDefined) : $percOK_madeCall,
 								$percMissing
 							);
+							
+							print BARPLOTSFULLDB join("\t", $readLevel, $variety, $methodName, $evaluationLevel, $callRate, $percOK_madeCall_fullAccuracy), "\n";						
 						}
 					}
 					print READSCORRECTBYLEVEL join("\t", @output_fields_byLevelCorrect), "\n";
@@ -651,6 +828,9 @@ elsif($action eq 'analyzeAll')
 			close(READSCORRECTBYLEVEL);
 		}
 	}
+	
+	close(BARPLOTSFULLDB);
+
 	{
 		my %_methods;
 		my %_readStratification;
@@ -731,6 +911,27 @@ elsif($action eq 'analyzeAll')
 		
 		close(FREQEVALUATION);
 	
+		open(XYPLOTS, '>', '_forPlot_frequencies_xy') or die;
+		print XYPLOTS join("\t", qw/simulationI variety method level taxonID taxonLabel freqTarget freqIs/), "\n";
+		for(my $simulationI = 0; $simulationI < $realizedN; $simulationI++)  
+		{
+			next unless(defined $frequencyComparisons_bySimulation[$simulationI]);
+			foreach my $variety (keys %{$frequencyComparisons_bySimulation[$simulationI]})
+			{
+				foreach my $label (keys %{$frequencyComparisons_bySimulation[$simulationI]{$variety}})
+				{
+					foreach my $level (keys %{$frequencyComparisons_bySimulation[$simulationI]{$variety}{$label}})
+					{
+						foreach my $taxonID (keys %{$frequencyComparisons_bySimulation[$simulationI]{$variety}{$label}{$level}})
+						{
+							my $taxonID_label = (($taxonID eq 'Unclassified') or ($taxonID eq 'NotLabelledAtLevel')) ? $taxonID : taxTree::taxon_id_get_name($taxonID, $fullTaxonomy_simulation);
+							print XYPLOTS join("\t", $simulationI, $variety, $label, $level, $taxonID, $taxonID_label, @{$frequencyComparisons_bySimulation[$simulationI]{$variety}{$label}{$level}{$taxonID}}), "\n";
+						}
+					}
+				}
+			}
+		}
+		close(XYPLOTS);
 	}
 	
 	if(1 == 0)
@@ -829,6 +1030,8 @@ cd $FindBin::Bin
 	print OUT join("\n", @cmds_switch);
 	
 	close(OUT);
+	
+	return scalar(@cmds);
 }
 
 sub inferenceOneSimulation
@@ -899,6 +1102,7 @@ sub evaluateOneSimulation
 	my $n_reads_correct_byVariety = shift;
 	my $n_reads_correct_byVariety_byLevel = shift;
 	my $freq_byVariety_byLevel = shift;
+	my $frequencyComparison_href = shift;
 	
 	my $taxonomyFromSimulation_dir = $simulation_href->{outputDirectory} . '/DB_fullDB/taxonomy';
 	my $taxonomy_usedForSimulation = taxTree::readTaxonomy($taxonomyFromSimulation_dir);
@@ -916,10 +1120,12 @@ sub evaluateOneSimulation
 	{
 		my $varietyName = $simulation_href->{inferenceDBs}[$varietyI][2];
 		print "Analyse $varietyName\n";
+		die if($varietyName =~ /_1/); # we still need to deal with this and remove the numerical indices for storing
 		
 		$n_reads_correct_byVariety->{$varietyName} = {} unless(defined $n_reads_correct_byVariety->{$varietyName});
 		$n_reads_correct_byVariety_byLevel->{$varietyName} = {} unless(defined $n_reads_correct_byVariety_byLevel->{$varietyName});
 		$freq_byVariety_byLevel->{$varietyName} = {} unless(defined $freq_byVariety_byLevel->{$varietyName});
+		$frequencyComparison_href->{$varietyName} = {} unless(defined $frequencyComparison_href->{$varietyName});
 		
 		my $simulation_results_dir = $simulation_href->{outputDirectory} . '/inference_' . $varietyName;
 		my $DBdir = $simulation_href->{outputDirectory} . '/DB_' . $varietyName;
@@ -947,7 +1153,7 @@ sub evaluateOneSimulation
 		
 		# get distribution
 		my $truth_mappingDatabase_distribution = validation::truthReadsToTruthSummary($specificTaxonomy, $truth_mappingDatabase_reads);
-		
+
 		# die Dumper($varietyName, $truth_mappingDatabase_distribution);
 		
 		# my %truth_allReads;
@@ -1002,8 +1208,11 @@ sub evaluateOneSimulation
 			}
 			else
 			{
+				print "Read $f\n";
 				my $inferred_distribution = validation::readInferredDistribution($extendedMaster, $extendedMaster_merged, $f);
-				validation::distributionLevelComparison($extendedMaster, $truth_mappingDatabase_distribution, $inferred_distribution, $methodName, $freq_byVariety_byLevel->{$varietyName});
+				print "Analyse $f\n";
+				validation::distributionLevelComparison($extendedMaster, $truth_mappingDatabase_distribution, $inferred_distribution, $methodName, $freq_byVariety_byLevel->{$varietyName}, $frequencyComparison_href->{$varietyName});
+				print "Done $f\n\n";
 			}
 			
 			# unclassified = deliberately no caller
@@ -1051,6 +1260,7 @@ sub addInferenceRoundsWithReducedDBs_allSpecies
 	
 	print {$fh_log}  "Remove, in turn, each of the contained taxa.\n";
 	
+	my %n_remove_key_counter;
 	foreach my $taxonID2Remove (keys %{$simulation_href->{targetTaxons}})
 	{
 		print {$fh_log} "\tSelected origin for removal: ", $taxonID2Remove, " (", taxTree::taxon_id_get_name(taxTree::node_get_rank_value($taxonomy_href, $taxonID2Remove, 'superkingdom'), $taxonomy_href), " -- ", taxTree::species_or_strain($taxonomy_href, $taxonID2Remove, 1), ") -- ", taxTree::taxon_id_get_name($taxonID2Remove, $taxonomy_href), "\n";
@@ -1062,7 +1272,15 @@ sub addInferenceRoundsWithReducedDBs_allSpecies
 		{
 			next unless(exists $ancestors_href->{$removeRank});
 			my $removeNode = $ancestors_href->{$removeRank};
-			push(@{$simulation_href->{inferenceDBs}}, ['remove', [$removeNode], 'removeOne_' . $removeRank]);
+			my $remove_key = 'removeOne_' . $removeRank;
+			my $already_removed = 0;
+			if(exists $n_remove_key_counter{$remove_key})
+			{
+				$already_removed = $n_remove_key_counter{$remove_key};
+			}
+			$n_remove_key_counter{$remove_key}++;
+			$remove_key .= '_' . $already_removed;
+			push(@{$simulation_href->{inferenceDBs}}, ['remove', [$removeNode], $remove_key]);
 			print {$fh_log} "\t\tRemoval at level $removeRank: $removeNode -- ", taxTree::taxon_id_get_name($removeNode, $taxonomy_href), "\n";
 		}
 	}
@@ -1080,7 +1298,7 @@ sub addInferenceRoundsWithReducedDBs
 
 	my $removal_origin = $targetTaxons_shuffled[0];
 	
-	print {$fh_log} "\tSelected origin for removal: ", $removal_origin, " (", taxTree::taxon_id_get_name(taxTree::node_get_rank_value($taxonomy_href, $removal_origin, 'superkingdom'), $taxonomy_href), " -- ", taxTree::species_or_strain($taxonomy_href, $removal_origin), ") -- ", taxTree::taxon_id_get_name($removal_origin, $taxonomy_href), "\n";
+	print {$fh_log} "\tSelected origin for removal: ", $removal_origin, " (", taxTree::taxon_id_get_name(taxTree::node_get_rank_value($taxonomy_href, $removal_origin, 'superkingdom'), $taxonomy_href), " -- ", taxTree::species_or_strain($taxonomy_href, $removal_origin, 1), ") -- ", taxTree::taxon_id_get_name($removal_origin, $taxonomy_href), "\n";
 	
 	my $ancestors_href = taxTree::get_ancestors_by_rank($taxonomy_href, $removal_origin);
 	$ancestors_href->{self} = $removal_origin;
@@ -1158,7 +1376,7 @@ sub returnOneSimulation_fromFile
 	my $taxon_2_contig_href = shift;
 	my $taxon_2_genomelength_href = shift;
 	my $outputDirectory = shift;
-	my $equalCoverage = shift;
+	my $coverageMode = shift;
 	my $taxonomy_href = shift;
 	my $fh_log = shift;
 	my $fn_desired = shift;
@@ -1166,26 +1384,101 @@ sub returnOneSimulation_fromFile
 	die unless(defined $taxonomy_href);
 	die unless(defined $fn_desired);
 	
+	die unless(($coverageMode eq 'equal') or ($coverageMode eq 'logNormal') or ($coverageMode eq 'file'));
+
 	my @selectedTaxa;
+	my %selectedTaxa_frequencies;
 	open(DESIRED, '<', $desiredTaxa) or die "Cannot open --desiredTaxa $desiredTaxa";
 	while(<DESIRED>)
 	{
 		my $line = $_;
 		chomp($line);
-		die "Unknown taxon ID $line" unless(exists $taxon_2_contig_href->{$line});
-		push(@selectedTaxa, $line);
+		next unless($line);
+		my @line_fields = split(/\t/, $line);
+		die unless((scalar(@line_fields) == 1) or (scalar(@line_fields) == 2) or (scalar(@line_fields) == 3));
+		if($coverageMode eq 'file')
+		{
+			die "File $desiredTaxa has only one field, but needs two (taxon ID and genome proportion), --coverageMode file in effect" unless(scalar(@line_fields) >= 2);
+		}
+		else
+		{
+			die "File $desiredTaxa has two fields, but needs one (taxon ID and genome proportion) unless --coverageMode file" unless(scalar(@line_fields) == 1);
+		}
+		my $useTaxonID;
+		if(exists $taxon_2_contig_href->{$line_fields[0]})
+		{
+			$useTaxonID = $line_fields[0];
+			if($line_fields[2])
+			{
+				my @contigs = @{$taxon_2_contig_href->{$line_fields[0]}};
+				die "Weird - file $desiredTaxa specifies that we want NC $line_fields[2], but this doesn't seem to exist -- available NCs: " . join(', ', @contigs) unless(scalar(grep {index($_, $line_fields[2]) != -1} @contigs));
+			}
+		}
+		else
+		{
+			die unless(defined $taxonomy_href->{$line_fields[0]}); 
+			my @descendants = grep {exists $taxon_2_contig_href->{$_}} taxTree::descendants($taxonomy_href, $line_fields[0]);
+			if(scalar(@descendants))
+			{
+				my @valid_descendants;
+				foreach my $tID (@descendants)
+				{
+					my @contigs = @{$taxon_2_contig_href->{$tID}};
+					if(scalar(grep {index($_, $line_fields[2]) != -1} @contigs))
+					{
+						push(@valid_descendants, $tID);
+					}
+				}
+				if(scalar(@valid_descendants) == 1)
+				{
+					$useTaxonID = $valid_descendants[0];				
+					warn "Taxon ID $line_fields[0] has exactly one genome that's compatible with $line_fields[2] -- use $useTaxonID";
+					
+				}
+				elsif(scalar(@valid_descendants) > 1)
+				{
+					$useTaxonID = $valid_descendants[0];								
+					warn "Taxon ID $line_fields[0] has more than one genome that's compatible with $line_fields[2] -- use $useTaxonID";
+				}
+				else
+				{
+					warn "Taxon ID $line_fields[0] has NO genome that's compatible with $line_fields[2]";
+				}					
+			}
+			else
+			{
+				warn "Unknown taxon ID $line_fields[0] of $desiredTaxa -- skip";			
+			}
+		}
+		
+		# print join("\t", $line_fields[0], scalar(@{$taxon_2_contig_href->{$line_fields[0]}})), "\n";
+		if(defined $useTaxonID)
+		{	
+			if(defined $line_fields[2])
+			{
+				my @contigs = @{$taxon_2_contig_href->{$useTaxonID}};
+				die unless(scalar(grep {index($_, $line_fields[2]) != -1} @contigs));				
+			}
+			if(scalar(@line_fields) >= 2)
+			{ 
+				$selectedTaxa_frequencies{$useTaxonID} = $line_fields[1];
+			}
+			push(@selectedTaxa, $useTaxonID);
+		}
 	}
 	close(DESIRED);
-	
+	my %_selectedTaxa = map {$_ => 1} @selectedTaxa;
+	die "Duplicate selected taxa for simulation" unless(scalar(keys %_selectedTaxa) == scalar(@selectedTaxa));
+		
 	print {$fh_log} "\tTaxa from file: $fn_desired; ", join(', ', @selectedTaxa), "\n";
 	
 	my %targetTaxonIDs;
-	if($equalCoverage)
+	if($coverageMode eq 'equal')
 	{
 		my $fr_taxon = 1/scalar(@selectedTaxa);
 		%targetTaxonIDs = map {$_ => $fr_taxon} @selectedTaxa;
-	}
-	else
+	} 
+	elsif($coverageMode eq 'logNormal')
 	{
 		my @frequencies;
 		my $frequencies_sum = 0;
@@ -1201,6 +1494,20 @@ sub returnOneSimulation_fromFile
 			$fr /= $frequencies_sum;
 		}
 		%targetTaxonIDs = (mesh @selectedTaxa, @frequencies);		
+	}
+	elsif($coverageMode eq 'file')
+	{
+		my $S_fr = 0;
+		for(values %selectedTaxa_frequencies)
+		{
+			$S_fr += $_;
+		}
+		die unless($S_fr);
+		for(@selectedTaxa)
+		{
+			die unless(defined $selectedTaxa_frequencies{$_});
+			$targetTaxonIDs{$_} = $selectedTaxa_frequencies{$_}/$S_fr;
+		}	
 	}
 	
 	my $simulation_href = {
@@ -1271,9 +1578,14 @@ sub doMetaMap
 	system($cmd_map) and die "Cannot execute $cmd_map";
 	die "No MetaMap mappings -- $file_mappings" unless(-e $file_mappings);
 		
-	# todo perhaps reconsider minreads
-	my $cmd_classify = qq(/usr/bin/time -v $metamap_bin classify --DB $DB --mappings $file_mappings --minreads 1000 &> file_res_classification);
-	$cmd_classify = qq(/usr/bin/time -v $metamap_bin classify --DB $DB --mappings $file_mappings --minreads 1000); 
+	my $minReads = 1000;
+	if($DB =~ /miniSeq_100/)
+	{
+		warn "Assume that we're using a very small simulation DB, set --minReads to 1";
+		$minReads = 1;
+	}	
+	my $cmd_classify = qq(/usr/bin/time -v $metamap_bin classify --DB $DB --mappings $file_mappings --minreads $minReads &> file_res_classification);
+	$cmd_classify = qq(/usr/bin/time -v $metamap_bin classify --DB $DB --mappings $file_mappings --minreads $minReads); 
 	system($cmd_classify) and die "Cannot execute $cmd_classify";
 	
 

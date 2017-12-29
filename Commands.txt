@@ -179,9 +179,8 @@ perl benchmarkInference.pl --mappings tmp/hmp7_2_miniSeq+H.EM --DB databases/min
 bwa mem -x pacbio -t 16 /data/projects/phillippy/projects/mash_map/Jobs/blasr/hmp/targetAll/mock.all.genome.fa /scratch/tmp/hmp_set7_combined.fastq | samtools view -bo /data/projects/phillippy/projects/mash_map/Jobs/blasr/hmp/targetAll/mock.all.genome.fa.pacbioReads.bam - ; samtools sort /data/projects/phillippy/projects/mash_map/Jobs/blasr/hmp/targetAll/mock.all.genome.fa.pacbioReads.bam > /data/projects/phillippy/projects/mash_map/Jobs/blasr/hmp/targetAll/mock.all.genome.fa.pacbioReads.sorted.bam; samtools index /data/projects/phillippy/projects/mash_map/Jobs/blasr/hmp/targetAll/mock.all.genome.fa.pacbioReads.sorted.bam
 
 
-perl simulate.pl --DB databases/miniSeq_100 --action prepare --n_simulations 2 --suffix logNormal --equalCoverage 0
+perl simulate.pl --DB databases/miniSeq_100 --action prepare --n_simulations 2 --suffix logNormal --coverageMode logNormal
 
-perl simulate.pl --DB databases/miniSeq+H --action prepareFromFile --desiredTaxa tmp/simulationDesiredTaxonIDs --suffix manualSpecies
 
 // Test run on small dataset:
 
@@ -193,3 +192,6 @@ perl simulate.pl --DB databases/miniSeq+H --action prepareFromFile --desiredTaxa
 ./metamap classify --mappings tmp/hmp7_2_miniSeq+H --DB databases/miniSeq+H
 
 
+perl simulate.pl --DB databases/miniSeq_100 --action prepare --n_simulations 1 --suffix logNormal --coverageMode logNormal
+perl simulate.pl --DB databases/miniSeq_100 --action prepareII --suffix logNormal 
+perl simulate.pl --DB databases/miniSeq_100 --action analyzeAll --suffix logNormal 

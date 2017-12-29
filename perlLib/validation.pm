@@ -187,7 +187,7 @@ sub getAllRanksForTaxon_withUnclassified
 	my $taxonID = shift;
 	
 	my %forReturn = map {$_ => 'Unclassified'} @evaluateAccuracyAtLevels;
-
+	$forReturn{mappingTarget} = $taxonID;
 	return \%forReturn if($taxonID eq '0');
 	
 	die unless(defined $taxonID);
@@ -524,11 +524,13 @@ sub distributionLevelComparison
 	my $distribution_inferred = shift;
 	my $label = shift;
 	my $external_comparison = shift;
+	my $frequencyComparison_href = shift;
 	
-	foreach my $level (@evaluateAccuracyAtLevels)
+	foreach my $level ('mappingTarget', @evaluateAccuracyAtLevels)
 	{
 		next unless(defined $distribution_inferred->{$level});
 		die unless(defined $distribution_truth->{$level});
+		
 		my $totalFreq = 0;
 		my $totalFreqCorrect = 0;
 		foreach my $inferredTaxonID (keys %{$distribution_inferred->{$level}})
@@ -579,7 +581,10 @@ sub distributionLevelComparison
 			my $L2_diff = ($isFreq - $shouldBeFreq)**2;
 			$L1_sum += $L1_diff;
 			$L2_sum += $L2_diff;
+			
+			$frequencyComparison_href->{$label}{$level}{$taxonID} = [$shouldBeFreq, $isFreq];
 		}
+		
 		my $L1 = $L1_sum;
 		my $L2 = sqrt($L2_sum);
 		
@@ -588,6 +593,7 @@ sub distributionLevelComparison
 		$RRMSE = sqrt($RRMSE);
 		
 		print join("\t", $label, $level, $totalFreqCorrect), "\n";
+		
 		
 		if(defined $external_comparison)
 		{
@@ -619,18 +625,19 @@ sub readInferredDistribution
 		my $line = $_;
 		chomp($line);
 		next unless($line);
+		
 		my @line_fields = split(/\t/, $line, -1);
 		die unless($#line_fields == $#header_fields);
 		my %line = (mesh @header_fields, @line_fields);
 
 		my $taxonID_nonMaster = ($line{ID} // $line{taxonID});
+
 		die unless(defined $taxonID_nonMaster);
-
-		next if($line{Name} eq 'TooShort');
-		next if($line{Name} eq 'Unmapped');
-		next if($line{Name} eq 'TotalReads');
-
-		if(((substr($taxonID_nonMaster, 0, 1) ne 'x') and ($taxonID_nonMaster <= 0)) and (($line{Name} eq 'Undefined') or ($line{Name} eq 'Unclassified') or ($line{Name} eq 'NotLabelledAtLevel')))
+		next if($line{Name} eq 'totalReads');
+		next if($line{Name} eq 'readsLongEnough');
+		next if($line{Name} eq 'readsLongEnough_unmapped');
+		
+		if(((substr($taxonID_nonMaster, 0, 1) ne 'x') and ($taxonID_nonMaster <= 0)) and (($line{Name} eq 'Undefined') or ($line{Name} eq 'Unclassified') or ($line{Name} eq 'NotLabelledAtLevel')or ($line{Name} eq 'NotLabelledAtLevel')))
 		{
 			$taxonID_nonMaster = $line{Name};
 		}
@@ -643,17 +650,20 @@ sub readInferredDistribution
 				
 		die Dumper(\%line) unless(defined $taxonID_master);
 		die Dumper("Unknown taxon ID $taxonID_master in file $f", $taxonomy->{$taxonID_master}, $taxonID_nonMaster, \%line) unless(($taxonID_master eq 'Undefined') or ($taxonID_master eq 'Unclassified') or ($taxonID_master eq 'NotLabelledAtLevel') or (defined $taxonomy->{$taxonID_master}));
-		die unless(defined $line{Absolute});
+		die Dumper("Weird line in $f", \%line) unless(defined $line{Absolute});
 		die unless(defined $line{PotFrequency});
 		$inference{$line{AnalysisLevel}}{$taxonID_master}[0] += $line{Absolute};
-		if(exists $line{EMFrequency})
-		{
-			$inference{$line{AnalysisLevel}}{$taxonID_master}[1] += $line{EMFrequency};
-		}
-		else
-		{
-			$inference{$line{AnalysisLevel}}{$taxonID_master}[1] += $line{PotFrequency};
-		}
+		die unless(exists $line{PotFrequency});
+		$inference{$line{AnalysisLevel}}{$taxonID_master}[1] += $line{PotFrequency};
+		
+		# if(exists $line{EMFrequency})
+		# {
+			# $inference{$line{AnalysisLevel}}{$taxonID_master}[1] += $line{EMFrequency};
+		# }
+		# else
+		# {
+			# $inference{$line{AnalysisLevel}}{$taxonID_master}[1] += $line{PotFrequency};
+		# }
 	}
 	close(I);	
 	
