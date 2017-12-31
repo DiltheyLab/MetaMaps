@@ -121,7 +121,7 @@ void printGenusLevelSummary(const taxonomy& T, std::pair<std::map<std::string, d
 	std::cout << "\n\n";
 }
 
-void producePotFile_U(std::string outputFN, const taxonomy& T, std::tuple<std::map<std::string, double>, std::map<std::string, double>, std::map<std::string, double>> frequencies, std::tuple<std::map<std::string, size_t>, std::map<std::string, size_t>> readCount, size_t mappableReads)
+void producePotFile_U(std::string outputFN, const taxonomy& T, std::tuple<std::map<std::string, double>, std::map<std::string, double>, std::map<std::string, double>> frequencies, std::tuple<std::map<std::string, size_t>, std::map<std::string, size_t>> readCount, size_t mappableReads, const std::set<std::string>& relevantTaxonIDs_direct)
 {
 		
 	//double initial_f_sum = 0;
@@ -163,12 +163,18 @@ void producePotFile_U(std::string outputFN, const taxonomy& T, std::tuple<std::m
 	for(auto taxonID : combinedKeys)
 	{
 		std::map<std::string, std::string> upwardByLevel = T.getUpwardNodesByRanks(taxonID, targetLevels);
-		upwardByLevel["mappingTarget"] = taxonID;
+		upwardByLevel["definedAndHypotheticalGenomes"] = taxonID;
+		upwardByLevel["definedGenomes"] = taxonID;
 
 		for(auto uN : upwardByLevel)
 		{
 			std::string level = uN.first;
 			std::string levelValue = uN.second;
+			if(level == "definedGenomes")
+			{
+				if(! relevantTaxonIDs_direct.count(levelValue))
+					continue;
+			}
 			combinedKeys_perLevel[level].insert(levelValue);
 
 			if(std::get<0>(frequencies_perLevel[level]).count(levelValue) == 0)
@@ -1234,7 +1240,7 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 
 
 
-	producePotFile_U(output_pot_frequencies, T, frequencies_triplet, assignedReads, nReadsMappable);
+	producePotFile_U(output_pot_frequencies, T, frequencies_triplet, assignedReads, nReadsMappable, relevantTaxonIDs_direct);
 	
 	produceShiftedHistograms(output_shifted_frequencies_file, iM, f);
 }

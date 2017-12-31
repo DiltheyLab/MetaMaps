@@ -187,7 +187,7 @@ sub getAllRanksForTaxon_withUnclassified
 	my $taxonID = shift;
 	
 	my %forReturn = map {$_ => 'Unclassified'} @evaluateAccuracyAtLevels;
-	$forReturn{mappingTarget} = $taxonID;
+	$forReturn{definedGenomes} = $taxonID;
 	return \%forReturn if($taxonID eq '0');
 	
 	die unless(defined $taxonID);
@@ -526,7 +526,7 @@ sub distributionLevelComparison
 	my $external_comparison = shift;
 	my $frequencyComparison_href = shift;
 	
-	foreach my $level ('mappingTarget', @evaluateAccuracyAtLevels)
+	foreach my $level ('definedGenomes', @evaluateAccuracyAtLevels)
 	{
 		next unless(defined $distribution_inferred->{$level});
 		die unless(defined $distribution_truth->{$level});

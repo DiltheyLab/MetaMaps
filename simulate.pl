@@ -484,9 +484,9 @@ elsif($action eq 'analyzeAll')
 					my $CR = $d->{N} / $N; die unless(($CR >= 0) and ($CR <= 1));
 					my $accuracy = $d->{correct} / $d->{N}; die unless(($accuracy >= 0) and ($accuracy <= 1));
 					
-					$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety}{$label}{$category}{mappingTarget}{CR} = $CR;
-					$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety}{$label}{$category}{mappingTarget}{Accuracy} = $accuracy;
-					push(@{$callRate_and_accuracy_byReadCategory{$category}{$label}{mappingTarget}}, [$CR, $accuracy]);
+					$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety}{$label}{$category}{definedGenomes}{CR} = $CR;
+					$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety}{$label}{$category}{definedGenomes}{Accuracy} = $accuracy;
+					push(@{$callRate_and_accuracy_byReadCategory{$category}{$label}{definedGenomes}}, [$CR, $accuracy]);
 				}
 			}
 		}

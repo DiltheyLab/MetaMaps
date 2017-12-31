@@ -17,7 +17,7 @@ file_out <- paste(file_prefix, ".U.plots.pdf", sep = "")
 idty <- read.delim(paste(file_prefix, ".U.lengthAndIdentitiesPerTaxonID", sep = ""), stringsAsFactors = F, na.strings = "", header = T)
 shifted <- read.delim(paste(file_prefix, ".U.shiftedHistogramsPerTaxonID", sep = ""), stringsAsFactors = F, na.strings = "", header = T)
 potDistr <- read.delim(paste(file_prefix, ".U.WIMP", sep = ""), stringsAsFactors = F, na.strings = "", header = T)
-potDistr <- potDistr[potDistr[[1]] == "mappingTarget",]
+potDistr <- potDistr[potDistr[[1]] == "definedGenomes",]
 
 pdf(file_out)
 par(mfrow=c(3,3))
