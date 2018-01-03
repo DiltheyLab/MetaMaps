@@ -121,7 +121,7 @@ void printGenusLevelSummary(const taxonomy& T, std::pair<std::map<std::string, d
 	std::cout << "\n\n";
 }
 
-void producePotFile_U(std::string outputFN, const taxonomy& T, std::tuple<std::map<std::string, double>, std::map<std::string, double>, std::map<std::string, double>> frequencies, std::tuple<std::map<std::string, size_t>, std::map<std::string, size_t>> readCount, size_t mappableReads, const std::set<std::string>& relevantTaxonIDs_direct)
+void producePotFile_U(std::string outputFN, const taxonomy& T, std::tuple<std::map<std::string, double>, std::map<std::string, double>, std::map<std::string, double>> frequencies, std::tuple<std::map<std::string, size_t>, std::map<std::string, size_t>> readCount, size_t mappableReads, const std::set<std::string>& relevantTaxonIDs_mappable)
 {
 		
 	//double initial_f_sum = 0;
@@ -172,7 +172,7 @@ void producePotFile_U(std::string outputFN, const taxonomy& T, std::tuple<std::m
 			std::string levelValue = uN.second;
 			if(level == "definedGenomes")
 			{
-				if(! relevantTaxonIDs_direct.count(levelValue))
+				if(! relevantTaxonIDs_mappable.count(levelValue))
 					continue;
 			}
 			combinedKeys_perLevel[level].insert(levelValue);
@@ -557,6 +557,8 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 
 	std::set<std::string> taxonIDsInMappings = getTaxonIDsFromMappingsFile(mappedFile);
 
+	std::set<std::string> mappableTaxonIDs = getDirectlyMappableTaxonIDs(DBdir);
+	
 	std::string fn_fittedLengthAndIdentities = mappedFile + ".EM.lengthAndIdentitiesPerMappingUnit";
 	if(! fileExists(fn_fittedLengthAndIdentities))
 	{
@@ -750,6 +752,10 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 		std::function<void(const std::vector<std::string>&)> processOneRead = [&](const std::vector<std::string>& readLines) -> void
 		{
 			processedRead++;
+			if((processedRead % 10000) == 0)
+			{
+				std::cout << "\r EM-U round " << EMiteration << ", read << " << processedRead << " / " << mappingStats.at("ReadsMapped") << "   " << std::flush;
+			}			
 			// todo reinstate
 			// std::cout << "\r EM round " << EMiteration << ", mapped read << " << processedRead << " / " << mappingStats.at("ReadsMapped") << "   " << std::flush;
 					
@@ -1240,7 +1246,7 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 
 
 
-	producePotFile_U(output_pot_frequencies, T, frequencies_triplet, assignedReads, nReadsMappable, relevantTaxonIDs_direct);
+	producePotFile_U(output_pot_frequencies, T, frequencies_triplet, assignedReads, nReadsMappable, mappableTaxonIDs);
 	
 	produceShiftedHistograms(output_shifted_frequencies_file, iM, f);
 }

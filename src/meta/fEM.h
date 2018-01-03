@@ -418,7 +418,10 @@ void doEM(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestC
 		std::function<void(const std::vector<std::string>&)> processOneRead = [&](const std::vector<std::string>& readLines) -> void
 		{
 			processedRead++;
-			std::cout << "\r EM round " << EMiteration << ", read << " << processedRead << " / " << mappingStats.at("ReadsMapped") << "   " << std::flush;
+			if((processedRead % 10000) == 0)
+			{
+				std::cout << "\r EM round " << EMiteration << ", read << " << processedRead << " / " << mappingStats.at("ReadsMapped") << "   " << std::flush;
+			}
 			
 			assert(readLines.size() > 0);
 			std::vector<oneMappingLocation> mappingLocations = getMappingLocations(taxonInfo, f, readLines);

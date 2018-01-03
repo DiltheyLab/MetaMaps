@@ -160,6 +160,7 @@ sub truthReadsToTruthSummary
 		unless(defined $taxonID_translation{$taxonID})
 		{
 			$taxonID_translation{$taxonID} = getAllRanksForTaxon_withUnclassified($taxonomy, $taxonID);
+			$taxonID_translation{$taxonID}{definedAndHypotheticalGenomes} = $taxonID_translation{$taxonID}{definedGenomes};
 		}
 		
 		foreach my $rank (keys %{$taxonID_translation{$taxonID}})
@@ -365,7 +366,7 @@ sub readLevelComparison
 			RANK: foreach my $rank (@evaluateAccuracyAtLevels)
 			{
 				die unless(defined $lightning_truth_inDB->{$rank});
-				if($lightning_truth_inDB->{$rank} ne 'Unclassified')
+				if(($lightning_truth_inDB->{$rank} ne 'Unclassified') and ($lightning_truth_inDB->{$rank} ne 'NotLabelledAtLevel'))
 				{
 					$shouldBeAssignedTo = $rank;
 					last RANK;
@@ -407,6 +408,7 @@ sub readLevelComparison
 					$n_reads_correct_byLevel{$category}{$level}{N} = 0;
 					$n_reads_correct_byLevel{$category}{$level}{N_truthDefined} = 0;
 					$n_reads_correct_byLevel{$category}{$level}{correct} = 0;
+					$n_reads_correct_byLevel{$category}{$level}{correct_exactlyAtLevel} = 0;
 					$n_reads_correct_byLevel{$category}{$level}{correct_truthDefined} = 0;
 				}
 			}
@@ -436,9 +438,24 @@ sub readLevelComparison
 				}
 			}
 			
+			my $printRead = (scalar(grep {$_ eq 'novel_to_superkingdom'} @read_categories) > 0);
+			$printRead = 0;
+			if($printRead)
+			{
+				print "Read $readID label $label\n";
+				print "\ttrueTaxonID_inUsedDB: ", $trueTaxonID_inUsedDB, "\n";
+				print "\tinferredTaxonID     : ", $inferredTaxonID, "\n";
+				print "\tabsolute truth      : ", $reads_truth_absolute->{$readID}, "\n";
+			}
 			foreach my $level (@evaluateAccuracyAtLevels)
 			{
 				die unless((defined $lightning_truth->{$level}) and (defined defined $lightning_inferred->{$level}));
+				if($printRead)
+				{
+					print "\t\t$level\n";
+					print "\t\t\ttruth    : $lightning_truth->{$level}   \n";
+					print "\t\t\tinference: $lightning_inferred->{$level}  \n";
+				}
 				foreach my $category (@read_categories)
 				{					
 					$n_reads_correct_byLevel{$category}{$level}{N}++;
@@ -446,6 +463,12 @@ sub readLevelComparison
 					if($lightning_truth->{$level} eq $lightning_inferred->{$level})
 					{
 						$n_reads_correct_byLevel{$category}{$level}{correct}++;
+						if($inferredTaxonID eq $trueTaxonID_inUsedDB)
+						{
+							$n_reads_correct_byLevel{$category}{$level}{correct_exactly}++;
+						}					
+
+											
 						$n_reads_correct_byLevel{$category}{$level}{correct_truthDefined}++ if($lightning_truth->{$level} ne 'NotLabelledAtLevel');
 					}		
 					else
@@ -526,7 +549,7 @@ sub distributionLevelComparison
 	my $external_comparison = shift;
 	my $frequencyComparison_href = shift;
 	
-	foreach my $level ('definedGenomes', @evaluateAccuracyAtLevels)
+	foreach my $level ('definedGenomes', 'definedAndHypotheticalGenomes', @evaluateAccuracyAtLevels)
 	{
 		next unless(defined $distribution_inferred->{$level});
 		die unless(defined $distribution_truth->{$level});

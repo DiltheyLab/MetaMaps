@@ -52,6 +52,40 @@ void errEx(const std::string& s)
 	exit(1);
 }
 
+std::set<std::string> getDirectlyMappableTaxonIDs(std::string DBdir)
+{
+	std::set<std::string> forReturn;
+
+	std::string fn_taxons = DBdir + "/taxonInfo.txt";
+	std::ifstream tS (fn_taxons);
+	if(! tS.is_open())
+	{
+		std::cerr << "Could not open file " << fn_taxons << " -- perhaps you have specified an incomplete DB?" << std::endl;
+		exit(1);
+	}
+	assert(tS.is_open());
+
+	std::string line;
+	while(tS.good())
+	{
+		std::getline(tS, line);
+		eraseNL(line);
+		if(line.length() == 0)
+			continue;
+		std::vector<std::string> line_fields = split(line, " ");
+		assert(line_fields.size() == 2);
+
+		std::string taxonID = line_fields.at(0);
+		std::vector<std::string> contigs = split(line_fields.at(1), ";");
+		assert(contigs.length());
+		
+		forReturn.insert(taxonID);
+	}
+
+	return forReturn;
+}
+
+
 std::string join(std::vector<std::string> parts, std::string delim)
 {
 	if(parts.size() == 0)

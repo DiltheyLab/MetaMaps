@@ -137,7 +137,9 @@ my $useVarietyI;
 my $suffix;
 my $n_species = 10;
 my $coverageMode = "equal";
+my $targetTotalSimulationInGigabytes;
 my $desiredTaxa;
+my $coverageTargetsAreOrganismAbundances = 0;
 GetOptions (
 	'DB:s' => \$DB,
 	'action:s' => \$action,
@@ -150,6 +152,8 @@ GetOptions (
 	'n_species:s' => \$n_species,
 	'desiredTaxa:s' => \$desiredTaxa,
 	'coverageMode:s' => \$coverageMode,
+	'coverageTargetsAreOrganismAbundances:s' => \$coverageTargetsAreOrganismAbundances,
+	'targetTotalSimulationInGigabytes:s' => \$targetTotalSimulationInGigabytes,
 );
 
 die unless(($coverageMode eq 'equal') or ($coverageMode eq 'logNormal') or ($coverageMode eq 'file'));
@@ -266,6 +270,39 @@ perl simulate.pl --action inferenceJobI --DB $DB --suffix $suffix --jobI \$jobID
 	
 	setFlag($globalOutputDir, 'simulated', 1);
 }
+elsif($action eq 'repeatReadSimulations')
+{
+	die "Simulations in directory $globalOutputDir not prepared" unless getFlag($globalOutputDir, 'simulated');
+	
+	my $fn_log = $globalOutputDir. '/log_repeatReadSimulation.txt';	
+
+	my $fh_log;
+	open($fh_log, '>', $fn_log) or die "Cannot open $fn_log";
+	
+	
+	my $MetaMap_taxonomy = {};
+	my %contigID_2_taxonID;
+	my %taxonID_2_contigIDs;	
+	my %contig_2_length;
+	fill_contigID_taxonID($DB, $MetaMap_taxonomy, \%contigID_2_taxonID, \%taxonID_2_contigIDs, \%contig_2_length);
+	my %taxon_2_genomeLength = map {$_ => getGenomeLength($_, \%taxonID_2_contigIDs, \%contig_2_length)} keys %taxonID_2_contigIDs;
+	
+	my $n_simulations_file = $globalOutputDir . '/n_simulations.txt';
+	open(N, '<', $n_simulations_file) or die "Cannot open $n_simulations_file";
+	my $realizedN = <N>;
+	chomp($realizedN);
+	close(N);
+	die unless($realizedN =~ /^\d+$/);
+	for(my $simulationI = 0; $simulationI < $realizedN; $simulationI++)
+	{
+		my $simulation_href_fn = $globalOutputDir . '/' . $simulationI . '/simulationStore';
+		my $simulation_href = retrieve $simulation_href_fn;
+		
+		setup_directory_and_simulate_reads($simulation_href, $MetaMap_taxonomy, $fh_log);
+	}
+	
+	close($fh_log);
+}
 elsif($action eq 'prepareFromFile')
 {
 	my $DB_fa = $DB . '/DB.fa';
@@ -377,6 +414,24 @@ elsif($action eq 'prepareII')
 	my %n_reads_correct_byVariety_byLevel;
 	my %freq_byVariety_byLevel;
 	
+	# check for required files
+	my @warnings;
+	for(my $jobI = 0; $jobI < $realizedN; $jobI++)  
+	{
+		my $simulation_href_fn = $globalOutputDir . '/' . $jobI . '/simulationStore';
+		my $simulation_href = retrieve $simulation_href_fn;
+					
+		for(my $varietyI = 0; $varietyI <= $#{$simulation_href->{dbDirs_metamap}}; $varietyI++)
+		{			
+			my $DB_target_dir = $simulation_href->{outputDirectory} . '/DB_' . $simulation_href->{inferenceDBs}[$varietyI][2];
+			die unless($DB_target_dir eq $simulation_href->{dbDirs_metamap}[$varietyI]);
+		
+			my $fn_selfSimilarities = $DB_target_dir . '/selfSimilarities.txt';
+			push(@warnings, "File $fn_selfSimilarities missing") unless(-e $fn_selfSimilarities);
+		}
+	}
+	die Dumper(@warnings) if(@warnings);
+	
 	# for(my $jobI = 0; $jobI < $realizedN; $jobI++)
 	my @commands;
 	for(my $jobI = 0; $jobI < $realizedN; $jobI++)  
@@ -486,7 +541,7 @@ elsif($action eq 'analyzeAll')
 					
 					$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety}{$label}{$category}{definedGenomes}{CR} = $CR;
 					$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety}{$label}{$category}{definedGenomes}{Accuracy} = $accuracy;
-					push(@{$callRate_and_accuracy_byReadCategory{$category}{$label}{definedGenomes}}, [$CR, $accuracy]);
+					push(@{$callRate_and_accuracy_byReadCategory{$category}{$label}{definedGenomes}}, [$CR, $accuracy, $accuracy]);
 				}
 			}
 		}
@@ -512,16 +567,19 @@ elsif($action eq 'analyzeAll')
 						die unless(exists $d->{N});
 						die unless(exists $d->{missing});
 						die unless(exists $d->{correct});
+						die unless(exists $d->{correct_exactlyAtLevel});
 						my $N = $d->{N} + $d->{missing};
 						die unless($N > 0);
 						die unless($d->{N} > 0);
 						
 						my $CR = $d->{N} / $N; die unless(($CR >= 0) and ($CR <= 1));
 						my $accuracy = $d->{correct} / $d->{N}; die unless(($accuracy >= 0) and ($accuracy <= 1));
+						my $accuracy_exactlyAtLevel = $d->{correct_exactlyAtLevel} / $d->{N}; die unless(($accuracy_exactlyAtLevel >= 0) and ($accuracy_exactlyAtLevel <= 1));
 						
 						$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety}{$label}{$category}{$level}{CR} = $CR;
 						$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety}{$label}{$category}{$level}{Accuracy} = $accuracy;						
-						push(@{$callRate_and_accuracy_byReadCategory{$category}{$label}{$level}}, [$CR, $accuracy]);						
+						$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety}{$label}{$category}{$level}{AccuracyExactlyAtLevel} = $accuracy_exactlyAtLevel;						
+						push(@{$callRate_and_accuracy_byReadCategory{$category}{$label}{$level}}, [$CR, $accuracy, $accuracy_exactlyAtLevel]);						
 					}
 				}
 			}
@@ -571,28 +629,32 @@ elsif($action eq 'analyzeAll')
 	}
 	
 	{
-		open(BARPLOTSREADCAT, '>', '_forPlot_barplots_readCategory') or die;
-		print BARPLOTSREADCAT join("\t", qw/readCategory evaluationLevel method callRateAvg accuracyAvg callRate_raw accuracy_raw/), "\n";
+		open(BARPLOTSREADCAT, '>', $globalOutputDir . '/_forPlot_barplots_readCategory') or die;
+		print BARPLOTSREADCAT join("\t", qw/readCategory evaluationLevel method callRateAvg accuracyAvg accuracyAvgExactltAtLevel callRate_raw accuracy_raw accuracy_raw_exactltyAtLevel/), "\n";
 		
-		foreach my $readCategory (keys %callRate_and_accuracy_byReadCategory)
+		foreach my $readCategory (sort keys %callRate_and_accuracy_byReadCategory)
 		{
-			foreach my $label (keys %{$callRate_and_accuracy_byReadCategory{$readCategory}})
+			foreach my $label (sort keys %{$callRate_and_accuracy_byReadCategory{$readCategory}})
 			{
-				foreach my $level (keys %{$callRate_and_accuracy_byReadCategory{$readCategory}{$label}})
+				foreach my $level (sort keys %{$callRate_and_accuracy_byReadCategory{$readCategory}{$label}})
 				{
 					my $v = $callRate_and_accuracy_byReadCategory{$readCategory}{$label}{$level};
 					my @callRates;
 					my @accuracies;
+					my @accuracies_exactlyAtLevel;
 					foreach my $e (@$v)
 					{
 						push(@callRates, $e->[0]);
 						push(@accuracies, $e->[1]);
+						push(@accuracies_exactlyAtLevel, $e->[2]);
 					}	
 					die unless(scalar(@callRates));
 					die unless(scalar(@accuracies));
+					die unless(scalar(@accuracies_exactlyAtLevel));
 					my $avg_callRate = Util::mean(@callRates);
 					my $avg_accuracy = Util::mean(@accuracies);
-					print BARPLOTSREADCAT join("\t", $readCategory, $level, $label, $avg_callRate, $avg_accuracy, join(';', @callRates), join(';', @accuracies)), "\n";
+					my $avg_accuracy_exactlyAtLevel = Util::mean(@accuracies_exactlyAtLevel);
+					print BARPLOTSREADCAT join("\t", $readCategory, $level, $label, $avg_callRate, $avg_accuracy, $avg_accuracy_exactlyAtLevel, join(';', @callRates), join(';', @accuracies), join(';', @accuracies_exactlyAtLevel)), "\n";
 				}
 			}
 		}
@@ -645,11 +707,11 @@ elsif($action eq 'analyzeAll')
 		my @evaluationLevels = qw/species genus family/;
 		die Dumper("Missing evaluation levels", \@evaluationLevels, \%_evaluationLevels) unless(all {exists $_evaluationLevels{$_}} @evaluationLevels);
 		
-		open(BARPLOTSFULLDB, '>', '_forPlot_barplots_fullDB') or die;
+		open(BARPLOTSFULLDB, '>', $globalOutputDir . '/_forPlot_barplots_fullDB') or die;
 		print BARPLOTSFULLDB join("\t", qw/readLevel variety method level callRate accuracy/), "\n";
 			
 		{
-			open(READSABSOLUTELYCORRECT, '>', '_readsAbsolutelyCorrect') or die;
+			open(READSABSOLUTELYCORRECT, '>', $globalOutputDir . '/_readsAbsolutelyCorrect') or die;
 			my @header_fields_1_absolutelyCorrect = ('ReadLevel');
 			my @header_fields_2_absolutelyCorrect = ('');
 			my @header_fields_3_absolutelyCorrect = ('');
@@ -725,7 +787,7 @@ elsif($action eq 'analyzeAll')
 		}
 		
 		{
-			open(READSCORRECTBYLEVEL, '>', '_readsCorrectByLevel') or die;
+			open(READSCORRECTBYLEVEL, '>', $globalOutputDir . '/_readsCorrectByLevel') or die;
 			my @header_fields_1_byLevelCorrect = ('ReadLevel', 'EvaluationLevel');
 			my @header_fields_2_byLevelCorrect = ('', '');
 			my @header_fields_3_byLevelCorrect = ('', '');	
@@ -853,7 +915,7 @@ elsif($action eq 'analyzeAll')
 		# my @evaluationLevels = sort keys %_evaluationLevels;
 		die Dumper("Missing evaluation levels", \@evaluationLevels, \%_evaluationLevels) unless(all {exists $_evaluationLevels{$_}} @evaluationLevels);
 				
-		open(FREQEVALUATION, '>', '_frequenciesCorrectByLevel') or die;
+		open(FREQEVALUATION, '>', $globalOutputDir . '/_frequenciesCorrectByLevel') or die;
 		my @header_fields_1_freqCorrect = ('EvaluationLevel');
 		my @header_fields_2_freqCorrect = ('');
 		my @header_fields_3_freqCorrect = ('');
@@ -911,7 +973,7 @@ elsif($action eq 'analyzeAll')
 		
 		close(FREQEVALUATION);
 	
-		open(XYPLOTS, '>', '_forPlot_frequencies_xy') or die;
+		open(XYPLOTS, '>', $globalOutputDir . '/_forPlot_frequencies_xy') or die;
 		print XYPLOTS join("\t", qw/simulationI variety method level taxonID taxonLabel freqTarget freqIs/), "\n";
 		for(my $simulationI = 0; $simulationI < $realizedN; $simulationI++)  
 		{
@@ -1713,27 +1775,35 @@ sub setup_directory_and_simulate_reads
 	my %taxa_genome_lengths;
 	foreach my $taxonID (@targetTaxonIDs)
 	{
-		my $thisTaxon_genomeLength = getGenomeLength($taxonID, $taxonID_2_contigIDs_href, $contig_2_length_href);
+		my $thisTaxon_genomeLength = getGenomeLength($taxonID, $taxonID_2_contigIDs_href, $contig_2_length_href);	
 		$taxa_genome_lengths{$taxonID} = $thisTaxon_genomeLength;
-		my $targetRelativeCoverage = $simulation_href->{targetTaxons}{$taxonID};
-		if(not defined $firstTaxon_genomeLength)
+	
+		if(not $coverageTargetsAreOrganismAbundances)
 		{
-			$firstTaxon_genomeLength = $thisTaxon_genomeLength;
-			$firstTaxon_relativeCoverage = $targetRelativeCoverage;
-			$simulationRelativeCoverages{$taxonID} = 1;
+			my $targetRelativeCoverage = $simulation_href->{targetTaxons}{$taxonID};
+			if(not defined $firstTaxon_genomeLength)
+			{
+				$firstTaxon_genomeLength = $thisTaxon_genomeLength;
+				$firstTaxon_relativeCoverage = $targetRelativeCoverage; 
+				$simulationRelativeCoverages{$taxonID} = 1;
+			}
+			else
+			{
+				my $targetCoverage_relative_first = $targetRelativeCoverage / $firstTaxon_relativeCoverage;
+				my $genomeSize_differential = $thisTaxon_genomeLength / $firstTaxon_genomeLength;
+				
+				$simulationRelativeCoverages{$taxonID} = $targetCoverage_relative_first / $genomeSize_differential;
+			}
 		}
 		else
 		{
-			my $targetCoverage_relative_first = $targetRelativeCoverage / $firstTaxon_relativeCoverage;
-			my $genomeSize_differential = $thisTaxon_genomeLength / $firstTaxon_genomeLength;
-			
-			$simulationRelativeCoverages{$taxonID} = $targetCoverage_relative_first / $genomeSize_differential;
+			$simulationRelativeCoverages{$taxonID} = $simulation_href->{targetTaxons}{$taxonID};
 		}
 	}
 
 	if(1)
 	{
-		print {$fh_log} "\tGenome-size adjusted coverages:\n";
+		print {$fh_log} "\tFinal (potentially genome-size adjusted) coverages:\n";
 		foreach my $taxonID (sort keys %simulationRelativeCoverages)
 		{
 			print {$fh_log}  "\t\t", $taxonID, ": ", sprintf("%.3f", $simulationRelativeCoverages{$taxonID}), " (length ", sprintf("%.3f", $taxa_genome_lengths{$taxonID}/(1024**2)), "M)\n";
@@ -1741,10 +1811,35 @@ sub setup_directory_and_simulate_reads
 		print {$fh_log} "\n";
 	}
 	
-	my $genome_files_href = extractTaxonIDsFromREF($simulation_FASTA, $simulation_href->{outputDirectory} . '/forSimulation', \%simulationRelativeCoverages, $taxonID_2_contigIDs_href);
+	# get estimated total megabases
+	my $totalExpectedBases = 0;
+	for(my $taxonI = 0; $taxonI <= $#targetTaxonIDs; $taxonI++)
+	{
+		my $taxonID = $targetTaxonIDs[$taxonI];
+		my $thisTaxon_genomeLength = getGenomeLength($taxonID, $taxonID_2_contigIDs_href, $contig_2_length_href);
+		my $relativeCoverage = $simulationRelativeCoverages{$taxonID};
+		die unless(defined $relativeCoverage);
+		$relativeCoverage *= $simulation_href->{coverageFactor};
+		$totalExpectedBases += ($relativeCoverage * $thisTaxon_genomeLength);
+	}
+		
+	my $local_coverageFactor = $simulation_href->{coverageFactor};
 	
+	if(defined $targetTotalSimulationInGigabytes)
+	{
+		my $expectGB = $totalExpectedBases / 1e9;
+		print {$fh_log} "Coverage correction: --targetTotalSimulationInGigabytes in effect -- expect about ${expectGB} GB, and want $targetTotalSimulationInGigabytes GB.\n";
+		my $factor = $expectGB / $targetTotalSimulationInGigabytes;
+		my $new_local_coverageFactor = $local_coverageFactor * (1 / $factor);
+		print {$fh_log} "Correct by factor $factor, i.e. set coverageFactor from $local_coverageFactor to $new_local_coverageFactor\n"; 
+		$local_coverageFactor = $new_local_coverageFactor;
+	}
+		
+	my $genome_files_href = extractTaxonIDsFromREF($simulation_FASTA, $simulation_href->{outputDirectory} . '/forSimulation', \%simulationRelativeCoverages, $taxonID_2_contigIDs_href);	
+
 	my $totalReads_allTaxa = 0;
-	my %reads_taxon;
+	my $totalBases_allTaxa = 0;
+	my %reads_taxon; 
 	my %readID_2_taxon;
 	my %taxonID_2_bases;
 	for(my $taxonI = 0; $taxonI <= $#targetTaxonIDs; $taxonI++)
@@ -1754,7 +1849,7 @@ sub setup_directory_and_simulate_reads
 		my $fn_genome = $genome_files_href->{$taxonID};
 		my $relativeCoverage = $simulationRelativeCoverages{$taxonID};
 		die unless((defined $fn_genome) and (defined $relativeCoverage));
-		$relativeCoverage *= $simulation_href->{coverageFactor};
+		$relativeCoverage *= $local_coverageFactor;
 		
 		my $outputDir_reads = $fn_genome . '.reads';
 		my $cmd_rm_outputDir_reads = "rm $outputDir_reads/*; rm -r $outputDir_reads";
@@ -1793,20 +1888,34 @@ sub setup_directory_and_simulate_reads
 		unlink($fn_genome) or die "Cannot delete $fn_genome";
 		
 		$taxonID_2_bases{$taxonID} += $combinedReadLength;
+		$totalBases_allTaxa += $combinedReadLength;
 	}
 	
-	my %realizedTaxonProportions;
+	my %realizedTaxonProportions_reads;
+	my %realizedOrganismAbundances;
+	my $sum_organismAbundances = 0;
 	foreach my $taxonID (@targetTaxonIDs)
 	{
-		$realizedTaxonProportions{$taxonID} = $reads_taxon{$taxonID} / $totalReads_allTaxa;
+		$realizedTaxonProportions_reads{$taxonID} = $reads_taxon{$taxonID} / $totalReads_allTaxa;
+		$realizedOrganismAbundances{$taxonID} = $taxonID_2_bases{$taxonID} / $taxa_genome_lengths{$taxonID};
+		$sum_organismAbundances += $realizedOrganismAbundances{$taxonID};
+	}
+	my %realizedRelativeOrganismAbundances;	
+	foreach my $taxonID (@targetTaxonIDs)
+	{
+		$realizedRelativeOrganismAbundances{$taxonID} = $realizedOrganismAbundances{$taxonID} / $sum_organismAbundances;
 	}
 	
 	if(1)
 	{
-		print {$fh_log} "\tRealized coverages:\n";
 		foreach my $taxonID (@targetTaxonIDs)
 		{
-			print {$fh_log} "\t\t", $taxonID, ": ", $reads_taxon{$taxonID}, " reads, proportion ", sprintf("%.3f", $realizedTaxonProportions{$taxonID}), "; vs target ", sprintf("%.3f", $simulation_href->{targetTaxons}{$taxonID}), "\n";
+			my $bases = 0;
+		}
+		print {$fh_log} "\tRealized read proportions:\n";
+		foreach my $taxonID (@targetTaxonIDs)
+		{
+			print {$fh_log} "\t\t", $taxonID, ": ", $reads_taxon{$taxonID}, " reads, read proportion ", sprintf("%.3f", $realizedTaxonProportions_reads{$taxonID}), "; copies of organism $realizedOrganismAbundances{$taxonID} / relative: $realizedRelativeOrganismAbundances{$taxonID}; vs target ", sprintf("%.3f", $simulation_href->{targetTaxons}{$taxonID}), "\n";
 		}	
 		print {$fh_log} "\n";
 	}
