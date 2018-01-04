@@ -32,6 +32,7 @@ use simulation;
 Util::get_metaMap_bin_and_enforce_mainDir();
 die unless(-e 'estimateSelfSimilarity.pl');
 
+
 #my $create_simulations = 2;
 #my $perSimulation_totalKnownGenomes = 5;
 
@@ -493,6 +494,7 @@ elsif($action eq 'analyzeAll')
 	
 	my %n_reads_correct_byVariety;
 	my %n_reads_correct_byVariety_byLevel;
+	my %n_reads_correct_byVariety_byLevel_byLength;
 	my %freq_byVariety_byLevel;
 	my @frequencyComparisons_bySimulation;
 	
@@ -500,6 +502,7 @@ elsif($action eq 'analyzeAll')
 	
 	my @highLevel_stats_keptSeparate_bySimulation;
 	my %callRate_and_accuracy_byReadCategory;
+	my %callRate_and_accuracy_byReadCategory_byLength;
 	my %attachedTo_byReadCategory;
 	# for(my $jobI = 0; $jobI < $realizedN; $jobI++)
 	for(my $jobI = 0; $jobI < $realizedN; $jobI++)  
@@ -508,9 +511,10 @@ elsif($action eq 'analyzeAll')
 		my $simulation_href = retrieve $simulation_href_fn;
 		my $frequencyComparison = {};
 		my %n_reads_correct_byVariety_local;
-		my %n_reads_correct_byVariety_byLevel_local;		
+		my %n_reads_correct_byVariety_byLevel_local;	
+		my %n_reads_correct_byVariety_byLevel_byLength_local;		
 		my %freq_byVariety_byLevel_local;		
-		evaluateOneSimulation($simulation_href, \%n_reads_correct_byVariety_local, \%n_reads_correct_byVariety_byLevel_local, \%freq_byVariety_byLevel_local, $frequencyComparison);
+		evaluateOneSimulation($simulation_href, \%n_reads_correct_byVariety_local, \%n_reads_correct_byVariety_byLevel_local, \%n_reads_correct_byVariety_byLevel_byLength_local, \%freq_byVariety_byLevel_local, $frequencyComparison);
 		push(@frequencyComparisons_bySimulation, $frequencyComparison);
 
 		# variety = fullDB/removeOne_genus ...
@@ -573,7 +577,6 @@ elsif($action eq 'analyzeAll')
 							die unless(not ref($value));
 							$n_reads_correct_byVariety_byLevel{$variety}{$label}{$category}{$level}{$key} += $value;
 						}
-						
 
 						my $d = $n_reads_correct_byVariety_byLevel_local{$variety}{$label}{$category}{$level};
 						die unless(exists $d->{N});
@@ -602,11 +605,80 @@ elsif($action eq 'analyzeAll')
 							$localAttachedHash{$key} = $d->{$key} / $d->{N};
 						}	
 
-						push(@{$attachedTo_byReadCategory{$category}{$label}{$level}}, \%localAttachedHash);						
+						push(@{$attachedTo_byReadCategory{$category}{$label}{$level}}, \%localAttachedHash);			
+
+					}
+					
+					die unless(defined $n_reads_correct_byVariety_byLevel_byLength_local{$variety}{$label}{$category});
+					foreach my $level (keys %{$n_reads_correct_byVariety_byLevel_byLength_local{$variety}{$label}{$category}})
+					{
+						foreach my $rL (keys %{$n_reads_correct_byVariety_byLevel_byLength_local{$variety}{$label}{$category}{$level}})
+						{
+							foreach my $key (keys %{$n_reads_correct_byVariety_byLevel_byLength_local{$variety}{$label}{$category}{$level}{$rL}})
+							{
+								my $value = $n_reads_correct_byVariety_byLevel_byLength_local{$variety}{$label}{$category}{$level}{$rL}{$key};
+								die Dumper($level, $rL, $key, $n_reads_correct_byVariety_byLevel_byLength_local{$variety}{$label}{$category}) unless(defined $value);
+								die unless(not ref($value));
+								$n_reads_correct_byVariety_byLevel_byLength{$variety}{$label}{$category}{$level}{$rL}{$key} += $value;							
+							}
+							
+							my $d = $n_reads_correct_byVariety_byLevel_byLength_local{$variety}{$label}{$category}{$level}{$rL};
+							die Dumper('N', $level, $rL, $d) unless(exists $d->{N});
+							die Dumper('missing', $level, $rL, $d) unless(exists $d->{missing});
+							die unless(exists $d->{correct});				
+							
+							my $N = $d->{N} + $d->{missing}; die unless($d > 0);
+							my $CR = $d->{N} / $N; die unless(($CR >= 0) and ($CR <= 1));
+							my $accuracy = ($d->{N} > 0) ? ($d->{correct} / $d->{N}) : -1; die unless(($accuracy >= -1) and ($accuracy <= 1));
+							
+							push(@{$callRate_and_accuracy_byReadCategory_byLength{$category}{$label}{$level}{$rL}}, [$CR, $accuracy]);						
+						}				
 					}
 				}
 			}
 		}
+		
+		open(BYREADLENGTH_FULLDB, '>', $globalOutputDir . '/_forPlot_byReadLength_fullDB') or die;
+		print BYREADLENGTH_FULLDB join("\t", qw/variety readCategory evaluationLevel method readLength Ntotal callRateAvg Ncalled accuracyAvg/), "\n";
+		foreach my $variety (sort keys %n_reads_correct_byVariety_byLevel_byLength)
+		{	
+			next unless($variety eq 'fullDB');
+			foreach my $label (sort keys %{$n_reads_correct_byVariety_byLevel_byLength{$variety}})
+			{		
+				foreach my $category (sort keys %{$n_reads_correct_byVariety_byLevel_byLength{$variety}{$label}})
+				{
+					foreach my $level (sort keys %{$n_reads_correct_byVariety_byLevel_byLength{$variety}{$label}{$category}})
+					{
+						foreach my $rL (sort {$a <=> $b} keys %{$n_reads_correct_byVariety_byLevel_byLength{$variety}{$label}{$category}{$level}})
+						{
+							my $d = $n_reads_correct_byVariety_byLevel_byLength{$variety}{$label}{$category}{$level}{$rL};
+							
+							die Dumper('N', $level, $rL, $d) unless(exists $d->{N});
+							die Dumper('missing', $level, $rL, $d) unless(exists $d->{missing});
+							die unless(exists $d->{correct});				
+							
+							my $N = $d->{N} + $d->{missing}; die unless($d > 0);
+							my $CR = $d->{N} / $N; die unless(($CR >= 0) and ($CR <= 1));
+							my $accuracy = ($d->{N} > 0) ? ($d->{correct} / $d->{N}) : -1; die unless(($accuracy >= -1) and ($accuracy <= 1));
+							
+							print BYREADLENGTH_FULLDB join("\t",
+								$variety,
+								$category,
+								$level,
+								$label,
+								$rL,
+								$N,
+								$CR,
+								$d->{N},
+								$accuracy
+							), "\n";
+						}
+					}
+				}
+			}
+		}
+		close(BYREADLENGTH_FULLDB);
+		
 		
 		foreach my $variety (keys %freq_byVariety_byLevel_local)
 		{			
@@ -655,6 +727,9 @@ elsif($action eq 'analyzeAll')
 		open(BARPLOTSREADCAT, '>', $globalOutputDir . '/_forPlot_barplots_readCategory') or die;
 		print BARPLOTSREADCAT join("\t", qw/readCategory evaluationLevel method callRateAvg accuracyAvg accuracyAvgExactltAtLevel callRate_raw accuracy_raw accuracy_raw_exactltyAtLevel/), "\n";
 		
+		#open(BYREADLENGTH, '>', $globalOutputDir . '/_forPlot_byReadLength') or die;
+		#print BYREADLENGTH join("\t", qw/readCategory evaluationLevel method readLength callRateAvg accuracyAvg accuracyAvgExactltAtLevel/), "\n";
+
 		my %categories_attachment_forPrint = map {'attachedTo_' . $_ => 1} qw/species genus family superfamily/;
 		my %values_attachment_forPrint;
 		
@@ -704,10 +779,30 @@ elsif($action eq 'analyzeAll')
 						$values_attachment_forPrint{$readCategory}{$label}{$level}{$k} = $v;
 						$categories_attachment_forPrint{$k}++;
 					}
+					
+					foreach my $rL (sort {$a <=> $b} keys %{$callRate_and_accuracy_byReadCategory_byLength{$readCategory}{$label}{$level}})
+					{
+						my $v_rL = $callRate_and_accuracy_byReadCategory_byLength{$readCategory}{$label}{$level}{$rL};
+						my @callRates_rL ;
+						my @accuracies_rL ;
+						foreach my $e (@$v_rL)
+						{
+							push(@callRates_rL, $e->[0]);
+							push(@accuracies_rL, $e->[1]);
+						}			
+
+						die unless(scalar(@callRates_rL));
+						die unless(scalar(@accuracies_rL));
+						my $avg_callRate_rL = Util::mean(@callRates_rL);
+						my $avg_accuracy_rL = Util::mean(@accuracies_rL);
+						#print BYREADLENGTH join("\t", $readCategory, $level, $label, $rL, $avg_callRate_rL, $avg_accuracy_rL), "\n";
+						
+					}
 				}
 			}
 		}
 		close(BARPLOTSREADCAT);
+		#close(BYREADLENGTH);
 		
 		open(BARPLOTS_ATTACHEDTO, '>', $globalOutputDir . '/_forPlot_barplots_attachedTo') or die;
 		my @keys_attachedTo = sort keys %categories_attachment_forPrint;
@@ -1239,6 +1334,7 @@ sub evaluateOneSimulation
 	my $simulation_href = shift;
 	my $n_reads_correct_byVariety = shift;
 	my $n_reads_correct_byVariety_byLevel = shift;
+	my $n_reads_correct_byVariety_byLevel_byLength = shift;
 	my $freq_byVariety_byLevel = shift;
 	my $frequencyComparison_href = shift;
 	
@@ -1249,6 +1345,7 @@ sub evaluateOneSimulation
 
 	my $truth_fn = $simulation_href->{outputDirectory} . '/truth_reads.txt';
 	my $truth_raw_reads_href = validation::readTruthFileReads($extendedMaster, $extendedMaster_merged, $truth_fn);
+	my $readLengths_href = Util::getReadLengths($simulation_href->{outputDirectory} . '/reads.fastq');
 	
 	# my %truth_raw_taxonIDs;
 	# $truth_raw_taxonIDs{$taxonID_master}++;
@@ -1262,6 +1359,7 @@ sub evaluateOneSimulation
 		
 		$n_reads_correct_byVariety->{$varietyName} = {} unless(defined $n_reads_correct_byVariety->{$varietyName});
 		$n_reads_correct_byVariety_byLevel->{$varietyName} = {} unless(defined $n_reads_correct_byVariety_byLevel->{$varietyName});
+		$n_reads_correct_byVariety_byLevel_byLength->{$varietyName} = {} unless(defined $n_reads_correct_byVariety_byLevel_byLength->{$varietyName});
 		$freq_byVariety_byLevel->{$varietyName} = {} unless(defined $freq_byVariety_byLevel->{$varietyName});
 		$frequencyComparison_href->{$varietyName} = {} unless(defined $frequencyComparison_href->{$varietyName});
 		
@@ -1342,7 +1440,7 @@ sub evaluateOneSimulation
 					my @missing_readIDs = grep {not exists $truth_raw_reads_href->{$_}} keys %$inferred_reads;
 					die Dumper("Missing some reads in truth file $truth_fn (inference file $f)", @missing_readIDs[0  .. 5]);
 				}
-				validation::readLevelComparison($extendedMaster, $truth_raw_reads_href, $truth_mappingDatabase_reads, $inferred_reads, $methodName, $n_reads_correct_byVariety->{$varietyName}, $n_reads_correct_byVariety_byLevel->{$varietyName}, \%reduced_taxonID_original_2_contigs);
+				validation::readLevelComparison($extendedMaster, $truth_raw_reads_href, $truth_mappingDatabase_reads, $inferred_reads, $methodName, $n_reads_correct_byVariety->{$varietyName}, $n_reads_correct_byVariety_byLevel->{$varietyName}, $n_reads_correct_byVariety_byLevel_byLength->{$varietyName}, \%reduced_taxonID_original_2_contigs, $readLengths_href);
 			}
 			else
 			{

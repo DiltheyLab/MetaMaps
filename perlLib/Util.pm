@@ -182,6 +182,29 @@ sub sd
 	return $sd;
 }
 
+sub getReadLengths
+{
+	my $file = shift;
+	my %forReturn;
+	open(F, '<', $file) or die "Cannot open $file";
+	while(<F>)
+	{
+		my $firstLine = $_;
+		chomp($firstLine);
+		next unless($firstLine);
+		die "Invalid format - is file $file FASTQ?" unless(substr($firstLine, 0, 1) eq '@');
+		my $readID = substr($firstLine, 1);
+		my $sequence = <F>;
+		chomp($sequence);
+		my $plus = <F>;
+		die unless(substr($plus, 0, 1) eq '+');
+		my $qualities = <F>;
+		$forReturn{$readID} = length($sequence);
+	}	
+	close(F);
+	return \%forReturn;
+}
+
 sub readFASTA
 {
 	my $file = shift;	

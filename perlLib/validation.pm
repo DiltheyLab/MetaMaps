@@ -312,10 +312,13 @@ sub readLevelComparison
 	my $label = shift;
 	my $external_reads_correct = shift;
 	my $external_reads_correct_byLevel = shift;
+	my $external_reads_correct_byLevel_byLength = shift;
 	my $mappableTaxonIDs = shift;
+	my $readLengths_href = shift;
 	
 	die unless(defined $label);
 	die unless(defined $mappableTaxonIDs);
+	die unless(defined $readLengths_href);
 	
 	my @readIDs = keys %$reads_truth_absolute;
 	die "readLevelComparison(..): We don't have absolute truth for some reads" unless(all {exists $reads_truth_absolute->{$_}} keys %$reads_inferred);
@@ -407,12 +410,26 @@ sub readLevelComparison
 		return $assignedToRank;
 	};
 	
+	my $getLengthBinForLength = sub {
+		my $length = shift;
+		return int(($length / 500) + 0.5) * 500;
+	};
+	die unless($getLengthBinForLength->(200) == 0);
+	die unless($getLengthBinForLength->(300) == 500);
+	die unless($getLengthBinForLength->(500) == 500);
+	die unless($getLengthBinForLength->(700) == 500);
+	die unless($getLengthBinForLength->(800) == 1000);
+	die unless($getLengthBinForLength->(1000) == 1000);
+
 	my %n_reads_correct;
 	my %n_reads_correct_byLevel;
+	my %n_reads_correct_byLevel_byLength;
 	# my %taxonID_across_ranks;
 	foreach my $readID (@readIDs)
 	{
 		my @read_categories = $get_read_categories->($readID);
+		die unless(defined $readLengths_href->{$readID});
+		my $readLengthBin = $getLengthBinForLength->($readLengths_href->{$readID});
 		
 		foreach my $category (@read_categories)
 		{
@@ -421,6 +438,13 @@ sub readLevelComparison
 				$n_reads_correct{$category}{missing} = 0;
 				$n_reads_correct{$category}{N} = 0;
 				$n_reads_correct{$category}{correct} = 0;
+			}	
+			
+			unless(defined $n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{N})
+			{
+				$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{missing} = 0;
+				$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{N} = 0;
+				$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{correct} = 0;			
 			}	
 
 			foreach my $level (@evaluateAccuracyAtLevels)
@@ -432,7 +456,14 @@ sub readLevelComparison
 					$n_reads_correct_byLevel{$category}{$level}{N_truthDefined} = 0;
 					$n_reads_correct_byLevel{$category}{$level}{correct} = 0;
 					$n_reads_correct_byLevel{$category}{$level}{correct_exactlyAtLevel} = 0;
-					$n_reads_correct_byLevel{$category}{$level}{correct_truthDefined} = 0;				
+					$n_reads_correct_byLevel{$category}{$level}{correct_truthDefined} = 0;	
+				}
+				
+				unless(defined $n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{N})
+				{
+					$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{missing} = 0;
+					$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{N} = 0;
+					$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{correct} = 0;
 				}
 			}
 		}
@@ -449,13 +480,15 @@ sub readLevelComparison
 			foreach my $category (@read_categories)
 			{
 				$n_reads_correct{$category}{N}++; 
-					
+				$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{N}++;
+
 				$n_reads_correct{$category}{'attachedTo_' . $attachedTo_inInference}++;
 				$n_reads_correct{$category}{'attachedToDirectlyMappable'} += ((exists $mappableTaxonIDs->{$inferredTaxonID}) ? 1 : 0);
 					
 				if($inferredTaxonID eq $trueTaxonID_inUsedDB)
 				{
 					$n_reads_correct{$category}{correct}++;
+					$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{correct}++;
 				}
 				else
 				{
@@ -488,6 +521,7 @@ sub readLevelComparison
 				{					
 					$n_reads_correct_byLevel{$category}{$level}{N}++;
 					$n_reads_correct_byLevel{$category}{$level}{N_truthDefined}++ if($lightning_truth->{$level} ne 'NotLabelledAtLevel');
+					$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{N}++;
 					
 					$n_reads_correct_byLevel{$category}{$level}{'attachedTo_' . $attachedTo_inInference}++;
 					$n_reads_correct_byLevel{$category}{$level}{'attachedToDirectlyMappable'} += ((exists $mappableTaxonIDs->{$inferredTaxonID}) ? 1 : 0);
@@ -495,6 +529,8 @@ sub readLevelComparison
 					if($lightning_truth->{$level} eq $lightning_inferred->{$level})
 					{
 						$n_reads_correct_byLevel{$category}{$level}{correct}++;
+						$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{correct}++;						
+						
 						if($inferredTaxonID eq $trueTaxonID_inUsedDB)
 						{
 							$n_reads_correct_byLevel{$category}{$level}{correct_exactly}++;
@@ -517,13 +553,16 @@ sub readLevelComparison
 		{
 			foreach my $category (@read_categories)
 			{
-				$n_reads_correct{$category}{missing}++;
+				$n_reads_correct{$category}{missing}++;			
 				die unless($n_reads_correct{$category}{missing} <= scalar(@readIDs));
+				$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{missing}++;
+				
 				foreach my $level (@evaluateAccuracyAtLevels)
 				{
 					$n_reads_correct_byLevel{$category}{$level}{missing}++;
 					die unless($n_reads_correct_byLevel{$category}{$level}{missing} <= scalar(@readIDs));
 					
+					$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{missing}++;
 				}
 			}
 		}
@@ -570,6 +609,23 @@ sub readLevelComparison
 			}
 		}
 	}	
+	
+	if(defined $external_reads_correct_byLevel_byLength)
+	{
+		foreach my $category (keys %n_reads_correct_byLevel_byLength)
+		{
+			foreach my $level (keys %{$n_reads_correct_byLevel_byLength{$category}})
+			{
+				foreach my $key (keys %{$n_reads_correct_byLevel_byLength{$category}{$level}})
+				{
+					foreach my $rL (keys %{$n_reads_correct_byLevel_byLength{$category}{$level}{$key}})
+					{
+						$external_reads_correct_byLevel_byLength->{$label}{$category}{$level}{$key}{$rL} += $n_reads_correct_byLevel_byLength{$category}{$level}{$key}{$rL};
+					}
+				}
+			}
+		}	
+	}
 }
 
 sub distributionLevelComparison

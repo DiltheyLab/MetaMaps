@@ -67,13 +67,54 @@ for(rL in unique(barplotD[["readLevel"]]))
 			#print(barPlotVector)
 			matrix_for_barplot <- matrix(barPlotVector, nrow = 4, ncol = length(methodNames))
 			colnames(matrix_for_barplot) <- methodNames
-			barplot(matrix_for_barplot, col = barplotPal, main = paste("Reads - complete DB (", rL, " reads against ", v, ")", sep = ""), ylab = "Accuracy")
-			legend("topright", legend = rev(c("Genome", "Species", "Genus", "Family")), fill = rev(barplotPal[1:4]))			
+			bpPos <- barplot(matrix_for_barplot, col = barplotPal, main = paste("Reads - complete DB (", rL, " reads against ", v, ")", sep = ""), ylab = "Accuracy", ylim = c(0, 1.3), axes = F)
+			axis(1, at = bpPos, tick = F, labels = methodNames)			
+			axis(2, at = c(0, 0.2, 0., 0.6, 0.8, 1), tick = T)
+
+			points(bpPos, rep(1.2, length(bpPos)), cex = 5 * callRatesVector, pch = 19, col = "#777777")
+			text(bpPos, rep(1.1, length(bpPos)), labels = paste(sprintf("%.f", 100*callRatesVector), "%", sep = ""), adj = c(0.5, 0.5), cex = 1)
+			
+			legend("bottomright", legend = rev(c("Genome", "Species", "Genus", "Family")), fill = rev(barplotPal[1:4]))			
+
+			axis(2, at = c(1.2), tick = F, labels = c("Call rate"), cex.axis = 1, line = -1)
+			
 		}
 	}
 }
 # dev.off()
 
+
+byReadLengthFile <- paste(prefix, "byReadLength_fullDB", sep = "")
+byReadLengthD <- read.delim(byReadLengthFile, header = T, stringsAsFactors = F)
+stopifnot(all(byReadLengthD[["variety"]] == "fullDB"))
+methodNames_reads <- unique(byReadLengthD[["method"]])
+rL_l_min <- min(byReadLengthD[["readLength"]])
+rL_l_max <- max(byReadLengthD[["readLength"]])
+rL_accuracy_min <- min(byReadLengthD[["accuracyAvg"]])
+rL_accuracy_max <- max(byReadLengthD[["accuracyAvg"]])
+for(mI in 1:length(methodNames))
+{
+	m <- methodNames[[mI]]
+	plot(0, 0, col = "white", main = paste("Reas assignment v/s read length: ", m, sep = ""), xlab = "Read length", xlim = c(rL_l_min, rL_l_max), ylim = c(0, 1))
+	plotLevels <- c("absolute", "species", "genus", "family")
+	for(lI in 1:length(plotLevels))
+	{
+		l <- plotLevels[[lI]]
+		indices <- which((byReadLengthD[["method"]] == m) & (byReadLengthD[["readCategory"]] == "ALL") & (byReadLengthD[["evaluationLevel"]] == l))	
+		indices_validAccuracy <- which((byReadLengthD[["method"]] == m) & (byReadLengthD[["readCategory"]] == "ALL") & (byReadLengthD[["evaluationLevel"]] == l) & (byReadLengthD[["accuracyAvg"]] >= 0))	
+		stopifnot(length(indices) > 0)
+		stopifnot(length(indices_validAccuracy) > 0)
+		if(lI == 1)
+		{
+			points(byReadLengthD[["readLength"]][indices], byReadLengthD[["callRateAvg"]][indices], col = "gray", pch = 2)
+			lines(byReadLengthD[["readLength"]][indices], byReadLengthD[["callRateAvg"]][indices], col = "gray")
+		}
+		
+		points(byReadLengthD[["readLength"]][indices_validAccuracy], byReadLengthD[["accuracyAvg"]][indices_validAccuracy], col = barplotPal[[lI]], pch = 19)		
+	}
+	legend("bottomright", legend = rev(c("Genome", "Species", "Genus", "Family", "Call rate")),  col = rev(c(barplotPal[1:4], "gray")), lty = c(0, 0, 0, 0, 1), pch = rev(c(19, 19, 19, 19, 2)))
+	
+}
 
 barPlotFile_byLevel <- paste(prefix, "barplots_readCategory", sep = "")
 barplotD_byLevel <- read.delim(barPlotFile_byLevel, header = T, stringsAsFactors = F)
