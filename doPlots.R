@@ -1,5 +1,21 @@
 library("RColorBrewer")
 
+
+capitalize <- function(x)
+{
+	if(nchar(x) > 0)
+	{
+		x2 <- x
+		substr(x2, 1, 1) <- toupper(substr(x2, 1, 1))
+		x2
+	}
+	else
+	{
+		x
+	}
+}
+
+
 simulationsDirectory <- "databases/miniSeq_100/simulations_logNormal"
 
 prefix <- paste(simulationsDirectory, "/_forPlot_", sep = "")
@@ -24,7 +40,7 @@ for(rL in unique(barplotD[["readLevel"]]))
 			{
 				barPlotVector_thisMethod <- c()
 
-				for(l in c("mappingTarget", "species", "genus", "family"))
+				for(l in c("absolute", "species", "genus", "family"))
 				{
 					indices <- which((barplotD[["readLevel"]] == rL) & (barplotD[["variety"]] == v) & (barplotD[["level"]] == l) & (barplotD[["method"]] == m))
 					stopifnot(length(indices) == 1)
@@ -32,7 +48,7 @@ for(rL in unique(barplotD[["readLevel"]]))
 					callRate <- barplotD[["callRate"]][indices[[1]]]
 					accuracy <- barplotD[["accuracy"]][indices[[1]]]
 					barPlotVector_thisMethod <- c(barPlotVector_thisMethod, accuracy)
-					if(l == "mappingTarget")
+					if(l == "absolute")
 					{
 						callRatesVector <- c(callRatesVector, callRate)
 					}						
@@ -51,7 +67,7 @@ for(rL in unique(barplotD[["readLevel"]]))
 			#print(barPlotVector)
 			matrix_for_barplot <- matrix(barPlotVector, nrow = 4, ncol = length(methodNames))
 			colnames(matrix_for_barplot) <- methodNames
-			barplot(matrix_for_barplot, col = barplotPal, main = paste("Reads - complete DB (", rL, " reads against ", v, ")", sep = ""))
+			barplot(matrix_for_barplot, col = barplotPal, main = paste("Reads - complete DB (", rL, " reads against ", v, ")", sep = ""), ylab = "Accuracy")
 			legend("topright", legend = rev(c("Genome", "Species", "Genus", "Family")), fill = rev(barplotPal[1:4]))			
 		}
 	}
@@ -62,6 +78,9 @@ for(rL in unique(barplotD[["readLevel"]]))
 barPlotFile_byLevel <- paste(prefix, "barplots_readCategory", sep = "")
 barplotD_byLevel <- read.delim(barPlotFile_byLevel, header = T, stringsAsFactors = F)
 # pdf(paste(prefix, "plots.pdf", sep = ""))
+
+attachedToFile_byLevel <- paste(prefix, "barplots_attachedTo", sep = "")
+attachedToD <- read.delim(attachedToFile_byLevel, header = T, stringsAsFactors = F)
 
 rCs <- c("truthLeafInDB", "novel_to_superkingdom")
 rCs_labels <- list()
@@ -74,6 +93,11 @@ rCs_to_evaluationLevels[["novel_to_superkingdom"]] <- "superkingdom"
 
 evaluationLevels <- unique(barplotD_byLevel[["evaluationLevel"]])
 evaluationLevels_ordered <- c("species", "genus", "family", "superkingdom")
+evaluationLevels_ordered_assignment_names <- list()
+evaluationLevels_ordered_assignment_names[["species"]] <- "Species/Strain"
+evaluationLevels_ordered_assignment_names[["genus"]] <- "Genus"
+evaluationLevels_ordered_assignment_names[["family"]] <- "Family"
+evaluationLevels_ordered_assignment_names[["superkingdom"]] <- "Superkingdom"
 evaluationLevels_to_i <- list()
 for(i in 1:length(evaluationLevels_ordered))
 {
@@ -88,6 +112,7 @@ for(rC in rCs)
 	
 	iMs <- sort(unique(barplotD_byLevel[["method"]][which(barplotD_byLevel[["readCategory"]] == rC)]))
 	callRates_by_Method <- c()
+	callRates_by_Method_list <- list()
 	accuracies_by_Method_byLevel <- list()
 	for(eL in evaluationLevels)
 	{
@@ -106,10 +131,11 @@ for(rC in rCs)
 		callRate <- callRates_iM[[1]]
 		stopifnot(all(callRates_iM == callRate))
 		callRates_by_Method <- c(callRates_by_Method, callRate)
+		callRates_by_Method_list[[iM]] <- callRate
 	}
 	
-	vector_for_barplot <- callRates_by_Method
-	for(eL in evaluationLevels_ordered)
+	vector_for_barplot <- c()
+	for(eL in c("absolute", evaluationLevels_ordered))
 	{
 		for(iM in iMs)
 		{
@@ -119,7 +145,7 @@ for(rC in rCs)
 	}
 	matrix_for_barplot <- matrix(vector_for_barplot, ncol = 1 + length(evaluationLevels_ordered), nrow = length(iMs))
 	# colnames(matrix_for_barplot) <- c("CR", evaluationLevels_ordered)
-	colorVector <- c(rep("gray", length(iMs)))
+	colorVector <- c(rep(barplotPal[[1]], length(iMs)))
 	for(i in 1:length(evaluationLevels_ordered))
 	{
 		thisEvaluationLevel <- evaluationLevels_ordered[[i]]
@@ -144,11 +170,61 @@ for(rC in rCs)
 	}
 	
 	pMar <- par()$mar
-	par(mar = pMar + c(4,0,0,0))
-	bpPos <- barplot(matrix_for_barplot, beside = T, main = paste("Reads - incomplete DB: ", rCs_labels[[rC]]), col = colorVector)
-	axis(1, at = colMeans(bpPos), tick = F, labels = c("Read call rate", evaluationLevels_ordered), pos = 0)
+	par(mar = pMar + c(4,0,0,0)) 
+	bpPos <- barplot(matrix_for_barplot, beside = T, main = paste("Reads - incomplete DB: ", rCs_labels[[rC]]), col = colorVector, ylim = c(0, 1.45), axes = F)
+
+	axis(1, at = colMeans(bpPos), tick = F, labels = c("Absolute", sapply(evaluationLevels_ordered, function(x){capitalize(x)}, USE.NAMES = F)), pos = 0)
 	axis(1, at = bpPos, tick = F, labels = rep(iMs, 1 + length(evaluationLevels_ordered)), las = 2, pos = -0.1, cex.axis = 0.7)
+	axis(2, at = c(0, 0.5, 1), tick = T)
+	
 	par(mar = pMar)
+	
+	attachedToProportions_methods <- c("Metamap-U-Reads", "Metamap-EM-Reads", "Kraken-Reads")
+
+	plotCircles_x_names <- c("Call rate", sapply(evaluationLevels_ordered, function(x){paste("Assn.: ", evaluationLevels_ordered_assignment_names[[x]])}, USE.NAMES = F) )
+	axis(3, at = colMeans(bpPos), tick = F, labels = plotCircles_x_names, cex.axis = 0.7, pos = 1.35)
+	
+	
+	plotCircles_realized_y_values <- c()
+	for(iMi in 1:length(attachedToProportions_methods))
+	{
+		iM <- attachedToProportions_methods[[iMi]]
+		
+		plotCircles_x_values <- c(callRates_by_Method_list[[iM]])
+		for(eLi in 1:length(evaluationLevels_ordered))
+		{
+			thisEvaluationLevel <- evaluationLevels_ordered[[eLi]]
+			indices <- which((attachedToD[["method"]] == iM) & (attachedToD[["readCategory"]] == rC))
+			if(!(length(indices) == 1))
+			{
+				print(indices)
+				cat("method = ", iM, ", readCategory = ", rC, "\n")
+			}
+			stopifnot(length(indices) == 1)
+			columnName_attachedTo <- paste("attachedTo_", thisEvaluationLevel, sep = "")
+			if(!(columnName_attachedTo %in% names(attachedToD)))
+			{
+				cat("Missing column: ", columnName_attachedTo, "\n")
+			}
+			stopifnot(columnName_attachedTo %in% names(attachedToD))
+			
+			plotCircles_x_values <- c(plotCircles_x_values, attachedToD[[columnName_attachedTo]][[indices[[1]]]])
+		}
+		stopifnot(length(plotCircles_x_names) == length(plotCircles_x_values))
+		
+		points_x <- colMeans(bpPos)
+		yPos <- 1.38 - (iMi - 1) * 0.1
+		plotCircles_realized_y_values <- c(plotCircles_realized_y_values, yPos)
+		points_y <- rep(yPos, length(points_x))
+		
+		points(points_x, points_y, pch = 19, cex = plotCircles_x_values * 1.9, col = c("black", barplotPal_byLevel))		
+		
+		text(points_x, points_y - 0.05, labels = paste(sprintf("%.f", 100*plotCircles_x_values), "%", sep = ""), adj = c(0.5, 0.5), cex = 0.5)
+	}
+	
+	axis(2, at = plotCircles_realized_y_values, tick = F, labels = attachedToProportions_methods, las = 2, cex.axis = 0.7, line = -2.4)
+	axis(2, at = c(0.5), tick = F, labels = c("Accuracy"), line = 2)
+
 }
 
 freqFile <- paste(prefix, "frequencies_xy", sep = "")
@@ -180,4 +256,3 @@ for(v in unique(freqD[["variety"]]))
 par(mfrow=c(1,1)) 
 
 dev.off()
-

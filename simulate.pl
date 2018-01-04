@@ -500,6 +500,7 @@ elsif($action eq 'analyzeAll')
 	
 	my @highLevel_stats_keptSeparate_bySimulation;
 	my %callRate_and_accuracy_byReadCategory;
+	my %attachedTo_byReadCategory;
 	# for(my $jobI = 0; $jobI < $realizedN; $jobI++)
 	for(my $jobI = 0; $jobI < $realizedN; $jobI++)  
 	{
@@ -539,9 +540,20 @@ elsif($action eq 'analyzeAll')
 					my $CR = $d->{N} / $N; die unless(($CR >= 0) and ($CR <= 1));
 					my $accuracy = $d->{correct} / $d->{N}; die unless(($accuracy >= 0) and ($accuracy <= 1));
 					
-					$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety}{$label}{$category}{definedGenomes}{CR} = $CR;
-					$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety}{$label}{$category}{definedGenomes}{Accuracy} = $accuracy;
-					push(@{$callRate_and_accuracy_byReadCategory{$category}{$label}{definedGenomes}}, [$CR, $accuracy, $accuracy]);
+					$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety}{$label}{$category}{absolute}{CR} = $CR;
+					$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety}{$label}{$category}{absolute}{Accuracy} = $accuracy;
+					push(@{$callRate_and_accuracy_byReadCategory{$category}{$label}{absolute}}, [$CR, $accuracy, $accuracy]);
+					
+					my @keys_attachedTo = grep {$_ =~ /^attachedTo/} keys %$d;
+					die unless(scalar(@keys_attachedTo));
+					
+					my %localAttachedHash;
+					foreach my $key (@keys_attachedTo)
+					{
+						$localAttachedHash{$key} = $d->{$key} / $d->{N};
+					}	
+
+					push(@{$attachedTo_byReadCategory{$category}{$label}{absolute}}, \%localAttachedHash);
 				}
 			}
 		}
@@ -580,6 +592,17 @@ elsif($action eq 'analyzeAll')
 						$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety}{$label}{$category}{$level}{Accuracy} = $accuracy;						
 						$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety}{$label}{$category}{$level}{AccuracyExactlyAtLevel} = $accuracy_exactlyAtLevel;						
 						push(@{$callRate_and_accuracy_byReadCategory{$category}{$label}{$level}}, [$CR, $accuracy, $accuracy_exactlyAtLevel]);						
+						
+						my @keys_attachedTo = grep {$_ =~ /^attachedTo/} keys %$d;
+						die unless(scalar(@keys_attachedTo));
+						
+						my %localAttachedHash;
+						foreach my $key (@keys_attachedTo)
+						{
+							$localAttachedHash{$key} = $d->{$key} / $d->{N};
+						}	
+
+						push(@{$attachedTo_byReadCategory{$category}{$label}{$level}}, \%localAttachedHash);						
 					}
 				}
 			}
@@ -632,6 +655,9 @@ elsif($action eq 'analyzeAll')
 		open(BARPLOTSREADCAT, '>', $globalOutputDir . '/_forPlot_barplots_readCategory') or die;
 		print BARPLOTSREADCAT join("\t", qw/readCategory evaluationLevel method callRateAvg accuracyAvg accuracyAvgExactltAtLevel callRate_raw accuracy_raw accuracy_raw_exactltyAtLevel/), "\n";
 		
+		my %categories_attachment_forPrint = map {'attachedTo_' . $_ => 1} qw/species genus family superfamily/;
+		my %values_attachment_forPrint;
+		
 		foreach my $readCategory (sort keys %callRate_and_accuracy_byReadCategory)
 		{
 			foreach my $label (sort keys %{$callRate_and_accuracy_byReadCategory{$readCategory}})
@@ -655,10 +681,60 @@ elsif($action eq 'analyzeAll')
 					my $avg_accuracy = Util::mean(@accuracies);
 					my $avg_accuracy_exactlyAtLevel = Util::mean(@accuracies_exactlyAtLevel);
 					print BARPLOTSREADCAT join("\t", $readCategory, $level, $label, $avg_callRate, $avg_accuracy, $avg_accuracy_exactlyAtLevel, join(';', @callRates), join(';', @accuracies), join(';', @accuracies_exactlyAtLevel)), "\n";
+					
+					my @attachmentHashes = @{$attachedTo_byReadCategory{$readCategory}{$label}{$level}};
+					my %valuesInHashes;
+					foreach my $h (@attachmentHashes)
+					{
+						my $s_nonDirectlyAttached = 0;
+						foreach my $k (keys %$h)
+						{
+							push(@{$valuesInHashes{$k}}, $h->{$k});
+							if($k ne 'attachedToDirectlyMappable')
+							{
+								$s_nonDirectlyAttached += $h->{$k};
+							}
+						}
+						die unless(abs(1 - $s_nonDirectlyAttached) <= 1e-3);
+					}
+					
+					foreach my $k (keys %valuesInHashes)
+					{
+						my $v = Util::mean(@{$valuesInHashes{$k}});
+						$values_attachment_forPrint{$readCategory}{$label}{$level}{$k} = $v;
+						$categories_attachment_forPrint{$k}++;
+					}
 				}
 			}
 		}
 		close(BARPLOTSREADCAT);
+		
+		open(BARPLOTS_ATTACHEDTO, '>', $globalOutputDir . '/_forPlot_barplots_attachedTo') or die;
+		my @keys_attachedTo = sort keys %categories_attachment_forPrint;
+		# print BARPLOTS_ATTACHEDTO join("\t", qw/readCategory method/, @keys_attachedTo), "\n";
+		print BARPLOTS_ATTACHEDTO join("\t", qw/readCategory method/, @keys_attachedTo), "\n";
+		foreach my $readCategory (sort keys %values_attachment_forPrint)
+		{
+			foreach my $label (sort keys %{$values_attachment_forPrint{$readCategory}})
+			{
+				foreach my $level ((sort keys %{$values_attachment_forPrint{$readCategory}{$label}})[0])
+				{
+					# my @values_forPrint = ($readCategory, $level, $label);
+					my @values_forPrint = ($readCategory, $label);
+					foreach my $k (@keys_attachedTo)
+					{
+						my $v = 0;
+						if(exists $values_attachment_forPrint{$readCategory}{$label}{$level}{$k})
+						{
+							$v = $values_attachment_forPrint{$readCategory}{$label}{$level}{$k};
+						}
+						push(@values_forPrint, $v);
+					}
+					print BARPLOTS_ATTACHEDTO join("\t", @values_forPrint), "\n";
+				}
+			}
+		}
+		close(BARPLOTS_ATTACHEDTO);
 				
 	}
 
@@ -774,7 +850,7 @@ elsif($action eq 'analyzeAll')
 						
 						push(@output_fields_absolutelyCorrect, $Ntotal, $percOK_total, $NmadeCall, $percOK_madeCall, $perc_missing);
 						
-						print BARPLOTSFULLDB join("\t", $readLevel, $variety, $methodName, 'mappingTarget', $callRate, $percOK_madeCall_fullAccuracy), "\n";
+						print BARPLOTSFULLDB join("\t", $readLevel, $variety, $methodName, 'absolute', $callRate, $percOK_madeCall_fullAccuracy), "\n";
 
 					}
 				}
@@ -1266,7 +1342,7 @@ sub evaluateOneSimulation
 					my @missing_readIDs = grep {not exists $truth_raw_reads_href->{$_}} keys %$inferred_reads;
 					die Dumper("Missing some reads in truth file $truth_fn (inference file $f)", @missing_readIDs[0  .. 5]);
 				}
-				validation::readLevelComparison($extendedMaster, $truth_raw_reads_href, $truth_mappingDatabase_reads, $inferred_reads, $methodName, $n_reads_correct_byVariety->{$varietyName}, $n_reads_correct_byVariety_byLevel->{$varietyName});
+				validation::readLevelComparison($extendedMaster, $truth_raw_reads_href, $truth_mappingDatabase_reads, $inferred_reads, $methodName, $n_reads_correct_byVariety->{$varietyName}, $n_reads_correct_byVariety_byLevel->{$varietyName}, \%reduced_taxonID_original_2_contigs);
 			}
 			else
 			{

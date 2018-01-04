@@ -312,8 +312,10 @@ sub readLevelComparison
 	my $label = shift;
 	my $external_reads_correct = shift;
 	my $external_reads_correct_byLevel = shift;
+	my $mappableTaxonIDs = shift;
 	
 	die unless(defined $label);
+	die unless(defined $mappableTaxonIDs);
 	
 	my @readIDs = keys %$reads_truth_absolute;
 	die "readLevelComparison(..): We don't have absolute truth for some reads" unless(all {exists $reads_truth_absolute->{$_}} keys %$reads_inferred);
@@ -384,6 +386,27 @@ sub readLevelComparison
 		return @categories;
 	};
 	
+	my $get_read_assignedToLevel = sub {
+		my $readID = shift;
+		my $taxonID_inferred =  $reads_inferred->{$readID};
+		die unless(defined $taxonID_inferred);
+		
+		my $lightning_inferred = $getLightning->($taxonID_inferred);
+		
+		my $assignedToRank;
+		RANK: foreach my $rank (@evaluateAccuracyAtLevels)
+		{
+			die unless(defined $lightning_inferred->{$rank});
+			if(($lightning_inferred->{$rank} ne 'Unclassified') and ($lightning_inferred->{$rank} ne 'NotLabelledAtLevel'))
+			{
+				$assignedToRank = $rank;
+				last RANK;
+			}
+		}
+		die unless(defined $assignedToRank);
+		return $assignedToRank;
+	};
+	
 	my %n_reads_correct;
 	my %n_reads_correct_byLevel;
 	# my %taxonID_across_ranks;
@@ -409,7 +432,7 @@ sub readLevelComparison
 					$n_reads_correct_byLevel{$category}{$level}{N_truthDefined} = 0;
 					$n_reads_correct_byLevel{$category}{$level}{correct} = 0;
 					$n_reads_correct_byLevel{$category}{$level}{correct_exactlyAtLevel} = 0;
-					$n_reads_correct_byLevel{$category}{$level}{correct_truthDefined} = 0;
+					$n_reads_correct_byLevel{$category}{$level}{correct_truthDefined} = 0;				
 				}
 			}
 		}
@@ -421,10 +444,15 @@ sub readLevelComparison
 			
 			my $lightning_truth = $getLightning->($trueTaxonID_inUsedDB);
 			my $lightning_inferred = $getLightning->($inferredTaxonID);
+			my $attachedTo_inInference = $get_read_assignedToLevel->($readID);
 			
 			foreach my $category (@read_categories)
 			{
-				$n_reads_correct{$category}{N}++;
+				$n_reads_correct{$category}{N}++; 
+					
+				$n_reads_correct{$category}{'attachedTo_' . $attachedTo_inInference}++;
+				$n_reads_correct{$category}{'attachedToDirectlyMappable'} += ((exists $mappableTaxonIDs->{$inferredTaxonID}) ? 1 : 0);
+					
 				if($inferredTaxonID eq $trueTaxonID_inUsedDB)
 				{
 					$n_reads_correct{$category}{correct}++;
@@ -460,6 +488,10 @@ sub readLevelComparison
 				{					
 					$n_reads_correct_byLevel{$category}{$level}{N}++;
 					$n_reads_correct_byLevel{$category}{$level}{N_truthDefined}++ if($lightning_truth->{$level} ne 'NotLabelledAtLevel');
+					
+					$n_reads_correct_byLevel{$category}{$level}{'attachedTo_' . $attachedTo_inInference}++;
+					$n_reads_correct_byLevel{$category}{$level}{'attachedToDirectlyMappable'} += ((exists $mappableTaxonIDs->{$inferredTaxonID}) ? 1 : 0);
+					
 					if($lightning_truth->{$level} eq $lightning_inferred->{$level})
 					{
 						$n_reads_correct_byLevel{$category}{$level}{correct}++;
