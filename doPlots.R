@@ -20,38 +20,152 @@ simulationsDirectory <- "databases/miniSeq_100/simulations_logNormal"
 
 prefix <- paste(simulationsDirectory, "/_forPlot_", sep = "")
 
+barplotPal <- brewer.pal(n = 5, name = "PuBu")
+
 pdf(paste(simulationsDirectory, "/plots_frequencies.pdf", sep = ""), height = 10, width = 10)
 library(ggplot2)
 freqFile <- paste(prefix, "frequencies_xy", sep = "")
 pBefore <- par(mfrow=c(4,4), oma=c(0,3,6,0), mar = c(2,2,2,1)) 
-freqD <- read.delim(freqFile, header = T)
+freqD <- read.delim(freqFile, header = T, stringsAsFactors = F)
 freq_methods <- c("Kraken-Dist", "Bracken-Dist", "MetaMap-EM-Dist", "MetaMap-U-Dist")
-freq_levels <- c("species", "genus", "family")
+freq_levels <- c("definedGenomes", "species", "genus", "family")
+freqD[["freqTarget"]] <- as.numeric(freqD[["freqTarget"]])
+freqD[["freqIs"]] <- as.numeric(freqD[["freqIs"]])
+idx_minmax <- which(freqD[["level"]] %in% freq_levels)
+pC <- list()
+pC[["Unclassified"]] <- "#00FF00"
+pC[["NotLabelledAtLevel"]] <- "#009900"
+# pC[["Mappable"]] <- barplotPal[[1]]
+# pC[["species"]] <- barplotPal[[2]]
+# pC[["genus"]] <- barplotPal[[3]]
+# pC[["family"]] <- barplotPal[[4]]
+# pC[["Other"]] <- barplotPal[[5]]
+pC[["Mappable"]] <- "blue"
+pC[["species"]] <- "blue"
+pC[["genus"]] <- "blue"
+pC[["family"]] <- "blue"
+pC[["Other"]] <- "blue"
+
+pCex <- list()
+pCex[["Unclassified"]] <- 2
+pCex[["NotLabelledAtLevel"]] <- 2
+pCex[["Mappable"]] <- 2
+pCex[["species"]] <- 2
+pCex[["genus"]] <- 2
+pCex[["family"]] <- 2
+pCex[["Other"]] <- 2
+
+
+pS <- list()
+pS[["Unclassified"]] <- 19
+pS[["NotLabelledAtLevel"]] <- 19
+pS[["Mappable"]] <- 3
+pS[["species"]] <- 4
+pS[["genus"]] <- 5
+pS[["family"]] <- 6
+pS[["Other"]] <- 7
+
+
+pL <- list()
+pL[["Unclassified"]] <- "Unclassified"
+pL[["NotLabelledAtLevel"]] <- "Unlabelled"
+pL[["Mappable"]] <- "Genome"
+pL[["species"]] <- "Species"
+pL[["genus"]] <- "Genus"
+pL[["family"]] <- "Family"
+pL[["Other"]] <- ">Family"
+
 
 for(l in freq_levels)
 {
 	for(m in freq_methods)
 	{
-		indices <- which((freqD[["method"]] == m) & (freqD[["level"]] == l) & (freqD[["variety"]] == "fullDB"))
-		stopifnot(length(indices) > 0)
+		l_lookup <- l
+		if((l == "definedGenomes") && (m == "MetaMap-U-Dist"))
+		{
+			l_lookup <- "definedAndHypotheticalGenomes"
+		}
 
-		frTarget <- freqD[["freqTarget"]][indices]
-		frIs <- freqD[["freqIs"]][indices]
-		taxonIDs <- freqD[["taxonID"]][indices]
-		taxonLabels <- freqD[["taxonLabel"]][indices]
-		xAxis_min <- min(frTarget)
-		xAxis_max <- max(frTarget)
+		indices <- which((freqD[["method"]] == m) & (freqD[["level"]] == l_lookup) & (freqD[["variety"]] == "fullDB"))
+
+		xAxis_min <- min(freqD[["freqTarget"]][idx_minmax])
+		xAxis_max <- max(freqD[["freqTarget"]][idx_minmax])
 		xAxis_half <- mean(c(xAxis_min, xAxis_max))
 		xAxis_twoThirds <- xAxis_min + (2/5) * (xAxis_max - xAxis_min)
 
-		yAxis_min <- min(frIs)
-		yAxis_max <- max(frIs)
+		yAxis_min <- min(freqD[["freqIs"]][idx_minmax])
+		yAxis_max <- max(freqD[["freqIs"]][idx_minmax])
 		yAxis_half <- mean(c(yAxis_min, yAxis_max))
 		yAxis_twoThirds <- yAxis_min + (4/5) * (yAxis_max - yAxis_min)
 				
-		r <- cor(frTarget, frIs)
 		# cat(paste(m, "@", l, ", ", "fullDB", ", r = ", cor(frTarget, frIs), sep = ""), "\n")
-		plot(frTarget, frIs, main = "", cex.main = 0.7, xaxt = "n", yaxt = "n", xaxs = "i", yaxs = "i", pch = 3)
+		
+		pointColours <- c()
+		pointCexs <- c()
+		pointSymbols <- c()
+		for(i in indices)
+		{
+			taxonID <- freqD[["taxonID"]][[i]]
+			pointLevel <- freqD[["taxonIDCategory"]][[i]]
+			mappable <- freqD[["isMappable"]][[i]]
+			pointColour <- ""
+			pointCex <- 0
+			pointSymbol <- 0
+			if(taxonID %in% names(pC))
+			{
+				pointColour <- pC[[taxonID]]
+				pointCex <- pCex[[taxonID]]
+				pointSymbol <- pS[[taxonID]]
+			}
+			else if(mappable == 1)
+			{
+				pointColour <- pC[["Mappable"]]
+				pointCex <- pCex[["Mappable"]]
+				pointSymbol <- pS[["Mappable"]]
+			}
+			else if(pointLevel %in% names(pC))
+			{
+				pointColour <- pC[[pointLevel]]
+				pointCex <- pCex[[pointLevel]]
+				pointSymbol <- pS[[pointLevel]]
+			}
+			else
+			{
+				pointColour <- pC[["Other"]]
+				pointCex <- pCex[["Other"]]
+				pointSymbol <- pS[["Other"]]
+				cat("Unknown point level: ", pointLevel, "\n")
+			}
+
+			pointColours <- c(pointColours, pointColour)
+			pointCexs <- c(pointCexs, pointCex)
+			pointSymbols <- c(pointSymbols, pointSymbol)
+		}
+			
+		if(!((l == "definedGenomes") && ((m == "Kraken-Dist") || (m == "Bracken-Dist"))))
+		{
+			plot(0, 0, col = "white", main = "", cex.main = 0.7, xaxt = "n", yaxt = "n", xlim = c(xAxis_min, xAxis_max), ylim = c(yAxis_min, yAxis_max))		
+			frTarget <- freqD[["freqTarget"]][indices]
+			frIs <- freqD[["freqIs"]][indices]
+			taxonIDs <- freqD[["taxonID"]][indices]
+			taxonLabels <- freqD[["taxonLabel"]][indices]		
+			stopifnot(length(indices) > 0)				
+			points(frTarget, frIs,  pch = pointSymbols, cex = pointCexs, col = pointColours)
+			stopifnot(length(frTarget) == length(pointColours))
+			r <- cor(frTarget, frIs)
+			text(xAxis_twoThirds, yAxis_twoThirds, labels = paste("r = ", sprintf("%.3f", r), sep = ""), cex = 1.5)
+			axis(2, xaxs = "i", labels = F)			
+			axis(1, xaxs = "i", labels = F)			
+		}	
+		else
+		{
+			plot(0, 0, col = "white", main = "", cex.main = 0.7, xaxt = "n", yaxt = "n", xaxs = "i", yaxs = "i", xlim = c(xAxis_min, xAxis_max), ylim = c(yAxis_min, yAxis_max), axes = F)
+			if(m == "Kraken-Dist")
+			{
+				legend("topright", legend = c(pL, recursive = T, use.names = F),  col = c(pC, recursive = T, use.names = F), pch = as.vector(pS), cex = 1.5)
+			}
+		}
+		
 		if(m == freq_methods[[1]])
 		{
 			axis(2, xaxs = "i")		
@@ -60,7 +174,6 @@ for(l in freq_levels)
 		}
 		else
 		{
-			axis(2, xaxs = "i", labels = F)			
 		}
 		
 		if(l == tail(freq_levels, n = 1))
@@ -70,7 +183,6 @@ for(l in freq_levels)
 		}
 		else
 		{
-			axis(1, xaxs = "i", labels = F)			
 		}
 		
 		if(l == freq_levels[[1]])
@@ -78,7 +190,6 @@ for(l in freq_levels)
 			title(main = m, cex.main = 1.8, line = 1)		
 		}
 		
-		text(xAxis_twoThirds, yAxis_twoThirds, labels = paste("r = ", sprintf("%.3f", r), sep = ""), cex = 1.5)
 		# frTarget_idx_005 <- which(frIs <= 0.05)
 		# plot(frTarget[frTarget_idx_005], frIs[frTarget_idx_005], main = paste("[Zoom] Frequencies ", m, ", ", l, ", ", v, sep = ""), xlab = "True frequency", ylab = "Inferred frequency", cex.main = 0.7)
 	}
@@ -99,7 +210,6 @@ pdf(paste(simulationsDirectory, "/plots_reads.pdf", sep = ""))
 
 barPlotFile <- paste(prefix, "barplots_fullDB", sep = "")
 barplotD <- read.delim(barPlotFile, header = T)
-barplotPal <- brewer.pal(n = 5, name = "PuBu")
 #pdf(paste(prefix, "plots.pdf", sep = ""))
 for(rL in unique(barplotD[["readLevel"]]))
 {
@@ -312,7 +422,7 @@ for(rC in rCs)
 			indices <- which((attachedToD[["method"]] == iM) & (attachedToD[["readCategory"]] == rC))
 			if(!(length(indices) == 1))
 			{
-				print(indices)
+				# print(indices)
 				cat("method = ", iM, ", readCategory = ", rC, "\n")
 			}
 			stopifnot(length(indices) == 1)

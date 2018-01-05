@@ -1186,7 +1186,7 @@ elsif($action eq 'analyzeAll')
 			
 	
 			open(XYPLOTS, '>', $globalOutputDir . '/_forPlot_frequencies_xy') or die;
-			print XYPLOTS join("\t", qw/simulationI variety method level taxonID taxonLabel taxonIDCategory isMappable freqTarget freqIs freqTargetControl proportionNovelDirectly proportionNovelTotal/), "\n";
+			print XYPLOTS join("\t", qw/simulationI variety method level taxonID taxonLabel taxonIDCategory isMappable freqTarget freqIs proportionNovelDirectly proportionNovelTotal controlFreq_target/), "\n";
 			for(my $simulationI = 0; $simulationI < $realizedN; $simulationI++)  
 			{
 				next unless(defined $frequencyComparisons_bySimulation[$simulationI]);
@@ -1206,12 +1206,15 @@ elsif($action eq 'analyzeAll')
 								my $taxonIDCategory = (($taxonID eq 'Unclassified') or ($taxonID eq 'NotLabelledAtLevel')) ? $taxonID : $get_taxonID_category->($taxonID);
 								my $isMappable = $frequencyComparisons_details_bySimulation[$simulationI]{$variety}{mappable}{$taxonID} ? 1 : 0;
 								
-								my $controlFrequency = $frequencyComparisons_details_bySimulation[$simulationI]{$variety}{truthReadsNovelTree}[0] / $frequencyComparisons_details_bySimulation[$simulationI]{$variety}{nReads};
-								my $freqNovelNew = $frequencyComparisons_details_bySimulation[$simulationI]{$variety}{truthReadsNovelTree}[1] / $frequencyComparisons_details_bySimulation[$simulationI]{$variety}{nReads};
-								my $freqNovelTotal = $frequencyComparisons_details_bySimulation[$simulationI]{$variety}{truthReadsNovelTree}[2] / $frequencyComparisons_details_bySimulation[$simulationI]{$variety}{nReads};
+								my $have_truth_freq_data = (exists $frequencyComparisons_details_bySimulation[$simulationI]{$variety}{truthReadsNovelTree}{$taxonID});
+								my $controlFrequency = (not $have_truth_freq_data) ? 0 : ($frequencyComparisons_details_bySimulation[$simulationI]{$variety}{truthReadsNovelTree}{$taxonID}[0] / $frequencyComparisons_details_bySimulation[$simulationI]{$variety}{nReads});
+								my $freqNovelNew = (not $have_truth_freq_data) ? 0 : ($frequencyComparisons_details_bySimulation[$simulationI]{$variety}{truthReadsNovelTree}{$taxonID}[1] / $frequencyComparisons_details_bySimulation[$simulationI]{$variety}{nReads});
+								my $freqNovelTotal = (not $have_truth_freq_data) ? 0 : ($frequencyComparisons_details_bySimulation[$simulationI]{$variety}{truthReadsNovelTree}{$taxonID}[2] / $frequencyComparisons_details_bySimulation[$simulationI]{$variety}{nReads});
 								
-								warn Dumper("Frequency mismatch -- $controlFrequency vs $frequencyComparisons_bySimulation[$simulationI]{$variety}{$label}{$level}{$taxonID}[0]", $simulationI, $variety, $label, $level, $taxonID) unless (abs($controlFrequency - $frequencyComparisons_bySimulation[$simulationI]{$variety}{$label}{$level}{$taxonID}[0]) <= 1e-4);
-								
+								if(($taxonID ne 'Unclassified') and ($taxonID ne 'NotLabelledAtLevel'))
+								{
+									warn Dumper("Frequency mismatch -- $controlFrequency vs $frequencyComparisons_bySimulation[$simulationI]{$variety}{$label}{$level}{$taxonID}[0]", $simulationI, $variety, $label, $level, $taxonID) unless (abs($controlFrequency - $frequencyComparisons_bySimulation[$simulationI]{$variety}{$label}{$level}{$taxonID}[0]) <= 1e-4);
+								}
 								print XYPLOTS join("\t",
 									$simulationI,
 									$variety,
@@ -1221,10 +1224,10 @@ elsif($action eq 'analyzeAll')
 									$taxonID_label,
 									$taxonIDCategory,
 									$isMappable,
-									@{$frequencyComparisons_bySimulation[$simulationI]{$variety}{$label}{$level}{$taxonID}}),
-									$controlFrequency,
+									@{$frequencyComparisons_bySimulation[$simulationI]{$variety}{$label}{$level}{$taxonID}},
 									$freqNovelNew,
 									$freqNovelTotal,
+									$controlFrequency),
 									"\n";
 							}
 						}

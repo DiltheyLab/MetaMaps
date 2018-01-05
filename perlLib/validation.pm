@@ -194,12 +194,12 @@ sub truthReadsTree
 			my $reads_from_below = 0;
 			foreach my $childID (@{$taxonomy_href->{$taxonID}{children}})
 			{
-				if(exists $treeCounts{$taxonID})
+				if(exists $treeCounts{$childID})
 				{
-					$reads_from_below += $treeCounts{$taxonID}[0];
+					$reads_from_below += $treeCounts{$childID}[0];
 				}
 			}
-			die unless($reads_from_below <= $treeCounts{$taxonID}[0]);
+			die Dumper($reads_from_below, $treeCounts{$taxonID}[0]) unless($reads_from_below <= $treeCounts{$taxonID}[0]);
 			my $new_reads = $treeCounts{$taxonID}[0] - $reads_from_below;
 			die unless($new_reads >= 0);
 			$treeCounts{$taxonID}[1] = $new_reads;
@@ -213,7 +213,7 @@ sub truthReadsTree
 		}
 	}
 	
-	die unless(($treeCounts{1}[0] + $treeCounts{1}[1]) == scalar(%$truthReads_href));
+	die Dumper("Read counts don't add up", $treeCounts{1}, scalar(keys %$truthReads_href)) unless(($treeCounts{1}[0] + $treeCounts{1}[1]) == scalar(keys %$truthReads_href));
 	die unless($treeCounts{1}[2] == $n_indirect);
 	foreach my $treeNode (keys %treeCounts)
 	{
