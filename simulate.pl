@@ -497,6 +497,7 @@ elsif($action eq 'analyzeAll')
 	my %n_reads_correct_byVariety_byLevel_byLength;
 	my %freq_byVariety_byLevel;
 	my @frequencyComparisons_bySimulation;
+	my @frequencyComparisons_details_bySimulation;
 	
 	my $fullTaxonomy_simulation = taxTree::readTaxonomy($DB . '/taxonomy');
 	
@@ -510,12 +511,15 @@ elsif($action eq 'analyzeAll')
 		my $simulation_href_fn = $globalOutputDir . '/' . $jobI . '/simulationStore';
 		my $simulation_href = retrieve $simulation_href_fn;
 		my $frequencyComparison = {};
+		my $frequencyComparison_details = {};
 		my %n_reads_correct_byVariety_local;
 		my %n_reads_correct_byVariety_byLevel_local;	
 		my %n_reads_correct_byVariety_byLevel_byLength_local;		
 		my %freq_byVariety_byLevel_local;		
-		evaluateOneSimulation($simulation_href, \%n_reads_correct_byVariety_local, \%n_reads_correct_byVariety_byLevel_local, \%n_reads_correct_byVariety_byLevel_byLength_local, \%freq_byVariety_byLevel_local, $frequencyComparison);
+		my %freq_details_byVariety_byLevel_local;		
+		evaluateOneSimulation($simulation_href, \%n_reads_correct_byVariety_local, \%n_reads_correct_byVariety_byLevel_local, \%n_reads_correct_byVariety_byLevel_byLength_local, \%freq_byVariety_byLevel_local, $frequencyComparison, $frequencyComparison_details);
 		push(@frequencyComparisons_bySimulation, $frequencyComparison);
+		push(@frequencyComparisons_details_bySimulation, $frequencyComparison_details);
 
 		# variety = fullDB/removeOne_genus ...
 		# label = MetaMap / Kraken ...
@@ -683,7 +687,7 @@ elsif($action eq 'analyzeAll')
 		foreach my $variety (keys %freq_byVariety_byLevel_local)
 		{			
 			foreach my $label (keys %{$freq_byVariety_byLevel_local{$variety}})
-			{		
+			{
 				foreach my $level (keys %{$freq_byVariety_byLevel_local{$variety}{$label}})
 				{
 					foreach my $key (keys %{$freq_byVariety_byLevel_local{$variety}{$label}{$level}})
@@ -1144,27 +1148,91 @@ elsif($action eq 'analyzeAll')
 		
 		close(FREQEVALUATION);
 	
-		open(XYPLOTS, '>', $globalOutputDir . '/_forPlot_frequencies_xy') or die;
-		print XYPLOTS join("\t", qw/simulationI variety method level taxonID taxonLabel freqTarget freqIs/), "\n";
-		for(my $simulationI = 0; $simulationI < $realizedN; $simulationI++)  
-		{
-			next unless(defined $frequencyComparisons_bySimulation[$simulationI]);
-			foreach my $variety (keys %{$frequencyComparisons_bySimulation[$simulationI]})
-			{
-				foreach my $label (keys %{$frequencyComparisons_bySimulation[$simulationI]{$variety}})
+		{		
+			my @evaluateAccuracyAtLevels = validation::getEvaluationLevels();
+			
+			my %_getLightning_cache;
+			my $getLightning = sub {
+				my $taxonID = shift;
+				if(exists $_getLightning_cache{$taxonID})
 				{
-					foreach my $level (keys %{$frequencyComparisons_bySimulation[$simulationI]{$variety}{$label}})
+					return $_getLightning_cache{$taxonID};
+				}
+				else
+				{
+					my $lightning = validation::getAllRanksForTaxon_withUnclassified($fullTaxonomy_simulation, $taxonID);
+					$_getLightning_cache{$taxonID} = $lightning;
+					return $lightning;
+				}
+			};
+			
+			my $get_taxonID_category = sub {
+				my $taxonID = shift;
+				my $taxonID_lightning = $getLightning->($taxonID);
+				
+				my $shouldBeAssignedTo;
+				RANK: foreach my $rank (@evaluateAccuracyAtLevels)
+				{
+					die unless(defined $taxonID_lightning->{$rank});
+					if(($taxonID_lightning->{$rank} ne 'Unclassified') and ($taxonID_lightning->{$rank} ne 'NotLabelledAtLevel'))
 					{
-						foreach my $taxonID (keys %{$frequencyComparisons_bySimulation[$simulationI]{$variety}{$label}{$level}})
+						$shouldBeAssignedTo = $rank;
+						last RANK;
+					}
+				}
+				die unless(defined $shouldBeAssignedTo);
+				return $shouldBeAssignedTo;
+			};
+			
+	
+			open(XYPLOTS, '>', $globalOutputDir . '/_forPlot_frequencies_xy') or die;
+			print XYPLOTS join("\t", qw/simulationI variety method level taxonID taxonLabel taxonIDCategory isMappable freqTarget freqIs freqTargetControl proportionNovelDirectly proportionNovelTotal/), "\n";
+			for(my $simulationI = 0; $simulationI < $realizedN; $simulationI++)  
+			{
+				next unless(defined $frequencyComparisons_bySimulation[$simulationI]);
+				foreach my $variety (keys %{$frequencyComparisons_bySimulation[$simulationI]})
+				{
+					die unless(defined $frequencyComparisons_details_bySimulation[$simulationI]{$variety});
+					die unless(defined $frequencyComparisons_details_bySimulation[$simulationI]{$variety}{mappable});
+					die unless(defined $frequencyComparisons_details_bySimulation[$simulationI]{$variety}{truthReadsNovelTree});
+					die unless(defined $frequencyComparisons_details_bySimulation[$simulationI]{$variety}{nReads});
+					foreach my $label (keys %{$frequencyComparisons_bySimulation[$simulationI]{$variety}})
+					{
+						foreach my $level (keys %{$frequencyComparisons_bySimulation[$simulationI]{$variety}{$label}})
 						{
-							my $taxonID_label = (($taxonID eq 'Unclassified') or ($taxonID eq 'NotLabelledAtLevel')) ? $taxonID : taxTree::taxon_id_get_name($taxonID, $fullTaxonomy_simulation);
-							print XYPLOTS join("\t", $simulationI, $variety, $label, $level, $taxonID, $taxonID_label, @{$frequencyComparisons_bySimulation[$simulationI]{$variety}{$label}{$level}{$taxonID}}), "\n";
+							foreach my $taxonID (keys %{$frequencyComparisons_bySimulation[$simulationI]{$variety}{$label}{$level}})
+							{
+								my $taxonID_label = (($taxonID eq 'Unclassified') or ($taxonID eq 'NotLabelledAtLevel')) ? $taxonID : taxTree::taxon_id_get_name($taxonID, $fullTaxonomy_simulation);
+								my $taxonIDCategory = (($taxonID eq 'Unclassified') or ($taxonID eq 'NotLabelledAtLevel')) ? $taxonID : $get_taxonID_category->($taxonID);
+								my $isMappable = $frequencyComparisons_details_bySimulation[$simulationI]{$variety}{mappable}{$taxonID} ? 1 : 0;
+								
+								my $controlFrequency = $frequencyComparisons_details_bySimulation[$simulationI]{$variety}{truthReadsNovelTree}[0] / $frequencyComparisons_details_bySimulation[$simulationI]{$variety}{nReads};
+								my $freqNovelNew = $frequencyComparisons_details_bySimulation[$simulationI]{$variety}{truthReadsNovelTree}[1] / $frequencyComparisons_details_bySimulation[$simulationI]{$variety}{nReads};
+								my $freqNovelTotal = $frequencyComparisons_details_bySimulation[$simulationI]{$variety}{truthReadsNovelTree}[2] / $frequencyComparisons_details_bySimulation[$simulationI]{$variety}{nReads};
+								
+								warn Dumper("Frequency mismatch -- $controlFrequency vs $frequencyComparisons_bySimulation[$simulationI]{$variety}{$label}{$level}{$taxonID}[0]", $simulationI, $variety, $label, $level, $taxonID) unless (abs($controlFrequency - $frequencyComparisons_bySimulation[$simulationI]{$variety}{$label}{$level}{$taxonID}[0]) <= 1e-4);
+								
+								print XYPLOTS join("\t",
+									$simulationI,
+									$variety,
+									$label,
+									$level,
+									$taxonID,
+									$taxonID_label,
+									$taxonIDCategory,
+									$isMappable,
+									@{$frequencyComparisons_bySimulation[$simulationI]{$variety}{$label}{$level}{$taxonID}}),
+									$controlFrequency,
+									$freqNovelNew,
+									$freqNovelTotal,
+									"\n";
+							}
 						}
 					}
 				}
 			}
+			close(XYPLOTS);
 		}
-		close(XYPLOTS);
 	}
 	
 	if(1 == 0)
@@ -1337,6 +1405,7 @@ sub evaluateOneSimulation
 	my $n_reads_correct_byVariety_byLevel_byLength = shift;
 	my $freq_byVariety_byLevel = shift;
 	my $frequencyComparison_href = shift;
+	my $unknown_and_frequencyContributions_href = shift;
 	
 	my $taxonomyFromSimulation_dir = $simulation_href->{outputDirectory} . '/DB_fullDB/taxonomy';
 	my $taxonomy_usedForSimulation = taxTree::readTaxonomy($taxonomyFromSimulation_dir);
@@ -1347,6 +1416,16 @@ sub evaluateOneSimulation
 	my $truth_raw_reads_href = validation::readTruthFileReads($extendedMaster, $extendedMaster_merged, $truth_fn);
 	my $readLengths_href = Util::getReadLengths($simulation_href->{outputDirectory} . '/reads.fastq');
 	
+	my %taxonIDs_in_direct_truth = map {$_ => 1} values %$truth_raw_reads_href;
+	foreach my $taxonID (keys %taxonIDs_in_direct_truth)
+	{
+		my @descendants = taxTree::descendants($extendedMaster, $taxonID);
+		foreach my $descendantID (@descendants)
+		{
+			die unless(exists $extendedMaster->{$descendantID});
+			die if(exists $taxonIDs_in_direct_truth{$descendantID});
+		}
+	}
 	# my %truth_raw_taxonIDs;
 	# $truth_raw_taxonIDs{$taxonID_master}++;
 	
@@ -1386,6 +1465,9 @@ sub evaluateOneSimulation
 	
 		# translate truth into reduced representation
 		my $truth_mappingDatabase_reads = validation::translateReadsTruthToReducedTaxonomy($extendedMaster, $specificTaxonomy, $truth_raw_reads_href);
+
+		# truth reads tree
+		my $truth_reads_novelTree = validation::truthReadsTree($extendedMaster, $truth_mappingDatabase_reads, \%taxonIDs_in_direct_truth);
 		
 		# get distribution
 		my $truth_mappingDatabase_distribution = validation::truthReadsToTruthSummary($specificTaxonomy, $truth_mappingDatabase_reads);
@@ -1438,7 +1520,7 @@ sub evaluateOneSimulation
 				unless(all {exists $truth_raw_reads_href->{$_}} keys %$inferred_reads)
 				{
 					my @missing_readIDs = grep {not exists $truth_raw_reads_href->{$_}} keys %$inferred_reads;
-					die Dumper("Missing some reads in truth file $truth_fn (inference file $f)", @missing_readIDs[0  .. 5]);
+					die Dumper("Missing some reads in truth file $truth_fn (inference file $f)", @missing_readIDs[0 .. 5]);
 				}
 				validation::readLevelComparison($extendedMaster, $truth_raw_reads_href, $truth_mappingDatabase_reads, $inferred_reads, $methodName, $n_reads_correct_byVariety->{$varietyName}, $n_reads_correct_byVariety_byLevel->{$varietyName}, $n_reads_correct_byVariety_byLevel_byLength->{$varietyName}, \%reduced_taxonID_original_2_contigs, $readLengths_href);
 			}
@@ -1483,8 +1565,17 @@ sub evaluateOneSimulation
 				
 				# print join("\t", $varietyName, $name, $level, $totalFreqCorrect), "\n";
 			# }
-		}
 			
+			
+		}
+		
+		$unknown_and_frequencyContributions_href->{$varietyName}{mappable} = {};
+		foreach my $taxonID (keys %reduced_taxonID_original_2_contigs)
+		{
+			$unknown_and_frequencyContributions_href->{$varietyName}{mappable}{$taxonID} = 1;
+			$unknown_and_frequencyContributions_href->{$varietyName}{truthReadsNovelTree} = $truth_reads_novelTree;
+			$unknown_and_frequencyContributions_href->{$varietyName}{nReads} = scalar(keys %$truth_raw_reads_href);
+		}
 	}
 }
 

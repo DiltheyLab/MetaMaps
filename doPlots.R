@@ -20,7 +20,81 @@ simulationsDirectory <- "databases/miniSeq_100/simulations_logNormal"
 
 prefix <- paste(simulationsDirectory, "/_forPlot_", sep = "")
 
-pdf(paste(simulationsDirectory, "/plots.pdf", sep = ""))
+pdf(paste(simulationsDirectory, "/plots_frequencies.pdf", sep = ""), height = 10, width = 10)
+library(ggplot2)
+freqFile <- paste(prefix, "frequencies_xy", sep = "")
+pBefore <- par(mfrow=c(4,4), oma=c(0,3,6,0), mar = c(2,2,2,1)) 
+freqD <- read.delim(freqFile, header = T)
+freq_methods <- c("Kraken-Dist", "Bracken-Dist", "MetaMap-EM-Dist", "MetaMap-U-Dist")
+freq_levels <- c("species", "genus", "family")
+
+for(l in freq_levels)
+{
+	for(m in freq_methods)
+	{
+		indices <- which((freqD[["method"]] == m) & (freqD[["level"]] == l) & (freqD[["variety"]] == "fullDB"))
+		stopifnot(length(indices) > 0)
+
+		frTarget <- freqD[["freqTarget"]][indices]
+		frIs <- freqD[["freqIs"]][indices]
+		taxonIDs <- freqD[["taxonID"]][indices]
+		taxonLabels <- freqD[["taxonLabel"]][indices]
+		xAxis_min <- min(frTarget)
+		xAxis_max <- max(frTarget)
+		xAxis_half <- mean(c(xAxis_min, xAxis_max))
+		xAxis_twoThirds <- xAxis_min + (2/5) * (xAxis_max - xAxis_min)
+
+		yAxis_min <- min(frIs)
+		yAxis_max <- max(frIs)
+		yAxis_half <- mean(c(yAxis_min, yAxis_max))
+		yAxis_twoThirds <- yAxis_min + (4/5) * (yAxis_max - yAxis_min)
+				
+		r <- cor(frTarget, frIs)
+		# cat(paste(m, "@", l, ", ", "fullDB", ", r = ", cor(frTarget, frIs), sep = ""), "\n")
+		plot(frTarget, frIs, main = "", cex.main = 0.7, xaxt = "n", yaxt = "n", xaxs = "i", yaxs = "i", pch = 3)
+		if(m == freq_methods[[1]])
+		{
+			axis(2, xaxs = "i")		
+			axis(2, at = xAxis_half, tick = F, line = 1, labels = c("Inferred"), cex.axis = 1)				
+			axis(2, at = yAxis_half, tick = F, line = 2.5, labels = c(capitalize(l)), cex.axis = 1.8)	
+		}
+		else
+		{
+			axis(2, xaxs = "i", labels = F)			
+		}
+		
+		if(l == tail(freq_levels, n = 1))
+		{
+			axis(1, xaxs = "i")			
+			axis(1, at = xAxis_half, tick = F, line = 1, labels = c("Truth"), cex.axis = 1)	
+		}
+		else
+		{
+			axis(1, xaxs = "i", labels = F)			
+		}
+		
+		if(l == freq_levels[[1]])
+		{
+			title(main = m, cex.main = 1.8, line = 1)		
+		}
+		
+		text(xAxis_twoThirds, yAxis_twoThirds, labels = paste("r = ", sprintf("%.3f", r), sep = ""), cex = 1.5)
+		# frTarget_idx_005 <- which(frIs <= 0.05)
+		# plot(frTarget[frTarget_idx_005], frIs[frTarget_idx_005], main = paste("[Zoom] Frequencies ", m, ", ", l, ", ", v, sep = ""), xlab = "True frequency", ylab = "Inferred frequency", cex.main = 0.7)
+	}
+}
+mtext("Inference with complete DB", side = 3, line = 2.2, outer = TRUE, cex = 1.5)
+
+dev.off()
+par(pBefore)
+q()
+
+# par(mfrow=c(1,1)) 
+
+dev.off()
+
+
+pdf(paste(simulationsDirectory, "/plots_reads.pdf", sep = ""))
 
 
 barPlotFile <- paste(prefix, "barplots_fullDB", sep = "")
@@ -268,32 +342,6 @@ for(rC in rCs)
 
 }
 
-freqFile <- paste(prefix, "frequencies_xy", sep = "")
-freqD <- read.delim(freqFile, header = T)
-for(v in unique(freqD[["variety"]]))
-{
-	for(l in unique(freqD[["level"]]))
-	{
-		for(m in sort(unique(freqD[["method"]])))
-		{
-			indices <- which((freqD[["variety"]] == v) & (freqD[["level"]] == l) & (freqD[["method"]] == m))
-			if(length(indices) > 0)
-			{
-				frTarget <- freqD[["freqTarget"]][indices]
-				frIs <- freqD[["freqIs"]][indices]
-				taxonIDs <- freqD[["taxonID"]][indices]
-				taxonLabels <- freqD[["taxonLabel"]][indices]
-				cat(paste(m, "@", l, ", ", v, ", r = ", cor(frTarget, frIs), sep = ""), "\n")
-				if((v == "fullDB") && (((m == "MetaMap-EM-Dist") && (l == "definedGenomes")) || ((m == "MetaMap-U-Dist") && (l == "definedAndHypotheticalGenomes"))))
-				{
-					plot(frTarget, frIs, main = paste("Frequencies ", m, ", ", l, ", ", v, sep = ""), xlab = "True frequency", ylab = "Inferred frequency", cex.main = 0.7)
-					frTarget_idx_005 <- which(frIs <= 0.05)
-					plot(frTarget[frTarget_idx_005], frIs[frTarget_idx_005], main = paste("[Zoom] Frequencies ", m, ", ", l, ", ", v, sep = ""), xlab = "True frequency", ylab = "Inferred frequency", cex.main = 0.7)
-				}
-			}
-		}
-	}
-}
 par(mfrow=c(1,1)) 
 
 dev.off()

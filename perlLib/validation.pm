@@ -147,6 +147,102 @@ sub checkTaxonomyIsProperReduction
 	}	
 }
 
+# returns hash:
+# taxonID -> [
+#	total attached reads
+#	newly attached reads
+#	total newly attached reads
+
+sub truthReadsTree
+{
+	my $taxonomy_href = shift;
+	my $truthReads_href = shift;
+	my $taxonIDs_in_direct_truth_href = shift;
+
+	my %counts_per_taxonID;
+	foreach my $readID (keys %$truthReads_href)
+	{
+		my $taxonID = $truthReads_href->{$readID};
+		$counts_per_taxonID{$taxonID}++;
+	}
+	
+	my %treeCounts;
+	my $n_indirect = 0;
+	foreach my $taxonID (keys %counts_per_taxonID)
+	{
+		my $n_reads = $counts_per_taxonID{$taxonID};
+		my @ancestor_nodes = taxTree::get_ancestors($taxonomy_href, $taxonID);
+		foreach my $nodeID ($taxonID, @ancestor_nodes)
+		{
+			unless(defined $treeCounts{$nodeID})
+			{
+				$treeCounts{$nodeID} = [0, 0, 0];
+			}
+			$treeCounts{$nodeID}[0] += $n_reads;
+		}
+		unless($taxonIDs_in_direct_truth_href->{$taxonID})
+		{
+			$n_indirect += $n_reads;
+		}
+		
+	}
+	
+	foreach my $taxonID (keys %treeCounts)
+	{
+		unless($taxonIDs_in_direct_truth_href->{$taxonID})
+		{
+			my $reads_from_below = 0;
+			foreach my $childID (@{$taxonomy_href->{$taxonID}{children}})
+			{
+				if(exists $treeCounts{$taxonID})
+				{
+					$reads_from_below += $treeCounts{$taxonID}[0];
+				}
+			}
+			die unless($reads_from_below <= $treeCounts{$taxonID}[0]);
+			my $new_reads = $treeCounts{$taxonID}[0] - $reads_from_below;
+			die unless($new_reads >= 0);
+			$treeCounts{$taxonID}[1] = $new_reads;
+			$treeCounts{$taxonID}[2] += $new_reads;
+			
+			my @ancestor_nodes = taxTree::get_ancestors($taxonomy_href, $taxonID);
+			foreach my $ancestorNodeID (@ancestor_nodes)
+			{
+				$treeCounts{$ancestorNodeID}[2] += $new_reads;
+			}		
+		}
+	}
+	
+	die unless(($treeCounts{1}[0] + $treeCounts{1}[1]) == scalar(%$truthReads_href));
+	die unless($treeCounts{1}[2] == $n_indirect);
+	foreach my $treeNode (keys %treeCounts)
+	{
+		die unless($treeCounts{$treeNode}[1] <= $treeCounts{$treeNode}[2]);
+		die unless($treeCounts{$treeNode}[2] <= $treeCounts{$treeNode}[0]);
+		
+		my $children_sum_total = 0;
+		my $children_sum_novel = 0;
+		foreach my $childID (@{$taxonomy_href->{$treeNode}{children}})
+		{
+			if(exists $treeCounts{$childID})
+			{
+				$children_sum_total += $treeCounts{$childID}[0];
+				$children_sum_novel += $treeCounts{$childID}[2];
+			}
+		}
+		my $expected_total_sum = $children_sum_total + ((exists $counts_per_taxonID{$treeNode}) ? $counts_per_taxonID{$treeNode} : 0);
+		die unless($treeCounts{$treeNode}[0] == $expected_total_sum);
+		
+		my $expected_novel_sum_I = ($taxonIDs_in_direct_truth_href->{$treeNode}) ? 0 : ((exists $counts_per_taxonID{$treeNode}) ? $counts_per_taxonID{$treeNode} : 0);
+		my $expected_novel_sum_II = $children_sum_novel + $expected_novel_sum_I;
+		
+		die unless($treeCounts{$treeNode}[1] == $expected_novel_sum_I);
+		die unless($treeCounts{$treeNode}[2] == $expected_novel_sum_II);
+		
+	}
+	return \%treeCounts;
+}
+
 sub truthReadsToTruthSummary
 {
 	my $taxonomy = shift;
