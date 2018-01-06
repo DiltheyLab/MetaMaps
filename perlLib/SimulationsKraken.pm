@@ -235,6 +235,7 @@ sub create_compatible_file_from_kraken
 		if($classified eq 'C')
 		{
 			my $lightning = $getLightning->($taxonID);
+			$reads_at_levels{'definedAndHypotheticalGenomes'}{$taxonID}++;
 			RANK: foreach my $rank (@evaluateAccuracyAtLevels)
 			{
 				die unless(defined $lightning->{$rank});
@@ -254,7 +255,7 @@ sub create_compatible_file_from_kraken
 	print OUTPUT join("\t", qw/AnalysisLevel ID Name Absolute PotFrequency/), "\n";		
 	print OUTPUT2 join("\t", qw/AnalysisLevel ID Name Absolute PotFrequency/), "\n";		
 	
-	foreach my $level (@evaluateAccuracyAtLevels)
+	foreach my $level ('definedAndHypotheticalGenomes', @evaluateAccuracyAtLevels)
 	{
 		$reads_at_levels{$level}{"Unclassified"} = 0 if(not exists $reads_at_levels{$level}{"Unclassified"});
 		$reads_at_levels{$level}{"Undefined"} = 0 if(not exists $reads_at_levels{$level}{"Undefined"});

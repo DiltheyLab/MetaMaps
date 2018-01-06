@@ -45,6 +45,7 @@ pC[["species"]] <- "blue"
 pC[["genus"]] <- "blue"
 pC[["family"]] <- "blue"
 pC[["Other"]] <- "blue"
+pC[["novelAdmixture"]] <- "orange"
 
 pCex <- list()
 pCex[["Unclassified"]] <- 2
@@ -75,126 +76,152 @@ pL[["genus"]] <- "Genus"
 pL[["family"]] <- "Family"
 pL[["Other"]] <- ">Family"
 
-
-for(l in freq_levels)
+for(plotType in c("complete", "incomplete"))
 {
-	for(m in freq_methods)
+	for(l in freq_levels)
 	{
-		l_lookup <- l
-		if((l == "definedGenomes") && (m == "MetaMap-U-Dist"))
+		for(m in freq_methods)
 		{
-			l_lookup <- "definedAndHypotheticalGenomes"
-		}
-
-		indices <- which((freqD[["method"]] == m) & (freqD[["level"]] == l_lookup) & (freqD[["variety"]] == "fullDB"))
-
-		xAxis_min <- min(freqD[["freqTarget"]][idx_minmax])
-		xAxis_max <- max(freqD[["freqTarget"]][idx_minmax])
-		xAxis_half <- mean(c(xAxis_min, xAxis_max))
-		xAxis_twoThirds <- xAxis_min + (2/5) * (xAxis_max - xAxis_min)
-
-		yAxis_min <- min(freqD[["freqIs"]][idx_minmax])
-		yAxis_max <- max(freqD[["freqIs"]][idx_minmax])
-		yAxis_half <- mean(c(yAxis_min, yAxis_max))
-		yAxis_twoThirds <- yAxis_min + (4/5) * (yAxis_max - yAxis_min)
-				
-		# cat(paste(m, "@", l, ", ", "fullDB", ", r = ", cor(frTarget, frIs), sep = ""), "\n")
-		
-		pointColours <- c()
-		pointCexs <- c()
-		pointSymbols <- c()
-		for(i in indices)
-		{
-			taxonID <- freqD[["taxonID"]][[i]]
-			pointLevel <- freqD[["taxonIDCategory"]][[i]]
-			mappable <- freqD[["isMappable"]][[i]]
-			pointColour <- ""
-			pointCex <- 0
-			pointSymbol <- 0
-			if(taxonID %in% names(pC))
+			l_lookup <- l
+			if((l == "definedGenomes") && (m == "MetaMap-U-Dist"))
 			{
-				pointColour <- pC[[taxonID]]
-				pointCex <- pCex[[taxonID]]
-				pointSymbol <- pS[[taxonID]]
+				l_lookup <- "definedAndHypotheticalGenomes"
 			}
-			else if(mappable == 1)
+
+			indices <- c()
+			if(plotType == "complete")
 			{
-				pointColour <- pC[["Mappable"]]
-				pointCex <- pCex[["Mappable"]]
-				pointSymbol <- pS[["Mappable"]]
-			}
-			else if(pointLevel %in% names(pC))
-			{
-				pointColour <- pC[[pointLevel]]
-				pointCex <- pCex[[pointLevel]]
-				pointSymbol <- pS[[pointLevel]]
+				pC[["Mappable"]] <- "blue"			
+				indices <- which((freqD[["method"]] == m) & (freqD[["level"]] == l_lookup) & (freqD[["variety"]] == "fullDB"))
 			}
 			else
 			{
-				pointColour <- pC[["Other"]]
-				pointCex <- pCex[["Other"]]
-				pointSymbol <- pS[["Other"]]
-				cat("Unknown point level: ", pointLevel, "\n")
+				pC[["Mappable"]] <- "gray"			
+				indices <- which((freqD[["method"]] == m) & (freqD[["level"]] == l_lookup) & (freqD[["variety"]] != "fullDB"))
 			}
-
-			pointColours <- c(pointColours, pointColour)
-			pointCexs <- c(pointCexs, pointCex)
-			pointSymbols <- c(pointSymbols, pointSymbol)
-		}
 			
-		if(!((l == "definedGenomes") && ((m == "Kraken-Dist") || (m == "Bracken-Dist"))))
-		{
-			plot(0, 0, col = "white", main = "", cex.main = 0.7, xaxt = "n", yaxt = "n", xlim = c(xAxis_min, xAxis_max), ylim = c(yAxis_min, yAxis_max))		
-			frTarget <- freqD[["freqTarget"]][indices]
-			frIs <- freqD[["freqIs"]][indices]
-			taxonIDs <- freqD[["taxonID"]][indices]
-			taxonLabels <- freqD[["taxonLabel"]][indices]		
-			stopifnot(length(indices) > 0)				
-			points(frTarget, frIs,  pch = pointSymbols, cex = pointCexs, col = pointColours)
-			stopifnot(length(frTarget) == length(pointColours))
-			r <- cor(frTarget, frIs)
-			text(xAxis_twoThirds, yAxis_twoThirds, labels = paste("r = ", sprintf("%.3f", r), sep = ""), cex = 1.5)
-			axis(2, xaxs = "i", labels = F)			
-			axis(1, xaxs = "i", labels = F)			
-		}	
-		else
-		{
-			plot(0, 0, col = "white", main = "", cex.main = 0.7, xaxt = "n", yaxt = "n", xaxs = "i", yaxs = "i", xlim = c(xAxis_min, xAxis_max), ylim = c(yAxis_min, yAxis_max), axes = F)
-			if(m == "Kraken-Dist")
+			xAxis_min <- min(freqD[["freqTarget"]][idx_minmax])
+			xAxis_max <- max(freqD[["freqTarget"]][idx_minmax])
+			xAxis_half <- mean(c(xAxis_min, xAxis_max))
+			xAxis_twoThirds <- xAxis_min + (2/5) * (xAxis_max - xAxis_min)
+
+			yAxis_min <- min(freqD[["freqIs"]][idx_minmax])
+			yAxis_max <- max(freqD[["freqIs"]][idx_minmax])
+			yAxis_half <- mean(c(yAxis_min, yAxis_max))
+			yAxis_twoThirds <- yAxis_min + (4/5) * (yAxis_max - yAxis_min)
+					
+			# cat(paste(m, "@", l, ", ", "fullDB", ", r = ", cor(frTarget, frIs), sep = ""), "\n")
+			
+			pointColours <- c()
+			pointCexs <- c()
+			pointSymbols <- c()
+			for(i in indices)
 			{
-				legend("topright", legend = c(pL, recursive = T, use.names = F),  col = c(pC, recursive = T, use.names = F), pch = as.vector(pS), cex = 1.5)
+				taxonID <- freqD[["taxonID"]][[i]]
+				pointLevel <- freqD[["taxonIDCategory"]][[i]]
+				mappable <- freqD[["isMappable"]][[i]]
+				proportionNovelTotal <- freqD[["proportionNovelTotal"]][[i]]
+				pointColour <- ""
+				pointCex <- 0
+				pointSymbol <- 0
+				
+				if(taxonID %in% names(pC))
+				{
+					pointColour <- pC[[taxonID]]
+					pointCex <- pCex[[taxonID]]
+					pointSymbol <- pS[[taxonID]]
+				}
+				else if(mappable == 1)
+				{
+					pointColour <- pC[["Mappable"]]
+					pointCex <- pCex[["Mappable"]]
+					pointSymbol <- pS[["Mappable"]]
+				}
+				else if(pointLevel %in% names(pC))
+				{
+					pointColour <- pC[[pointLevel]]
+					pointCex <- pCex[[pointLevel]]
+					pointSymbol <- pS[[pointLevel]]
+				}
+				else
+				{
+					pointColour <- pC[["Other"]]
+					pointCex <- pCex[["Other"]]
+					pointSymbol <- pS[["Other"]]
+					cat("Unknown point level: ", pointLevel, "\n")
+				}
+				
+				if(proportionNovelTotal > 0)
+				{
+					pointColour <- pC[["novelAdmixture"]]				
+				}				
+
+				pointColours <- c(pointColours, pointColour)
+				pointCexs <- c(pointCexs, pointCex)
+				pointSymbols <- c(pointSymbols, pointSymbol)
 			}
+				
+			if(!((l == "definedGenomes") && ((m == "Kraken-Dist") || (m == "Bracken-Dist"))))
+			{
+				plot(0, 0, col = "white", main = "", cex.main = 0.7, xaxt = "n", yaxt = "n", xlim = c(xAxis_min, xAxis_max), ylim = c(yAxis_min, yAxis_max))		
+				frTarget <- freqD[["freqTarget"]][indices]
+				frIs <- freqD[["freqIs"]][indices]
+				taxonIDs <- freqD[["taxonID"]][indices]
+				taxonLabels <- freqD[["taxonLabel"]][indices]		
+				stopifnot(length(indices) > 0)				
+				points(frTarget, frIs,  pch = pointSymbols, cex = pointCexs, col = pointColours)
+				stopifnot(length(frTarget) == length(pointColours))
+				r <- cor(frTarget, frIs)
+				text(xAxis_twoThirds, yAxis_twoThirds, labels = paste("r = ", sprintf("%.3f", r), sep = ""), cex = 1.5)
+				axis(2, xaxs = "i", labels = F)			
+				axis(1, xaxs = "i", labels = F)			
+			}	
+			else
+			{
+				plot(0, 0, col = "white", main = "", cex.main = 0.7, xaxt = "n", yaxt = "n", xaxs = "i", yaxs = "i", xlim = c(xAxis_min, xAxis_max), ylim = c(yAxis_min, yAxis_max), axes = F)
+				if(m == "Kraken-Dist")
+				{
+					legend("topright", legend = c(pL, recursive = T, use.names = F),  col = c(pC, recursive = T, use.names = F), pch = as.vector(pS), cex = 1.5)
+				}
+			}
+			
+			if(m == freq_methods[[1]])
+			{
+				axis(2, xaxs = "i")		
+				axis(2, at = xAxis_half, tick = F, line = 1, labels = c("Inferred"), cex.axis = 1)				
+				axis(2, at = yAxis_half, tick = F, line = 2.5, labels = c(capitalize(l)), cex.axis = 1.8)	
+			}
+			else
+			{
+			}
+			
+			if(l == tail(freq_levels, n = 1))
+			{
+				axis(1, xaxs = "i")			
+				axis(1, at = xAxis_half, tick = F, line = 1, labels = c("Truth"), cex.axis = 1)	
+			}
+			else
+			{
+			}
+			
+			if(l == freq_levels[[1]])
+			{
+				title(main = m, cex.main = 1.8, line = 1)		
+			}
+			
+			# frTarget_idx_005 <- which(frIs <= 0.05)
+			# plot(frTarget[frTarget_idx_005], frIs[frTarget_idx_005], main = paste("[Zoom] Frequencies ", m, ", ", l, ", ", v, sep = ""), xlab = "True frequency", ylab = "Inferred frequency", cex.main = 0.7)
 		}
-		
-		if(m == freq_methods[[1]])
-		{
-			axis(2, xaxs = "i")		
-			axis(2, at = xAxis_half, tick = F, line = 1, labels = c("Inferred"), cex.axis = 1)				
-			axis(2, at = yAxis_half, tick = F, line = 2.5, labels = c(capitalize(l)), cex.axis = 1.8)	
-		}
-		else
-		{
-		}
-		
-		if(l == tail(freq_levels, n = 1))
-		{
-			axis(1, xaxs = "i")			
-			axis(1, at = xAxis_half, tick = F, line = 1, labels = c("Truth"), cex.axis = 1)	
-		}
-		else
-		{
-		}
-		
-		if(l == freq_levels[[1]])
-		{
-			title(main = m, cex.main = 1.8, line = 1)		
-		}
-		
-		# frTarget_idx_005 <- which(frIs <= 0.05)
-		# plot(frTarget[frTarget_idx_005], frIs[frTarget_idx_005], main = paste("[Zoom] Frequencies ", m, ", ", l, ", ", v, sep = ""), xlab = "True frequency", ylab = "Inferred frequency", cex.main = 0.7)
+	}
+	if(plotType == "complete")
+	{
+		mtext("Inference with complete DB", side = 3, line = 2.2, outer = TRUE, cex = 1.5)
+	}
+	else
+	{
+		mtext("Inference with incomplete DB", side = 3, line = 2.2, outer = TRUE, cex = 1.5)	
 	}
 }
-mtext("Inference with complete DB", side = 3, line = 2.2, outer = TRUE, cex = 1.5)
 
 dev.off()
 par(pBefore)

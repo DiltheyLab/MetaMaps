@@ -491,6 +491,7 @@ elsif($action eq 'analyzeAll')
 	my @n_reads_correct_byVariety_bySimulation;
 	my @n_reads_correct_byVariety_byLevel_bySimulation;;
 	my @freq_byVariety_byLevel_bySimulation;;
+	my @directlyMappable_bySimulation;
 	
 	my %n_reads_correct_byVariety;
 	my %n_reads_correct_byVariety_byLevel;
@@ -516,10 +517,12 @@ elsif($action eq 'analyzeAll')
 		my %n_reads_correct_byVariety_byLevel_local;	
 		my %n_reads_correct_byVariety_byLevel_byLength_local;		
 		my %freq_byVariety_byLevel_local;		
-		my %freq_details_byVariety_byLevel_local;		
-		evaluateOneSimulation($simulation_href, \%n_reads_correct_byVariety_local, \%n_reads_correct_byVariety_byLevel_local, \%n_reads_correct_byVariety_byLevel_byLength_local, \%freq_byVariety_byLevel_local, $frequencyComparison, $frequencyComparison_details);
+		my %freq_details_byVariety_byLevel_local;	
+		my %directlyMappable;
+		evaluateOneSimulation($simulation_href, \%n_reads_correct_byVariety_local, \%n_reads_correct_byVariety_byLevel_local, \%n_reads_correct_byVariety_byLevel_byLength_local, \%freq_byVariety_byLevel_local, $frequencyComparison, $frequencyComparison_details, \%directlyMappable);
 		push(@frequencyComparisons_bySimulation, $frequencyComparison);
 		push(@frequencyComparisons_details_bySimulation, $frequencyComparison_details);
+		push(@directlyMappable_bySimulation, \%directlyMappable);
 
 		# variety = fullDB/removeOne_genus ...
 		# label = MetaMap / Kraken ...
@@ -1154,13 +1157,16 @@ elsif($action eq 'analyzeAll')
 			my %_getLightning_cache;
 			my $getLightning = sub {
 				my $taxonID = shift;
+				my $directlyMappable_href = shift;
+				die unless(defined  $directlyMappable_href);
+				
 				if(exists $_getLightning_cache{$taxonID})
 				{
 					return $_getLightning_cache{$taxonID};
 				}
 				else
 				{
-					my $lightning = validation::getAllRanksForTaxon_withUnclassified($fullTaxonomy_simulation, $taxonID);
+					my $lightning = validation::getAllRanksForTaxon_withUnclassified($fullTaxonomy_simulation, $taxonID, $directlyMappable_href);
 					$_getLightning_cache{$taxonID} = $lightning;
 					return $lightning;
 				}
@@ -1168,7 +1174,10 @@ elsif($action eq 'analyzeAll')
 			
 			my $get_taxonID_category = sub {
 				my $taxonID = shift;
-				my $taxonID_lightning = $getLightning->($taxonID);
+				my $directlyMappable_href = shift;
+				die unless(defined  $directlyMappable_href);
+								
+				my $taxonID_lightning = $getLightning->($taxonID, $directlyMappable_href);
 				
 				my $shouldBeAssignedTo;
 				RANK: foreach my $rank (@evaluateAccuracyAtLevels)
@@ -1186,7 +1195,7 @@ elsif($action eq 'analyzeAll')
 			
 	
 			open(XYPLOTS, '>', $globalOutputDir . '/_forPlot_frequencies_xy') or die;
-			print XYPLOTS join("\t", qw/simulationI variety method level taxonID taxonLabel taxonIDCategory isMappable freqTarget freqIs proportionNovelDirectly proportionNovelTotal controlFreq_target/), "\n";
+			print XYPLOTS join("\t", qw/simulationI variety method level taxonID taxonLabel taxonIDCategory isMappable freqTarget freqIs proportionNovelDirectly proportionNovelTotal/), "\n";
 			for(my $simulationI = 0; $simulationI < $realizedN; $simulationI++)  
 			{
 				next unless(defined $frequencyComparisons_bySimulation[$simulationI]);
@@ -1203,7 +1212,8 @@ elsif($action eq 'analyzeAll')
 							foreach my $taxonID (keys %{$frequencyComparisons_bySimulation[$simulationI]{$variety}{$label}{$level}})
 							{
 								my $taxonID_label = (($taxonID eq 'Unclassified') or ($taxonID eq 'NotLabelledAtLevel')) ? $taxonID : taxTree::taxon_id_get_name($taxonID, $fullTaxonomy_simulation);
-								my $taxonIDCategory = (($taxonID eq 'Unclassified') or ($taxonID eq 'NotLabelledAtLevel')) ? $taxonID : $get_taxonID_category->($taxonID);
+								die unless(defined $directlyMappable_bySimulation[$simulationI]{$variety});
+								my $taxonIDCategory = (($taxonID eq 'Unclassified') or ($taxonID eq 'NotLabelledAtLevel')) ? $taxonID : $get_taxonID_category->($taxonID, $directlyMappable_bySimulation[$simulationI]{$variety});
 								my $isMappable = $frequencyComparisons_details_bySimulation[$simulationI]{$variety}{mappable}{$taxonID} ? 1 : 0;
 								
 								my $have_truth_freq_data = (exists $frequencyComparisons_details_bySimulation[$simulationI]{$variety}{truthReadsNovelTree}{$taxonID});
@@ -1211,10 +1221,15 @@ elsif($action eq 'analyzeAll')
 								my $freqNovelNew = (not $have_truth_freq_data) ? 0 : ($frequencyComparisons_details_bySimulation[$simulationI]{$variety}{truthReadsNovelTree}{$taxonID}[1] / $frequencyComparisons_details_bySimulation[$simulationI]{$variety}{nReads});
 								my $freqNovelTotal = (not $have_truth_freq_data) ? 0 : ($frequencyComparisons_details_bySimulation[$simulationI]{$variety}{truthReadsNovelTree}{$taxonID}[2] / $frequencyComparisons_details_bySimulation[$simulationI]{$variety}{nReads});
 								
-								if(($taxonID ne 'Unclassified') and ($taxonID ne 'NotLabelledAtLevel'))
+								if(($taxonID ne 'Unclassified') and ($taxonID ne 'NotLabelledAtLevel') and ($level ne 'definedAndHypotheticalGenomes') and ($level ne 'definedGenomes'))
 								{
-									warn Dumper("Frequency mismatch -- $controlFrequency vs $frequencyComparisons_bySimulation[$simulationI]{$variety}{$label}{$level}{$taxonID}[0]", $simulationI, $variety, $label, $level, $taxonID) unless (abs($controlFrequency - $frequencyComparisons_bySimulation[$simulationI]{$variety}{$label}{$level}{$taxonID}[0]) <= 1e-4);
+									unless (abs($controlFrequency - $frequencyComparisons_bySimulation[$simulationI]{$variety}{$label}{$level}{$taxonID}[0]) <= 1e-4)
+									{
+										die Dumper("Frequency mismatch -- $controlFrequency vs $frequencyComparisons_bySimulation[$simulationI]{$variety}{$label}{$level}{$taxonID}[0]", $simulationI, $variety, $label, $level, $taxonID) ;
+										#warn Dumper($frequencyComparisons_details_bySimulation[$simulationI]{$variety}{truthReadsNovelTree});
+									}
 								}
+								
 								print XYPLOTS join("\t",
 									$simulationI,
 									$variety,
@@ -1226,8 +1241,8 @@ elsif($action eq 'analyzeAll')
 									$isMappable,
 									@{$frequencyComparisons_bySimulation[$simulationI]{$variety}{$label}{$level}{$taxonID}},
 									$freqNovelNew,
-									$freqNovelTotal,
-									$controlFrequency),
+									$freqNovelTotal),
+									#$controlFrequency),
 									"\n";
 							}
 						}
@@ -1409,6 +1424,8 @@ sub evaluateOneSimulation
 	my $freq_byVariety_byLevel = shift;
 	my $frequencyComparison_href = shift;
 	my $unknown_and_frequencyContributions_href = shift;
+	my $directlyMappable_href = shift;
+	die unless(defined $directlyMappable_href);
 	
 	my $taxonomyFromSimulation_dir = $simulation_href->{outputDirectory} . '/DB_fullDB/taxonomy';
 	my $taxonomy_usedForSimulation = taxTree::readTaxonomy($taxonomyFromSimulation_dir);
@@ -1462,6 +1479,10 @@ sub evaluateOneSimulation
 			$reduced_taxonID_master_2_contigs{$taxonID_master} = $reduced_taxonID_original_2_contigs{$taxonID_original};
 		}
 		
+		foreach my $tID (keys %reduced_taxonID_master_2_contigs)
+		{
+			$directlyMappable_href->{$varietyName}{$tID} = 1;
+		}
 		# reduce master taxonomy
 		my $specificTaxonomy = dclone $extendedMaster;
 		taxTree::removeUnmappableParts($specificTaxonomy, \%reduced_taxonID_master_2_contigs);
@@ -1473,8 +1494,11 @@ sub evaluateOneSimulation
 		my $truth_reads_novelTree = validation::truthReadsTree($extendedMaster, $truth_mappingDatabase_reads, \%taxonIDs_in_direct_truth);
 		
 		# get distribution
-		my $truth_mappingDatabase_distribution = validation::truthReadsToTruthSummary($specificTaxonomy, $truth_mappingDatabase_reads);
+		my $truth_mappingDatabase_distribution = validation::truthReadsToTruthSummary($specificTaxonomy, $truth_mappingDatabase_reads, \%reduced_taxonID_master_2_contigs);
 
+		
+		# print Dumper($truth_mappingDatabase_distribution);
+		
 		# die Dumper($varietyName, $truth_mappingDatabase_distribution);
 		
 		# my %truth_allReads;

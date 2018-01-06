@@ -247,6 +247,8 @@ sub truthReadsToTruthSummary
 {
 	my $taxonomy = shift;
 	my $truthReads_href = shift;
+	my $mappableTaxonIDs_href = shift;
+	die unless(defined $mappableTaxonIDs_href);
 	
 	my %taxonID_translation;	
 	my %truth_allReads;
@@ -255,8 +257,8 @@ sub truthReadsToTruthSummary
 		my $taxonID = $truthReads_href->{$readID};
 		unless(defined $taxonID_translation{$taxonID})
 		{
-			$taxonID_translation{$taxonID} = getAllRanksForTaxon_withUnclassified($taxonomy, $taxonID);
-			$taxonID_translation{$taxonID}{definedAndHypotheticalGenomes} = $taxonID_translation{$taxonID}{definedGenomes};
+			$taxonID_translation{$taxonID} = getAllRanksForTaxon_withUnclassified($taxonomy, $taxonID, $mappableTaxonIDs_href);
+			$taxonID_translation{$taxonID}{definedAndHypotheticalGenomes} = $taxonID;
 		}
 		
 		foreach my $rank (keys %{$taxonID_translation{$taxonID}})
@@ -282,9 +284,18 @@ sub getAllRanksForTaxon_withUnclassified
 {
 	my $taxonomy = shift;
 	my $taxonID = shift;
+	my $mappableTaxonIDs_href = shift;
+	die unless(defined $mappableTaxonIDs_href);
 	
 	my %forReturn = map {$_ => 'Unclassified'} @evaluateAccuracyAtLevels;
-	$forReturn{definedGenomes} = $taxonID;
+	if(defined $mappableTaxonIDs_href->{$taxonID})
+	{
+		$forReturn{definedGenomes} = $taxonID;
+	}
+	else
+	{
+		$forReturn{definedGenomes} = 'Unclassified';
+	}
 	return \%forReturn if($taxonID eq '0');
 	
 	die unless(defined $taxonID);
@@ -438,7 +449,7 @@ sub readLevelComparison
 		}
 		else
 		{
-			my $lightning = getAllRanksForTaxon_withUnclassified($masterTaxonomy, $taxonID);
+			my $lightning = getAllRanksForTaxon_withUnclassified($masterTaxonomy, $taxonID, $mappableTaxonIDs);
 			$_getLightning_cache{$taxonID} = $lightning;
 			return $lightning;
 		}
@@ -788,6 +799,11 @@ sub distributionLevelComparison
 			my $L2_diff = ($isFreq - $shouldBeFreq)**2;
 			$L1_sum += $L1_diff;
 			$L2_sum += $L2_diff;
+			
+			if($taxonID eq '1280')
+			{
+				# print join("\t", "VALUE IN COMPARSION for $label // $level: ", $taxonID, $shouldBeFreq, $isFreq), "\n";
+			}
 			
 			$frequencyComparison_href->{$label}{$level}{$taxonID} = [$shouldBeFreq, $isFreq];
 		}
