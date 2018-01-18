@@ -225,7 +225,7 @@ for(plotType in c("complete", "incomplete"))
 
 dev.off()
 par(pBefore)
-q()
+# q()
 
 # par(mfrow=c(1,1)) 
 
@@ -306,7 +306,7 @@ rL_accuracy_max <- max(byReadLengthD[["accuracyAvg"]])
 for(mI in 1:length(methodNames))
 {
 	m <- methodNames[[mI]]
-	plot(0, 0, col = "white", main = paste("Reas assignment v/s read length: ", m, sep = ""), xlab = "Read length", xlim = c(rL_l_min, rL_l_max), ylim = c(0, 1))
+	plot(0, 0, col = "white", main = paste("Reads assignment v/s read length: ", m, sep = ""), xlab = "Read length", xlim = c(rL_l_min, rL_l_max), ylim = c(0, 1))
 	plotLevels <- c("absolute", "species", "genus", "family")
 	for(lI in 1:length(plotLevels))
 	{

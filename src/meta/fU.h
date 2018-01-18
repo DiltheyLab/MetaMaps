@@ -973,6 +973,8 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 			std::cout << "\tImprovement: " << ll_diff << std::endl;
 			std::cout << "\tRelative   : " << ll_relative << std::endl;
 		
+			double ll_relative_imp = 1 - ll_relative;
+			
 			// todo 
 			if((ll_diff < 20) || (EMiteration > 30))
 			{
@@ -983,12 +985,23 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 			{
 				continueEM = false; 
 			}
+			
+			if(ll_relative_imp < 0.0001)
+			{
+				continueEM = false;
+			}
+						
 		/*
 			if(abs(1-ll_relative) < 0.01)
 			{
 				continueEM = false;
 			}
 		*/
+		}
+		
+		if(EMiteration > 10)
+		{
+			// continueEM = false;
 		}
 		
 		if(0 && (EMiteration == (round_first_unknown - 1)))
@@ -1115,12 +1128,19 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 	std::tuple<std::map<std::string, double>, std::map<std::string, double>, std::map<std::string, double>> frequencies_triplet;
 	if(unmappedReadsLengths.size())
 	{
+		std::cerr << "Analysis of unmapped reads:\n";
+		
 		double proportion_mapped = (double)nMapped / (double)nReadsMappable;
 		double proportion_toDistribute = (double)nUnmapped / (double)nReadsMappable;
 		assert(abs((proportion_mapped + proportion_toDistribute) - 1) <= 1e-3);
 
+		std::cerr << "\t" << "proportion_mapped" << ": " << proportion_mapped << "\n";
+		std::cerr << "\t" << "proportion_toDistribute" << ": " << proportion_toDistribute << "\n";
+
 		// find average proportion of expected unmapped reads, at given unmapped read lengths
 		std::map<std::string, double> proportion_unmapped_averagedEmpiricalReadLengths;
+		std::cerr << "\t" << "Unmapped for - expected\n";
+		
 		for(auto tF : f.second)
 		{
 			double proportion_unmapped_sum = 0;
@@ -1131,8 +1151,30 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 			double proportion_unmapped_average = proportion_unmapped_sum / (double)unmappedReadsLengths.size();
 			assert((proportion_unmapped_average >= 0) && (proportion_unmapped_average <= 1));
 			proportion_unmapped_averagedEmpiricalReadLengths[tF.first] = proportion_unmapped_average;
+			std::cerr << "\t\t" << "Taxon ID " << tF.first << ": indirectly " << tF.second << "; unmapped for " << tF.first << ": " << proportion_unmapped_average << "\n";
 		}
 
+		
+		std::map<std::string, double> totalFrequencies_before;
+		for(auto tF : f.first)
+		{
+			if(totalFrequencies_before.count(tF.first) == 0)
+			{
+				totalFrequencies_before[tF.first] = 0;
+			}
+			totalFrequencies_before.at(tF.first) += tF.second;
+		}	
+		for(auto tF : f.second)
+		{
+			if(totalFrequencies_before.count(tF.first) == 0)
+			{
+				totalFrequencies_before[tF.first] = 0;
+			}
+			totalFrequencies_before.at(tF.first) += tF.second;
+		}	
+		
+		std::cerr << "\t" << "Would like to add:\n";
+		
 		// find how many unmapped reads we might want to add
 		double allTaxa_wantAdditionalReads = 0;
 		std::map<std::string, double> perTaxon_wantAdditionalReads;
@@ -1142,22 +1184,32 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 			assert((currentIndirectFrequency >= 0) && (currentIndirectFrequency <= 1));
 			double approximate_read_number = nMapped * currentIndirectFrequency;
 			double expected_proportion_mapped = 1 - proportion_unmapped_averagedEmpiricalReadLengths.at(tF.first);
-			double wouldLikeToAdd = 1.0/expected_proportion_mapped * approximate_read_number;
+			double wouldLikeTotal = (1.0/expected_proportion_mapped) * approximate_read_number;
+			double wouldLikeToAdd = wouldLikeTotal - approximate_read_number;
+			assert(wouldLikeToAdd >= 0);
 			allTaxa_wantAdditionalReads += wouldLikeToAdd;
 			perTaxon_wantAdditionalReads[tF.first] = wouldLikeToAdd;
+			
+			std::cerr << "\t\t" << "Taxon ID " << tF.first  << ": " << approximate_read_number << " reads indirectly assigned; expected mapped: " << expected_proportion_mapped << "; desireed total: " << wouldLikeTotal << "; now would like to add: " << wouldLikeToAdd << "\n";
 		}
 
+		
 		// scale the number of reads we can add
 		double addReads_scalingFactor = 1;
 		if(allTaxa_wantAdditionalReads > nUnmapped)
 		{
 			addReads_scalingFactor = nUnmapped /  allTaxa_wantAdditionalReads;
 		}
-		double leaveUnasssigned = nUnmapped - (allTaxa_wantAdditionalReads * addReads_scalingFactor);
-		assert(leaveUnasssigned >= 0);
-		double leaveUnassignedProp = leaveUnasssigned / nReadsMappable;
+		
+		std::cerr << "\t" << "Total reads we'd like to add: " << allTaxa_wantAdditionalReads << "; can spread (max.): " << nUnmapped << "; scaling factor: " << addReads_scalingFactor << "\n";
+
+		double leaveUnassigned = nUnmapped - (allTaxa_wantAdditionalReads * addReads_scalingFactor);
+		assert(leaveUnassigned >= 0);
+		double leaveUnassignedProp = leaveUnassigned / nReadsMappable;
 		assert((leaveUnassignedProp >= 0) && (leaveUnassignedProp <= 1));
 
+		std::cerr << "\t" << "Leave unassigned: " << leaveUnassigned << "; prop: " << leaveUnassignedProp << "\n" << std::flush;
+		
 		// now re-assign reads across taxa
 		for(auto& tF : f.first)
 		{
@@ -1185,27 +1237,53 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 			total_reads_post_unmapped += tF.second;
 		}
 
-		assert(abs((total_reads_post_unmapped + leaveUnasssigned) - nReadsMappable ) <= 1e-3);
+		assert(abs((total_reads_post_unmapped + leaveUnassigned) - nReadsMappable ) <= 1e-3);
 
 		normalize_f_triplet(frequencies_triplet);
 
+				
+		std::map<std::string, double> totalFrequencies_after;
 		double checkSum_postUnassignedRemoval = 0;
 		for(auto& tF : std::get<0>(frequencies_triplet))
 		{
 			tF.second *= (1 - leaveUnassignedProp);
 			checkSum_postUnassignedRemoval += tF.second;
+			if(totalFrequencies_after.count(tF.first) == 0)
+			{
+				totalFrequencies_after[tF.first] = 0;
+			}
+			totalFrequencies_after.at(tF.first) += tF.second;
 		}
 		for(auto& tF : std::get<1>(frequencies_triplet))
 		{
 			tF.second *= (1 - leaveUnassignedProp);
 			checkSum_postUnassignedRemoval += tF.second;
+			if(totalFrequencies_after.count(tF.first) == 0)
+			{
+				totalFrequencies_after[tF.first] = 0;
+			}
+			totalFrequencies_after.at(tF.first) += tF.second;			
 		}
 		for(auto& tF : std::get<2>(frequencies_triplet))
 		{
 			tF.second *= (1 - leaveUnassignedProp);
 			checkSum_postUnassignedRemoval += tF.second;
+			if(totalFrequencies_after.count(tF.first) == 0)
+			{
+				totalFrequencies_after[tF.first] = 0;
+			}
+			totalFrequencies_after.at(tF.first) += tF.second;			
 		}
 		assert(abs(1 - (checkSum_postUnassignedRemoval + leaveUnassignedProp)) <= 1e-3);
+		
+		assert(totalFrequencies_before.size() == totalFrequencies_after.size());
+		std::cerr << "\tTotal freq change summary\n";
+		for(auto tF : totalFrequencies_before)
+		{
+			std::cerr << "\t\tTaxon ID " << tF.first << ": " << totalFrequencies_before.at(tF.first) << " -> " << totalFrequencies_after.at(tF.first) << "\n";
+		}
+		std::cerr << std::flush;
+		std::cout << std::flush;
 	}
 	else
 	{

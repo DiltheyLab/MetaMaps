@@ -513,7 +513,12 @@ sub readLevelComparison
 				last RANK;
 			}
 		}
+		unless(defined $assignedToRank)
+		{
+			$assignedToRank = '>' . $evaluateAccuracyAtLevels[$#evaluateAccuracyAtLevels];
+		}
 		die unless(defined $assignedToRank);
+		# die "Cannot assign rank of ID $readID -- assigned to $taxonID_inferred" unless(defined $assignedToRank);#
 		return $assignedToRank;
 	};
 	
@@ -746,14 +751,19 @@ sub distributionLevelComparison
 	
 	foreach my $level ('definedGenomes', 'definedAndHypotheticalGenomes', @evaluateAccuracyAtLevels)
 	{
-		next unless(defined $distribution_inferred->{$level});
+		my $lookupKey_level_InInference = $level;
+		if(($level eq 'definedAndHypotheticalGenomes') and (not defined $distribution_inferred->{$lookupKey_level_InInference}))
+		{
+			$lookupKey_level_InInference = 'definedGenomes';
+		}
+		next unless(defined $distribution_inferred->{$lookupKey_level_InInference});
 		die unless(defined $distribution_truth->{$level});
 		
 		my $totalFreq = 0;
 		my $totalFreqCorrect = 0;
-		foreach my $inferredTaxonID (keys %{$distribution_inferred->{$level}})
+		foreach my $inferredTaxonID (keys %{$distribution_inferred->{$lookupKey_level_InInference}})
 		{
-			my $isFreq = $distribution_inferred->{$level}{$inferredTaxonID}[1];
+			my $isFreq = $distribution_inferred->{$lookupKey_level_InInference}{$inferredTaxonID}[1];
 			my $shouldBeFreq = 0;
 			if(exists $distribution_truth->{$level}{$inferredTaxonID})
 			{
@@ -783,17 +793,17 @@ sub distributionLevelComparison
 		{
 			my $shouldBeFreq = $distribution_truth->{$level}{$trueTaxonID};
 			die Dumper("Problem with shouldBeFreq", $shouldBeFreq, $distribution_truth) unless($shouldBeFreq > 0);
-			my $isFreq = (exists $distribution_inferred->{$level}{$trueTaxonID}) ? $distribution_inferred->{$level}{$trueTaxonID}[1] : 0;
+			my $isFreq = (exists $distribution_inferred->{$lookupKey_level_InInference}{$trueTaxonID}) ? $distribution_inferred->{$lookupKey_level_InInference}{$trueTaxonID}[1] : 0;
 			$S_AVGRE += ( abs($shouldBeFreq - $isFreq) / $shouldBeFreq);
 			$S_RRMSE += (($shouldBeFreq - $isFreq) / $shouldBeFreq)**2;
 		}
 		
 		my $L1_sum = 0;
 		my $L2_sum = 0;
-		my %joint_taxonIDs = map {$_ => 1} ((keys %{$distribution_inferred->{$level}}), (keys %{$distribution_truth->{$level}}));
+		my %joint_taxonIDs = map {$_ => 1} ((keys %{$distribution_inferred->{$lookupKey_level_InInference}}), (keys %{$distribution_truth->{$level}}));
 		foreach my $taxonID (keys %joint_taxonIDs)
 		{
-			my $isFreq = (exists $distribution_inferred->{$level}{$taxonID}) ? $distribution_inferred->{$level}{$taxonID}[1] : 0;
+			my $isFreq = (exists $distribution_inferred->{$lookupKey_level_InInference}{$taxonID}) ? $distribution_inferred->{$lookupKey_level_InInference}{$taxonID}[1] : 0;
 			my $shouldBeFreq = (exists $distribution_truth->{$level}{$taxonID}) ? $distribution_truth->{$level}{$taxonID} : 0;
 			my $L1_diff = abs($isFreq - $shouldBeFreq);
 			my $L2_diff = ($isFreq - $shouldBeFreq)**2;
@@ -811,8 +821,8 @@ sub distributionLevelComparison
 		my $L1 = $L1_sum;
 		my $L2 = sqrt($L2_sum);
 		
-		my $AVGRE *= (1 / scalar(keys %{$distribution_inferred->{$level}}));
-		my $RRMSE *= (1 / scalar(keys %{$distribution_inferred->{$level}}));
+		my $AVGRE *= (1 / scalar(keys %{$distribution_inferred->{$lookupKey_level_InInference}}));
+		my $RRMSE *= (1 / scalar(keys %{$distribution_inferred->{$lookupKey_level_InInference}}));
 		$RRMSE = sqrt($RRMSE);
 		
 		print join("\t", $label, $level, $totalFreqCorrect), "\n";

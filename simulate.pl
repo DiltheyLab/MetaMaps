@@ -1549,7 +1549,7 @@ sub evaluateOneSimulation
 					my @missing_readIDs = grep {not exists $truth_raw_reads_href->{$_}} keys %$inferred_reads;
 					die Dumper("Missing some reads in truth file $truth_fn (inference file $f)", @missing_readIDs[0 .. 5]);
 				}
-				validation::readLevelComparison($extendedMaster, $truth_raw_reads_href, $truth_mappingDatabase_reads, $inferred_reads, $methodName, $n_reads_correct_byVariety->{$varietyName}, $n_reads_correct_byVariety_byLevel->{$varietyName}, $n_reads_correct_byVariety_byLevel_byLength->{$varietyName}, \%reduced_taxonID_original_2_contigs, $readLengths_href);
+				validation::readLevelComparison($extendedMaster, $truth_raw_reads_href, $truth_mappingDatabase_reads, $inferred_reads, $methodName, $n_reads_correct_byVariety->{$varietyName}, $n_reads_correct_byVariety_byLevel->{$varietyName}, $n_reads_correct_byVariety_byLevel_byLength->{$varietyName}, \%reduced_taxonID_master_2_contigs, $readLengths_href);
 			}
 			else
 			{

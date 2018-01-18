@@ -22,7 +22,7 @@ my $DB = 'databases/miniSeq+H';
 # my $MetaMap_results = '/scratch/tmp/MetaMap/hmp_set7';
 my $MetaMap_results = 'tmp/hmp7_2_miniSeq+H';
 my $kraken_results_dir = '/scratch/tmp/hmp_set7_combined_kraken_results';
-my $truth = 'tmp/truthHMP7';
+my $truth = 'tmp/truthHMP7_blasr';
 
 
 my %results_readLevel = (
@@ -50,15 +50,17 @@ my $taxonomy_usedForInference = taxTree::readTaxonomy($DB . '/taxonomy');
 
 my $truth_reads_href = validation::readTruthFileReads($extendedMaster, $extendedMaster_merged, $truth . '.perRead');
 
+my $readLengths_href = Util::getReadLengths('/scratch/tmp/hmp_set7_combined.fastq');
 my $mappableTaxonomy;
 my $truth_reads_mappable;
+my %reduced_taxonID_master_2_contigs;
 {
+		
 	my %reduced_taxonID_original_2_contigs;
 	my %reduced_contigLength;
 	Util::read_taxonIDs_and_contigs($DB, \%reduced_taxonID_original_2_contigs, \%reduced_contigLength);
 	
 	# read reduced taxonomy
-	my %reduced_taxonID_master_2_contigs;
 	foreach my $taxonID_original (keys %reduced_taxonID_original_2_contigs)
 	{
 		my $taxonID_master = taxTree::findCurrentNodeID($extendedMaster, $extendedMaster_merged, $taxonID_original);
@@ -75,12 +77,13 @@ my $truth_reads_mappable;
 my $truth_reads_href_noUnknown = { map {$_ => $truth_reads_mappable->{$_}} grep {$truth_reads_mappable->{$_}} keys %$truth_reads_mappable };
 die unless(all {exists $mappableTaxonomy->{$_}} values %$truth_reads_href_noUnknown);
 
-my $truth_mappingDatabase_distribution = validation::truthReadsToTruthSummary($mappableTaxonomy, $truth_reads_href_noUnknown);
+my $truth_mappingDatabase_distribution = validation::truthReadsToTruthSummary($mappableTaxonomy, $truth_reads_href_noUnknown, \%reduced_taxonID_master_2_contigs);
 
 
 my $n_reads_correct_byVariety = {};
 my $n_reads_correct_byVariety_byLevel = {};
 my $freq_byVariety_byLevel = {};
+my $n_reads_correct_byVariety_byLevel_byLength = {};
 	
 foreach my $label (keys %results_readLevel)
 {
@@ -88,8 +91,8 @@ foreach my $label (keys %results_readLevel)
 	
 	$n_reads_correct_byVariety->{$label} = {} unless(defined $n_reads_correct_byVariety->{$label});
 	$n_reads_correct_byVariety_byLevel->{$label} = {} unless(defined $n_reads_correct_byVariety_byLevel->{$label});
+	$n_reads_correct_byVariety_byLevel_byLength->{$label} = {} unless(defined $n_reads_correct_byVariety_byLevel_byLength->{$label});
 	
-
 
 	my $inferred_reads = validation::readInferredFileReads($extendedMaster, $extendedMaster_merged, $results_readLevel{$label});
 
@@ -99,7 +102,7 @@ foreach my $label (keys %results_readLevel)
 		die "Error: have ", scalar(@readIDs_no_truth), " (of ", scalar(keys %$inferred_reads), ") reads without defined truth.\n";
 	}
 	
-	validation::readLevelComparison($extendedMaster, $truth_reads_href, $truth_reads_mappable, $inferred_reads, $label, $n_reads_correct_byVariety->{$label}, $n_reads_correct_byVariety_byLevel->{$label});
+	validation::readLevelComparison($extendedMaster, $truth_reads_href, $truth_reads_mappable, $inferred_reads, $label, $n_reads_correct_byVariety->{$label}, $n_reads_correct_byVariety_byLevel->{$label}, $n_reads_correct_byVariety_byLevel_byLength->{$label}, \%reduced_taxonID_master_2_contigs, $readLengths_href);
 }
 
 my @evaluateAccuracyAtLevels = validation::getEvaluationLevels();
