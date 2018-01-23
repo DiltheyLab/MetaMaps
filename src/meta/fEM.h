@@ -814,6 +814,8 @@ void doEM(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestC
 		double oneThird_p = highestMedian_oneThird_cumulativeP;
 		std::ofstream evidenceNewSpeciesStream(output_evidence_unknownSpecies);
 		evidenceNewSpeciesStream << "taxonID"
+				<< "\t" << "species"
+				<< "\t" << "genus"
 				<< "\t" << "nReads"
 				<< "\t" << "propBottomThirdReadIdentities"
 				<< "\t" << "expectedPropBottomThirdReadIdentities"
@@ -926,8 +928,12 @@ void doEM(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestC
 					usableWindows_coverageZero_p_str = std::to_string(windows_0_pValue);
 				}
 			}
-
+			
+			std::map<std::string, std::string> upwardByLevel = T.getUpwardNodesByRanks(taxonID,  std::set<std::string>({"species", "genus"}));
+			
 			evidenceNewSpeciesStream << taxonID
+					<< "\t" << upwardByLevel.at("species")
+					<< "\t" << upwardByLevel.at("genus")
 					<< "\t" << identities.size()
 					<< "\t" << propBottomThirdReadIdentities_str
 					<< "\t" << oneThird_p_str

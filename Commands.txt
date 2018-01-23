@@ -164,10 +164,8 @@ perl benchmarkInference.pl --mappings /scratch/tmp/MetaMap/hmp_set7.EM --DB data
 perl convertMetaMapToKraken.pl databases/miniSeq
 perl callKrakenOnConvertedDB.pl databases/miniSeq /scratch/tmp/hmp_set7_combined.fastq /scratch/tmp/hmp_set7_combined_kraken_results
 
-// benchmark against Kraken
+perl callKrakenOnConvertedDB.pl databases/miniSeq /scratch/tmp/hmp-nanopore.fasta.fastq /scratch/tmp/hmp_nanopore_set7_combined_kraken_results
 
-perl convertMetaMapToKraken.pl databases/miniSeq+H
-perl callKrakenOnConvertedDB.pl databases/miniSeq+H /scratch/tmp/hmp_set7_combined.fastq /scratch/tmp/hmp_set7_combined_kraken_results
 
 
 // HMP7 classical mapping

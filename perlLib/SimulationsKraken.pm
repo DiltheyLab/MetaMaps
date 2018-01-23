@@ -97,12 +97,14 @@ sub doKrakenOnExistingDB
 	my $outputDir = shift;
 	my $kraken_binPrefix = shift;
 	my $Bracken_dir = shift;
+	my $taxonID_original_2_contigs_href = shift;
 	
+	die unless(defined $taxonID_original_2_contigs_href);
 	my $pre_chdir_cwd = getcwd();
-	
+	 
 	chdir($kraken_dir) or die;  
 	
-	my $cmd_classify = qq(/usr/bin/time -v ${kraken_binPrefix} --preload --db DB $simulatedReads > reads_classified);
+	my $cmd_classify = qq(/usr/bin/time -v ${kraken_binPrefix} --preload --db DB $simulatedReads 1> reads_classified 2> kraken_resources);
 	system($cmd_classify) and die "Could not execute command: $cmd_classify";
 	
 	my $cmd_report = qq(/usr/bin/time -v ${kraken_binPrefix}-report --db DB reads_classified > reads_classified_report);
@@ -118,7 +120,8 @@ sub doKrakenOnExistingDB
 		$outputDir . '/results_kraken.txt',
 		'DB/taxonomy',
 		'reads_classified_report',
-		'reads_classified',		
+		'reads_classified',	
+		$taxonID_original_2_contigs_href
 	);
 
 	create_compatible_reads_file_from_kraken(
@@ -150,7 +153,11 @@ sub doKraken
 	
 	die unless(defined $Bracken_dir);
 	
-	
+
+	my %taxonID_original_2_contigs;
+	my %contigLength;
+	Util::read_taxonIDs_and_contigs($dbDir, \%taxonID_original_2_contigs, \%contigLength);
+
 	my $kraken_dir = $jobDir . '/kraken/';
 	my $jobDir_abs = abs_path($jobDir);
 	
@@ -160,7 +167,7 @@ sub doKraken
 	die unless(-e $simulatedReads);
 	
 	my $outputPrefix = '';
-	doKrakenOnExistingDB($kraken_dir, $simulatedReads, $jobDir_abs, $kraken_binPrefix, $Bracken_dir);
+	doKrakenOnExistingDB($kraken_dir, $simulatedReads, $jobDir_abs, $kraken_binPrefix, $Bracken_dir, \%taxonID_original_2_contigs);
 	
 }
 
@@ -170,6 +177,8 @@ sub create_compatible_file_from_kraken
 	my $taxonomy_kraken_dir = shift;
 	my $f_K = shift;
 	my $f_reads = shift;
+	my $create_compatible_file_from_kraken = shift;	
+	die unless(defined $create_compatible_file_from_kraken);
 	
 	my $taxonomy_kraken = taxTree::readTaxonomy($taxonomy_kraken_dir);
 	
@@ -212,7 +221,7 @@ sub create_compatible_file_from_kraken
 		}
 		else
 		{
-			my $lightning = validation::getAllRanksForTaxon_withUnclassified($taxonomy_kraken, $taxonID);
+			my $lightning = validation::getAllRanksForTaxon_withUnclassified($taxonomy_kraken, $taxonID, $create_compatible_file_from_kraken);
 			$_getLightning_cache{$taxonID} = $lightning;
 			return $lightning;
 		}

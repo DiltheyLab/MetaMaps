@@ -36,6 +36,12 @@ unless(-e $outputDir)
 {
 	mkdir($outputDir) or die "Cannot mkdir $outputDir";
 }
+
+
+my %taxonID_original_2_contigs;
+my %contigLength;
+Util::read_taxonIDs_and_contigs($database, \%taxonID_original_2_contigs, \%contigLength);
+
 	
 my $krakenDir = $database . '/kraken';
 
@@ -44,7 +50,8 @@ SimulationsKraken::doKrakenOnExistingDB (
 	$FASTQ,
 	$outputDir,
 	$kraken_binPrefix,
-	$Bracken_dir
+	$Bracken_dir,
+	\%taxonID_original_2_contigs
 );
 
 sub print_help

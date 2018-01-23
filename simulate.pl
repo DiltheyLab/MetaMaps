@@ -1189,7 +1189,8 @@ elsif($action eq 'analyzeAll')
 						last RANK;
 					}
 				}
-				die unless(defined $shouldBeAssignedTo);
+				$shouldBeAssignedTo = '>' . $evaluateAccuracyAtLevels[$#evaluateAccuracyAtLevels] unless(defined $shouldBeAssignedTo);
+				die Dumper("Can't find target assignment for $taxonID", $taxonID_lightning) unless(defined $shouldBeAssignedTo);
 				return $shouldBeAssignedTo;
 			};
 			
@@ -1403,8 +1404,10 @@ sub get_files_for_evaluation
 {
 	my $simulation_href = shift;
 	return (
+		# 'Bracken-Dist' => ['distribution', 'results_bracken.txt.ignoreUnclassified'],
+		# 'Kraken-Dist' => ['distribution', 'results_kraken.txt.ignoreUnclassified'],
 		'Bracken-Dist' => ['distribution', 'results_bracken.txt'],
-		'Kraken-Dist' => ['distribution', 'results_kraken.txt'],
+		'Kraken-Dist' => ['distribution', 'results_kraken.txt'],		
 		'MetaMap-EM-Dist' => ['distribution', 'metamap.EM.WIMP'],
 		'MetaMap-U-Dist' => ['distribution', 'metamap.U.WIMP'],
 		'Kraken-Reads' => ['reads', 'results_kraken.txt.reads2Taxon'],
@@ -1928,7 +1931,7 @@ sub doMetaMap
 	
 	die unless(-e $DB.'/DB.fa');
 	my $cmd_map = qq(/usr/bin/time -v $metamap_bin mapDirectly --all -r $DB/DB.fa -q $reads -m 2000 --pi 80 -o $file_mappings &> file_res_mapping);
-	$cmd_map = qq(/usr/bin/time -v $metamap_bin mapDirectly --all -r $DB/DB.fa -q $reads -m 2000 --pi 80 -o $file_mappings);
+	# $cmd_map = qq(/usr/bin/time -v $metamap_bin mapDirectly --all -r $DB/DB.fa -q $reads -m 2000 --pi 80 -o $file_mappings);
 	system($cmd_map) and die "Cannot execute $cmd_map";
 	die "No MetaMap mappings -- $file_mappings" unless(-e $file_mappings);
 		

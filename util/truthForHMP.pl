@@ -9,12 +9,7 @@ use taxTree;
 use simulation;
 
 my $prefix_out = '../tmp/truthHMP7';
-
-
 my $targetDB = '../databases/miniSeq';
-
-my $HMP_fastQ = '/scratch/tmp/hmp_set7_combined.fastq';
-my $HMP_readIDs_href = getReadIDs($HMP_fastQ);
 
 my $masterTaxonomy_dir = '/data/projects/phillippy/projects/MetaMap/downloads/taxonomy';
 my $MetaMap_taxonomy = taxTree::readTaxonomy($masterTaxonomy_dir);
@@ -33,8 +28,15 @@ while(<GL>)
 }
 close(GL);
 
-foreach my $config (['blasr', '/data/projects/phillippy/projects/mash_map/Jobs/blasr/hmp/target/all.m4'], ['bwa', '/data/projects/phillippy/projects/mash_map/Jobs/blasr/hmp/targetAll/mock.all.genome.fa.pacbioReads.bam'])
+
+# foreach my $config (['bwa_nanopore', '/data/projects/phillippy/projects/mash_map/Jobs/blasr/hmp/targetAll/mock.all.genome.fa.nanopore.sorted.bam', '/scratch/tmp/hmp-nanopore.fasta'], ['blasr_pacbio', '/data/projects/phillippy/projects/mash_map/Jobs/blasr/hmp/target/all.m4', '/scratch/tmp/hmp_set7_combined.fastq'], ['bwa_pacbio', '/data/projects/phillippy/projects/mash_map/Jobs/blasr/hmp/targetAll/mock.all.genome.fa.pacbioReads.bam', '/scratch/tmp/hmp_set7_combined.fastq'])
+foreach my $config (['bwa_pacbio', '/data/projects/phillippy/projects/mash_map/Jobs/blasr/hmp/targetAll/mock.all.genome.fa.pacbioReads.bam', '/scratch/tmp/hmp_set7_combined.fastq'], ['bwa_nanopore', '/data/projects/phillippy/projects/mash_map/Jobs/blasr/hmp/targetAll/mock.all.genome.fa.nanopore.sorted.bam', '/scratch/tmp/hmp-nanopore.fasta'])
 {
+	print $config->[0], "\n";
+	
+	my $HMP_fastQ = $config->[2];
+	my $HMP_readIDs_href = getReadIDs($HMP_fastQ);
+
 	my $fn_out_reads = $prefix_out . '_' . $config->[0] . '.perRead';
 	my $fn_out_distribution = $prefix_out . '_' . $config->[0] . '.distribution';
 	my $fn_out_distribution_genomeFreqs = $prefix_out . '_' . $config->[0] . '.distribution_genomes';
@@ -56,7 +58,7 @@ foreach my $config (['blasr', '/data/projects/phillippy/projects/mash_map/Jobs/b
 			chomp($line);
 			my @fields = split(/\s+/, $line);
 			my $longReadID = $fields[0];
-			die "Can't parse read ID $longReadID" unless($longReadID =~ /(^.+)\/\d+_\d+$/);
+			die "Can't parse read ID $longReadID from $config->[1]" unless($longReadID =~ /(^.+)\/\d+_\d+$/);
 			my $readID = $1;
 			if(exists $HMP_readIDs_href->{$readID})
 			{
@@ -89,6 +91,8 @@ foreach my $config (['blasr', '/data/projects/phillippy/projects/mash_map/Jobs/b
 			
 			die "Invalid contig ID - no GI! $contigID" unless($contigID =~ /gi\|(\d+)\|/);
 			my $gi = $1;
+			#next if($gi eq '148642060');
+			
 			push(@{$read_2_gis{$readID}}, [$gi, $alignment_read_length * ($identity/100)]);
 			if(exists $readID_2_length{$readID})
 			{
@@ -112,8 +116,20 @@ foreach my $config (['blasr', '/data/projects/phillippy/projects/mash_map/Jobs/b
 			chomp($line);
 			my @fields = split(/\s+/, $line);
 			my $longReadID = $fields[0];
-			die "Can't parse read ID $longReadID" unless($longReadID =~ /(^.+)\/\d+_\d+$/);
-			my $readID = $1;
+			
+			my $readID;
+			if($config->[1] =~ /nanopore/i)
+			{
+				$readID = $longReadID;
+
+			}
+			else
+			{
+				die "Can't parse read ID $longReadID from $config->[1]" unless($longReadID =~ /(^.+)\/\d+_\d+$/);
+				$readID = $1;	
+				$readID = $longReadID;
+			}
+
 			if(exists $HMP_readIDs_href->{$longReadID})
 			{
 				#next;
@@ -123,6 +139,7 @@ foreach my $config (['blasr', '/data/projects/phillippy/projects/mash_map/Jobs/b
 			}
 			else
 			{
+				die Dumper("Read ID not in FASTQ?", $longReadID, $readID);
 				$noReadInFastQ{$longReadID}++;
 				next;
 			}
@@ -134,6 +151,9 @@ foreach my $config (['blasr', '/data/projects/phillippy/projects/mash_map/Jobs/b
 			die unless($mapQ =~ /^\d+$/);
 			die "Invalid contig ID - no GI! $contigID" unless($contigID =~ /gi\|(\d+)\|/);
 			my $gi = $1;
+			
+			#next if($gi eq '148642060');
+					
 			die "Duplicate short read ID $readID from $longReadID in file $config->[1]" if(exists $read_2_gis{$readID});
 			push(@{$read_2_gis{$readID}}, [$gi, $mapQ]);
 			
@@ -171,6 +191,7 @@ foreach my $config (['blasr', '/data/projects/phillippy/projects/mash_map/Jobs/b
 	print "Number-of-alignments histogram:\n";
 	foreach my $n_alignment (sort keys %histogram_n_alignments)
 	{
+		next if($histogram_n_alignments{$n_alignment} < 100);
 		print "\t", $n_alignment, "\t", $histogram_n_alignments{$n_alignment}, "\n";
 	}
 
@@ -196,6 +217,8 @@ foreach my $config (['blasr', '/data/projects/phillippy/projects/mash_map/Jobs/b
 			@alignments = reverse @alignments;
 			die unless($alignments[0][1] >= $alignments[1][1]);
 		}
+		
+		
 		$read_2_gis{$readID} = $alignments[0][0];
 		$gis_present{$alignments[0][0]}++;
 	}
@@ -245,6 +268,7 @@ foreach my $config (['blasr', '/data/projects/phillippy/projects/mash_map/Jobs/b
 	$gi_2_taxon{126640109} = '400667';
 	$gi_2_taxon{161510924} = '451516';
 	$gi_2_taxon{32470532} = '176280';
+	# $gi_2_taxon{148642060} = '420247';
 				
 	open(OUT_PERREAD, '>', $fn_out_reads) or die "Cannot open file $fn_out_reads";
 	my %read_2_taxonID;
@@ -288,6 +312,7 @@ foreach my $config (['blasr', '/data/projects/phillippy/projects/mash_map/Jobs/b
 	print "\t - $fn_out_reads \n";
 	print "\t - $fn_out_distribution \n";
 	print "\t - $fn_out_distribution_genomeFreqs \n";
+	print "\n";
 }
 
 sub getReadIDs
@@ -296,18 +321,39 @@ sub getReadIDs
 	
 	my %forReturn;
 	open(F, '<', $fn) or die;
+	my $isFirstLine = 1;
+	my $FASTA = 0;
 	while(<F>)
 	{
 		chomp;
 		next unless($_);
-		my $readID = $_;
-		die unless(substr($readID, 0, 1) eq '@');
-		substr($readID, 0, 1) = '';
-		<F>;
-		my $plus = <F>;
-		die unless(substr($plus, 0, 1) eq '+');
-		<F>;
-		$forReturn{$readID}++;
+		if($isFirstLine)
+		{
+			$FASTA = 1 if(substr($_, 0, 1) eq '>');
+			$isFirstLine = 0;
+		}
+		
+		if($FASTA)
+		{
+			my $readID = $_;
+			die unless(substr($readID, 0, 1) eq '>');
+			substr($readID, 0, 1) = '';
+			<F>;
+			$readID =~ s/\s.+//;
+			die if($forReturn{$readID});
+			$forReturn{$readID}++;		
+		}
+		else
+		{
+			my $readID = $_;
+			die unless(substr($readID, 0, 1) eq '@');
+			substr($readID, 0, 1) = '';
+			<F>;
+			my $plus = <F>;
+			die unless(substr($plus, 0, 1) eq '+');
+			<F>;
+			$forReturn{$readID}++;
+		}
 	}
 	close(F);
 	return \%forReturn;

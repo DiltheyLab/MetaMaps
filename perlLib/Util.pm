@@ -185,6 +185,8 @@ sub sd
 sub getReadLengths
 {
 	my $file = shift;
+	my $cutAfterWhiteSpace = shift;
+	
 	my %forReturn;
 	open(F, '<', $file) or die "Cannot open $file";
 	while(<F>)
@@ -194,6 +196,7 @@ sub getReadLengths
 		next unless($firstLine);
 		die "Invalid format - is file $file FASTQ?" unless(substr($firstLine, 0, 1) eq '@');
 		my $readID = substr($firstLine, 1);
+		$readID =~ s/\s.+// if($cutAfterWhiteSpace);		
 		my $sequence = <F>;
 		chomp($sequence);
 		my $plus = <F>;
