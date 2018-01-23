@@ -180,7 +180,27 @@ unless(-e $globalOutputDir)
 	mkdir($globalOutputDir) or die "Cannot mkdir $globalOutputDir";
 }
 
-if($action eq 'prepare')
+if($action eq 'testTaxonomy')
+{
+	my $fullTaxonomy = taxTree::readTaxonomy($masterTaxonomy_dir);
+	my @leafs = taxTree::get_leave_ids($fullTaxonomy);
+	foreach my $taxonID (@taxonIDs)
+	{
+		die unless(defined $fullTaxonomy->{$taxonID});
+		my @ancestors = taxTree::get_ancestors($fullTaxonomy, $taxonID);
+		my $haveSpecies = 0;
+		foreach my $ancestorID (@ancestors)
+		{
+			my $rank = $fullTaxonomy->{$ancestorID}{rank};
+			$haveSpecies = 1 if($rank eq 'species');
+		}
+		unless($haveSpecies)
+		{
+			warn "No species info for taxon $taxonID";
+		}
+	}
+}
+elsif($action eq 'prepare')
 {
 	my $DB_fa = $DB . '/DB.fa';
 	my $existingSelfSimilarities = $DB . '/selfSimilarities.txt';
@@ -1185,6 +1205,7 @@ elsif($action eq 'analyzeAll')
 					die unless(defined $taxonID_lightning->{$rank});
 					if(($taxonID_lightning->{$rank} ne 'Unclassified') and ($taxonID_lightning->{$rank} ne 'NotLabelledAtLevel'))
 					{
+						die if($taxonID_lightning->{$rank} eq 'Undefined');
 						$shouldBeAssignedTo = $rank;
 						last RANK;
 					}
