@@ -183,16 +183,31 @@ unless(-e $globalOutputDir)
 if($action eq 'testTaxonomy')
 {
 	my $fullTaxonomy = taxTree::readTaxonomy($masterTaxonomy_dir);
-	my @leafs = taxTree::get_leave_ids($fullTaxonomy);
-	foreach my $taxonID (@taxonIDs)
+	my %ranks;
+	foreach my $taxonID (keys %$fullTaxonomy)
+	{
+		next unless(scalar(@{$fullTaxonomy->{$taxonID}{children}}) == 0);
+		my $rank = $fullTaxonomy->{$taxonID}{rank};
+		$ranks{$rank}++;
+	}
+	print "Rank summary:\n";
+	foreach my $rank (sort {$ranks{$b} <=> $ranks{$a}} keys %ranks)
+	{
+		print " - $rank: ", $ranks{$rank}, "\n";
+	}
+
+	foreach my $taxonID (keys %$fullTaxonomy)
 	{
 		die unless(defined $fullTaxonomy->{$taxonID});
 		my @ancestors = taxTree::get_ancestors($fullTaxonomy, $taxonID);
 		my $haveSpecies = 0;
+		my $rank = $fullTaxonomy->{$taxonID}{rank};
+		next unless(($rank eq 'subspecies') or ($rank eq 'varietas') or ($rank eq 'forma'));
+		$haveSpecies = 1 if($rank eq 'species');		
 		foreach my $ancestorID (@ancestors)
 		{
-			my $rank = $fullTaxonomy->{$ancestorID}{rank};
-			$haveSpecies = 1 if($rank eq 'species');
+			my $rank_ancestor = $fullTaxonomy->{$ancestorID}{rank};
+			$haveSpecies = 1 if($rank_ancestor eq 'species');
 		}
 		unless($haveSpecies)
 		{
