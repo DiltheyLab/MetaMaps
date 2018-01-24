@@ -170,11 +170,11 @@ void producePotFile(std::string outputFN, const taxonomy& T, std::map<std::strin
 		double l_freq_pot = 0;
 		for(auto taxonID : l.second)
 		{
-			std::string taxonIDName = (taxonID != "Undefined") ? T.getNode(taxonID).name.scientific_name : "NotLabelledAtLevel";
+			std::string taxonIDName = (taxonID != "Undefined") ? T.getNode(taxonID).name.scientific_name : "Unclassified";
 
 			strout_frequencies <<
 				levelName << "\t" <<
-				((taxonID != "Undefined") ? taxonID : "-1") << "\t" <<
+				((taxonID != "Undefined") ? taxonID : "0") << "\t" <<
 				taxonIDName << "\t" <<
 				rC_per_level.at(levelName).at(taxonID) << "\t" <<
 				f_originalEM_thisLevel.at(taxonID) << "\t" <<

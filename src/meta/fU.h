@@ -123,7 +123,6 @@ void printGenusLevelSummary(const taxonomy& T, std::pair<std::map<std::string, d
 
 void producePotFile_U(std::string outputFN, const taxonomy& T, std::tuple<std::map<std::string, double>, std::map<std::string, double>, std::map<std::string, double>> frequencies, std::tuple<std::map<std::string, size_t>, std::map<std::string, size_t>> readCount, size_t mappableReads, const std::set<std::string>& relevantTaxonIDs_mappable)
 {
-		
 	//double initial_f_sum = 0;
 	std::set<std::string> combinedKeys;
 	for(auto f : std::get<0>(frequencies))
@@ -227,14 +226,17 @@ void producePotFile_U(std::string outputFN, const taxonomy& T, std::tuple<std::m
 		size_t levelReadSum = 0;
 		for(auto taxonID : l.second)
 		{
-			std::string taxonIDName = (taxonID != "Undefined") ? T.getNode(taxonID).name.scientific_name : "NotLabelledAtLevel";
+			if(taxonID == "Undefined")
+				continue;
+
+			std::string taxonIDName = T.getNode(taxonID).name.scientific_name;
 			
 			size_t taxonID_combinedReads = (readCount_perLevel.at(levelName).first.at(taxonID) + readCount_perLevel.at(levelName).second.at(taxonID));
 			double taxonID_combinedFreq = (std::get<0>(frequencies_perLevel.at(levelName)).at(taxonID) + std::get<1>(frequencies_perLevel.at(levelName)).at(taxonID) + std::get<2>(frequencies_perLevel.at(levelName)).at(taxonID));
 			
 			strout_frequencies <<
 					levelName << "\t" <<
-					((taxonID != "Undefined") ? taxonID : "-1") << "\t" <<
+					taxonID << "\t" <<
 					taxonIDName << "\t" <<
 					readCount_perLevel.at(levelName).first.at(taxonID) << "\t" <<
 					readCount_perLevel.at(levelName).second.at(taxonID) << "\t" <<

@@ -1218,6 +1218,7 @@ elsif($action eq 'analyzeAll')
 				RANK: foreach my $rank (@evaluateAccuracyAtLevels)
 				{
 					die unless(defined $taxonID_lightning->{$rank});
+					die if($taxonID_lightning->{$rank} eq 'NotLabelledAtLevel');
 					if(($taxonID_lightning->{$rank} ne 'Unclassified') and ($taxonID_lightning->{$rank} ne 'NotLabelledAtLevel'))
 					{
 						die if($taxonID_lightning->{$rank} eq 'Undefined');

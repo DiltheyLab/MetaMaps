@@ -6,6 +6,8 @@ use List::Util qw/all/;
 use List::MoreUtils qw/mesh/;
 use taxTree;
 
+# this assumes that the taxonomy is complete, i.e. there are no unclassified
+# inputs
 sub truthReadFrequenciesFromReadCounts
 {
 	my $outputFn = shift;
@@ -31,7 +33,6 @@ sub truthReadFrequenciesFromReadCounts
 		
 			my @relevantNodes = ($taxonID, taxTree::get_ancestors($taxonomy_href, $taxonID));
 			
-			
 			foreach my $n (@relevantNodes)
 			{
 				my $rank = $taxonomy_href->{$n}{rank};
@@ -47,7 +48,7 @@ sub truthReadFrequenciesFromReadCounts
 		{
 			if(not defined $thisTaxon_levels{$l})
 			{
-				$thisTaxon_levels{$l} = 'NotLabelledAtLevel';
+				$thisTaxon_levels{$l} = 'Unclassified';
 			}
 			
 			$readCount_by_level{$l}{$thisTaxon_levels{$l}} += $readCounts_href->{$taxonID};
@@ -80,10 +81,10 @@ sub truthReadFrequenciesFromReadCounts
 			my $f = $nReads / $totalReads;
 			my $name;
 			my $taxonIDForPrint = $taxonID;
-			if($taxonID eq 'NotLabelledAtLevel')
+			if($taxonID eq 'Unclassified')
 			{
 				$name = $taxonID;
-				$taxonIDForPrint = -1;
+				$taxonIDForPrint = 0;
 			}
 			else
 			{ 

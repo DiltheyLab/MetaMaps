@@ -324,6 +324,7 @@ sub getAllRanksForTaxon_withUnclassified
 	
 	if(defined $firstRankAssigned)
 	{
+		# we don't set stuff to undefined / NotLabelledAtLevel anymore
 		my $setToUndefined = 0;
 		foreach my $rank (taxTree::getRelevantRanks())
 		{
@@ -337,7 +338,7 @@ sub getAllRanksForTaxon_withUnclassified
 			{
 				if($setToUndefined and ($forReturn{$rank} eq 'Unclassified'))
 				{
-					$forReturn{$rank} = 'NotLabelledAtLevel';
+					$forReturn{$rank} = 'Unclassified'; # previously: NotLabelledAtLevel
 				}
 			}
 		}
@@ -478,8 +479,10 @@ sub readLevelComparison
 			RANK: foreach my $rank (@evaluateAccuracyAtLevels)
 			{
 				die unless(defined $lightning_truth_inDB->{$rank});
+				die if($lightning_truth_inDB->{$rank} eq 'NotLabelledAtLevel');
 				if(($lightning_truth_inDB->{$rank} ne 'Unclassified') and ($lightning_truth_inDB->{$rank} ne 'NotLabelledAtLevel'))
 				{
+					die if($lightning_truth_inDB->{$rank} eq 'Undefined');
 					$shouldBeAssignedTo = $rank;
 					last RANK;
 				}
@@ -880,9 +883,12 @@ sub readInferredDistribution
 		}
 		
 		my $taxonID_master = taxTree::findCurrentNodeID($taxonomy, $taxonomy_merged, $taxonID_nonMaster);
-				
+		if(($taxonID_master eq 'Undefined') or ($taxonID_master eq 'NotLabelledAtLevel')
+		{
+			$taxonID_master = 'Unclassified';
+		}
 		die Dumper(\%line) unless(defined $taxonID_master);
-		die Dumper("Unknown taxon ID $taxonID_master in file $f", $taxonomy->{$taxonID_master}, $taxonID_nonMaster, \%line) unless(($taxonID_master eq 'Undefined') or ($taxonID_master eq 'Unclassified') or ($taxonID_master eq 'NotLabelledAtLevel') or (defined $taxonomy->{$taxonID_master}));
+		die Dumper("Unknown taxon ID $taxonID_master in file $f", $taxonomy->{$taxonID_master}, $taxonID_nonMaster, \%line) unless(($taxonID_master eq 'Unclassified') or (defined $taxonomy->{$taxonID_master}));
 		die Dumper("Weird line in $f", \%line) unless(defined $line{Absolute});
 		die unless(defined $line{PotFrequency});
 		$inference{$line{AnalysisLevel}}{$taxonID_master}[0] += $line{Absolute};
@@ -928,6 +934,7 @@ sub readInferredFileReads
 		
 		if($taxonID_master eq 'Unclassified')
 		{
+			die;
 			$taxonID_master = 1;
 		}
 		

@@ -186,10 +186,12 @@ foreach my $resultsSet (@resultsSets)
 				}
 				elsif($taxonID eq 'Undefined')
 				{
+					die;
 					$taxonLabel = 'Undefined';
 				}
 				elsif($taxonID eq 'NotLabelledAtLevel')
 				{
+					die;
 					$taxonLabel = 'NotLabelledAtLevel';
 				}			
 				else

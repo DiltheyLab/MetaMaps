@@ -283,11 +283,13 @@ sub create_compatible_file_from_kraken
 			}
 			elsif($taxonID eq 'Undefined')
 			{
+				die;
 				$name = 'NotLabelledAtLevel'; 
 				$taxonID_for_print = -1;				
 			}
 			elsif($taxonID eq 'NotLabelledAtLevel')
 			{
+				die;
 				$name = 'NotLabelledAtLevel'; 
 				$taxonID_for_print = -1;				
 			}			
@@ -466,11 +468,13 @@ sub create_compatible_file_from_kraken_bracken
 			}
 			elsif($taxonID eq 'Undefined')
 			{
+				die;
 				$name = 'NotLabelledAtLevel'; 
 				$taxonID_for_print = -1;				
 			}
 			elsif($taxonID eq 'NotLabelledAtLevel')
 			{
+				die;
 				$name = 'NotLabelledAtLevel'; 
 				$taxonID_for_print = -1;				
 			}			
