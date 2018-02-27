@@ -240,7 +240,7 @@ sub create_compatible_file_from_kraken
 		my $classified = $f[0];
 		my $readID = $f[1];
 		my $taxonID = $f[2];
-		die "Weird classification symbol in $f_reads: '$classified'" unless(($classified eq 'C') or ($classified eq 'U'));
+		die "Weird classification symbol in $f_reads: '$classified' (line $. of $f_reads in ".getcwd(). ")" unless(($classified eq 'C') or ($classified eq 'U'));
 		if($classified eq 'C')
 		{
 			my $lightning = $getLightning->($taxonID);
@@ -257,7 +257,7 @@ sub create_compatible_file_from_kraken
 		}
 	}
 	close(KRAKEN);
-	die unless($n_unclassified_check == $n_unclassified);
+	die "Inconsistency w.r.t. unclassified reads -- $n_unclassified_check vs $n_unclassified" unless($n_unclassified_check == $n_unclassified);
 	
 	open(OUTPUT, '>', $output_fn) or die "Cannot open $output_fn";
 	open(OUTPUT2, '>', $output_fn_2) or die "Cannot open $output_fn_2";
@@ -267,7 +267,7 @@ sub create_compatible_file_from_kraken
 	foreach my $level ('definedAndHypotheticalGenomes', @evaluateAccuracyAtLevels)
 	{
 		$reads_at_levels{$level}{"Unclassified"} = 0 if(not exists $reads_at_levels{$level}{"Unclassified"});
-		$reads_at_levels{$level}{"Undefined"} = 0 if(not exists $reads_at_levels{$level}{"Undefined"});
+		# $reads_at_levels{$level}{"Undefined"} = 0 if(not exists $reads_at_levels{$level}{"Undefined"});
 		
 		$reads_at_levels{$level}{"Unclassified"} += $n_unclassified;
 		my $reads_all_taxa = 0;
@@ -322,7 +322,9 @@ sub create_compatible_reads_file_from_kraken
 	
 	my $taxonomy_kraken = taxTree::readTaxonomy($taxonomy_kraken_dir);
 	
+	my $output_fn_unclassified = $output_fn . '.unclassified';
 	open(OUTPUT, '>', $output_fn) or die "Cannot open $output_fn";	
+	open(OUTPUT_UNCL, '>', $output_fn_unclassified) or die "Cannot open $output_fn_unclassified";	
 	open(KRAKEN, '<', $f_reads) or die "Cannot open $f_reads";
 	while(<KRAKEN>)
 	{
@@ -340,11 +342,12 @@ sub create_compatible_reads_file_from_kraken
 		}
 		else
 		{
-			# print OUTPUT $readID, "\t", 'Unclassified', "\n";		
+			print OUTPUT_UNCL $readID, "\t", 'Unclassified', "\n";		
 		}
 	}
 	close(KRAKEN);
 	close(OUTPUT);
+	close(OUTPUT_UNCL);
 	
 }
 

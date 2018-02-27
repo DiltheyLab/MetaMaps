@@ -833,8 +833,12 @@ sub distributionLevelComparison
 		
 		if(defined $external_comparison)
 		{
-			$external_comparison->{$label}{$level}{total} += $totalFreq; 
-			$external_comparison->{$label}{$level}{correct} += $totalFreqCorrect; 
+			# $external_comparison->{$label}{$level}{total} += $totalFreq; 
+			# $external_comparison->{$label}{$level}{correct} += $totalFreqCorrect; 
+			my $freqOK = $totalFreqCorrect / $totalFreq;
+			die unless(($freqOK >= 0) and ($freqOK <= 1));
+			
+			push(@{$external_comparison->{$label}{$level}{freqOK}}, $freqOK);
 			push(@{$external_comparison->{$label}{$level}{AVGRE}}, $AVGRE);
 			push(@{$external_comparison->{$label}{$level}{RRMSE}}, $RRMSE);
 			push(@{$external_comparison->{$label}{$level}{L1}}, $L1);
@@ -883,7 +887,7 @@ sub readInferredDistribution
 		}
 		
 		my $taxonID_master = taxTree::findCurrentNodeID($taxonomy, $taxonomy_merged, $taxonID_nonMaster);
-		if(($taxonID_master eq 'Undefined') or ($taxonID_master eq 'NotLabelledAtLevel')
+		if(($taxonID_master eq 'Undefined') or ($taxonID_master eq 'NotLabelledAtLevel'))
 		{
 			$taxonID_master = 'Unclassified';
 		}

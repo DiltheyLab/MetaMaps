@@ -1,0 +1,30 @@
+perl simulate.pl --DB databases/miniSeq+H --action prepareFromFile --desiredTaxa tmp/p25DesiredTaxonIDs --suffix p25_uniform --n_simulations 1
+perl simulate.pl --DB databases/miniSeq+H --action prepareFromFile --desiredTaxa tmp/p25DesiredTaxonIDs --suffix p25_logNormal --coverageMode logNormal --n_simulations 1
+perl simulate.pl --DB databases/miniSeq+H --action repeatReadSimulations --suffix p25_logNormal --coverageMode logNormal --targetTotalSimulationInGigabytes 1
+
+perl simulate.pl --DB databases/miniSeq+H --action prepareFromFile --desiredTaxa tmp/i100DesiredTaxonIDs --suffix i100_specifiedFrequencies --coverageMode file --n_simulations 1
+perl simulate.pl --DB databases/miniSeq+H --action repeatReadSimulations --suffix i100_specifiedFrequencies --targetTotalSimulationInGigabytes 1 --coverageTargetsAreOrganismAbundances 1
+
+perl simulate.pl --DB databases/miniSeq+H --action prepare --suffix random_uniform
+perl simulate.pl --DB databases/miniSeq+H --action prepare --suffix random_logNormal --coverageMode logNormal
+
+screen -r sim_p25_uniform
+screen -r sim_p25_logNormal
+screen -r sim_random_uniform
+screen -r sim_random_logNormal
+screen -r sim_i100
+
+./metamap mapDirectly --all -r databases/miniSeq+H/DB.fa -q /scratch/tmp/hmp_set7_combined.fastq -o tmp/hmp7_2_miniSeq+H &> tests/resources/hmp7_2_miniSeq;\
+./metamap classify --mappings tmp/hmp7_2_miniSeq+H --DB databases/miniSeq+H
+
+./metamap mapDirectly --all -r databases/miniSeq+H/DB.fa -q /scratch/tmp/hmp-nanopore.fasta -o tmp/hmp-nanopore_miniSeq+H
+./metamap classify --mappings tmp/hmp-nanopore_miniSeq+H --DB databases/miniSeq+H
+
+Memory testing:
+
+/usr/bin/time -v ./metamap mapDirectly --all -r databases/miniSeq+H/DB.fa -q /scratch/tmp/hmp_set7_combined.fastq -o tmp/hmp7_2_miniSeq+H_unlimitedMemory &> tests/resources/hmp7_2_miniSeq &> hmp7_unlimitedMemory;\
+./metamap classify --mappings tmp/hmp7_2_miniSeq+H_unlimitedMemory --DB databases/miniSeq+H;\
+/usr/bin/time -v ./metamap mapDirectly --all -r databases/miniSeq+H/DB.fa -q /scratch/tmp/hmp_set7_combined.fastq -o tmp/hmp7_2_miniSeq+H_limitedMemory_20G &> tests/resources/hmp7_2_miniSeq --maxmemory 20 &> hmp7_limitedMemory;\
+./metamap classify --mappings tmp/hmp7_2_miniSeq+H_limitedMemory_20G  --DB databases/miniSeq+H
+
+

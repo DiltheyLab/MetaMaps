@@ -24,13 +24,16 @@ unless(-e $inputFA)
 	die "File $inputFA (from parameter --inputFA) does not exist";
 }
 
+my $contigI = 0;
 open(FIN, '<', $inputFA) or die "Cannot open $inputFA";
 open(FOUT, '>', $outputFA) or die "Cannot open $outputFA for writing";
 while(<FIN>)
 {
 	if(substr($_, 0, 1) eq '>')
 	{
-		substr($_, 0, 1) = '>kraken:taxid|' . $taxonID . '|';
+		$contigI++;
+		$_ =~ s/ .+//;
+		substr($_, 0, 1) = '>kraken:taxid|' . $taxonID . '|C' . $contigI . '|';
 	}
 	print FOUT $_;
 }

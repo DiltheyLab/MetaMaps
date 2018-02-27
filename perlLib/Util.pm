@@ -161,7 +161,7 @@ sub getGenomeLength
 sub mean
 {
 	my $s = 0;
-	die unless(scalar(@_));
+	die Dumper("No arguments passed to Util::mean?", [@_]) unless(scalar(@_));
 	foreach my $v (@_)
 	{
 		$s += $v;

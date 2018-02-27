@@ -14,6 +14,17 @@ perl buildDB.pl --DB databases/miniSeq+H --FASTAs /data/projects/phillippy/proje
 perl buildDB.pl --DB databases/miniSeq_100 --FASTAs /data/projects/phillippy/projects/mashsim/db/refseq/ref.fa --taxonomy /data/projects/phillippy/projects/mashsim/src/krakenDBTemplate/taxonomy --maxSpecies 100 --oldTaxonomy /data/projects/phillippy/projects/mashsim/NCBI/refseq/taxonomy/ --updateTaxonomy 1
 
 
+miniSeq plus 2 x human + mouse
+
+perl util/addTaxonIDToFasta.pl --inputFA /data/projects/phillippy/references/h_sapiens/1000genome/GRCh38_full_analysis_set_plus_decoy_hla.fa --outputFA /data/projects/phillippy/projects/MetaMap/additionalReferences/GRCh38_full_analysis_set_plus_decoy_hla.fa.with9606 --taxonID 9606;\
+perl util/addTaxonIDToFasta.pl --inputFA /data/projects/phillippy/projects/MetaMap/additionalReferences/GCA_000001635.8_GRCm38.p6_genomic.fna --outputFA /data/projects/phillippy/projects/MetaMap/additionalReferences/GCA_000001635.8_GRCm38.p6_genomic.fna.with10090 --taxonID 10090;\
+perl util/addTaxonIDToFasta.pl --inputFA /data/projects/phillippy/references/h_sapiens/NA19240/LKPB02.fasta --outputFA /data/projects/phillippy/projects/MetaMap/additionalReferences/LKPB02fa.with9606 --taxonID 9606
+
+perl buildDB.pl --DB databases/miniSeq+hhm --FASTAs /data/projects/phillippy/projects/mashsim/db/refseq/ref.fa,additionalReferences/GRCh38_full_analysis_set_plus_decoy_hla.fa.with9606,additionalReferences/GCA_000001635.8_GRCm38.p6_genomic.fna.with10090,additionalReferences/LKPB02fa.with9606 --taxonomy /data/projects/phillippy/projects/MetaMap/downloads/taxonomy --oldTaxonomy /data/projects/phillippy/projects/mashsim/NCBI/refseq/taxonomy/ --updateTaxonomy 1
+
+perl estimateSelfSimilarity.pl --DB databases/miniSeq+hhm --mode prepareFromScratch
+
+
 # smallSeq
 
 perl annotateRefSeqSequencesWithUniqueTaxonIDs.pl --refSeqDirectory /data/projects/phillippy/projects/mashsim/NCBI/refseq/ --taxonomyInDirectory /data/projects/phillippy/projects/MetaMap/downloads/taxonomy --taxonomyOutDirectory /data/projects/phillippy/projects/mashsim/NCBI_taxonomy_modified

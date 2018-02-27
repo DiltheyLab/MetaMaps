@@ -358,14 +358,18 @@ barplotD_byLevel <- read.delim(barPlotFile_byLevel, header = T, stringsAsFactors
 attachedToFile_byLevel <- paste(prefix, "barplots_attachedTo", sep = "")
 attachedToD <- read.delim(attachedToFile_byLevel, header = T, stringsAsFactors = F)
 
-rCs <- c("truthLeafInDB", "novel_to_superkingdom")
+rCs <- c("truthLeafInDB", "novel_to_species", "novel_to_genus", "novel_to_superkingdom")
 rCs <- rCs[rCs %in% barplotD_byLevel[["readCategory"]]]
 rCs_labels <- list()
 rCs_labels[["truthLeafInDB"]] <- "Read source in DB"
+rCs_labels[["novel_to_species"]] <- "Reads to novel species node"
+rCs_labels[["novel_to_genus"]] <- "Reads to novel genus node"
 rCs_labels[["novel_to_superkingdom"]] <- "Reads to novel superkingdom node"
 
 rCs_to_evaluationLevels <- list()
 rCs_to_evaluationLevels[["truthLeafInDB"]] <- ""
+rCs_to_evaluationLevels[["novel_to_species"]] <- "species"
+rCs_to_evaluationLevels[["novel_to_genus"]] <- "genus"
 rCs_to_evaluationLevels[["novel_to_superkingdom"]] <- "superkingdom"
 
 evaluationLevels <- unique(barplotD_byLevel[["evaluationLevel"]])

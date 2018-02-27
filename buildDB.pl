@@ -163,6 +163,7 @@ for(my $fileI = 0; $fileI <= $#FASTAfiles; $fileI++)
 			if(defined $currentContigID)
 			{
 				die unless(defined $currentContigRunningLength);
+				die "Duplicate contig ID in $currentContigID" if(defined $contig_2_length{$currentContigID});
 				$contig_2_length{$currentContigID} = $currentContigRunningLength;
 			}
 			$currentContigID = substr($contigID, 1);
@@ -179,6 +180,7 @@ for(my $fileI = 0; $fileI <= $#FASTAfiles; $fileI++)
 	if(defined $currentContigID)
 	{
 		die unless(defined $currentContigRunningLength);
+		die "Duplicate contig ID in $currentContigID" if(defined $contig_2_length{$currentContigID});		
 		$contig_2_length{$currentContigID} = $currentContigRunningLength;
 	}	
 }

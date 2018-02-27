@@ -13,6 +13,8 @@ use Cwd qw/getcwd abs_path/;
 use File::Copy;
 use Storable qw/dclone store retrieve/;
 use Math::Random;
+use File::stat;
+use Time::localtime;
 
 # TODO
 # REMOVE ONE SPECIES REMOVALL!!!
@@ -514,6 +516,28 @@ elsif($action eq 'analyzeJobI')
 	my $simulation_href = retrieve $simulation_href_fn;
 	evaluateOneSimulation($simulation_href);
 }
+elsif($action eq 'printVarietiesAndDirectories')
+{
+	my $n_simulations_file = $globalOutputDir . '/n_simulations.txt';
+	open(N, '<', $n_simulations_file) or die "Cannot open $n_simulations_file";
+	my $realizedN = <N>;
+	chomp($realizedN);
+	close(N);
+	die unless($realizedN =~ /^\d+$/);
+	
+	my $haveAllFiles = 0;
+	for(my $jobI = 0; $jobI < $realizedN; $jobI++)  
+	{
+		my $simulation_href_fn = $globalOutputDir . '/' . $jobI . '/simulationStore';
+		my $simulation_href = retrieve $simulation_href_fn;
+		
+		for(my $varietyI = 0; $varietyI <= $#{$simulation_href->{dbDirs_metamap}}; $varietyI++)
+		{
+			my $varietyName = $simulation_href->{inferenceDBs}[$varietyI][2];
+			print "Simulation $jobI - variety $varietyI - name $varietyName\n";
+		}
+	}
+}
 elsif($action eq 'analyzeAll')
 {
 	my $n_simulations_file = $globalOutputDir . '/n_simulations.txt';
@@ -523,6 +547,62 @@ elsif($action eq 'analyzeAll')
 	close(N);
 	die unless($realizedN =~ /^\d+$/);
 
+	# check that required files are present
+	my $haveAllFiles = 1;
+	for(my $jobI = 0; $jobI < $realizedN; $jobI++)  
+	{
+		my $simulation_href_fn = $globalOutputDir . '/' . $jobI . '/simulationStore';
+		my $simulation_href = retrieve $simulation_href_fn;
+		
+		for(my $varietyI = 0; $varietyI <= $#{$simulation_href->{dbDirs_metamap}}; $varietyI++)
+		{
+			my $varietyName = $simulation_href->{inferenceDBs}[$varietyI][2];
+					
+			# print "Check $varietyName\n";
+			# die if($varietyName =~ /_1/); # we still need to deal with this and remove the numerical indices for storing
+
+			my $simulation_results_dir = $simulation_href->{outputDirectory} . '/inference_' . $varietyName;
+		
+			my %expected_results_files = get_files_for_evaluation();
+
+			foreach my $methodName (keys %expected_results_files)
+			{
+				my $methodDetails = $expected_results_files{$methodName};
+				my $evaluationType = $methodDetails->[0];
+				my $f = $simulation_results_dir . '/' . $methodDetails->[1];
+				my $optional = $methodDetails->[2];
+				if(-e $f)
+				{ 
+					if($methodName =~ /meta/i)
+					{	
+						my $fh ;
+						open($fh, '<', $f) or die;
+						my $timestamp = ctime(stat($fh)->mtime);
+						# print "\t $f $timestamp\n";
+					}				
+				}
+				else
+				{
+
+					if($optional)
+					{
+						warn "Expected file $f for $methodName not present -- ignore.";
+					}
+					else
+					{
+						warn "Expected file $f for $methodName not present.";	
+						$haveAllFiles = 0;
+					}
+				}
+			}
+		}
+	}
+	
+	unless($haveAllFiles)
+	{
+		die "Not all inference files present, abort." ;
+	}
+	
 	my @n_reads_correct_byVariety_bySimulation;
 	my @n_reads_correct_byVariety_byLevel_bySimulation;;
 	my @freq_byVariety_byLevel_bySimulation;;
@@ -530,7 +610,6 @@ elsif($action eq 'analyzeAll')
 	
 	my %n_reads_correct_byVariety;
 	my %n_reads_correct_byVariety_byLevel;
-	my %n_reads_correct_byVariety_byLevel_byLength;
 	my %freq_byVariety_byLevel;
 	my @frequencyComparisons_bySimulation;
 	my @frequencyComparisons_details_bySimulation;
@@ -544,6 +623,8 @@ elsif($action eq 'analyzeAll')
 	# for(my $jobI = 0; $jobI < $realizedN; $jobI++)
 	for(my $jobI = 0; $jobI < $realizedN; $jobI++)  
 	{
+		my %n_reads_correct_byVariety_byLevel_byLength;
+
 		my $simulation_href_fn = $globalOutputDir . '/' . $jobI . '/simulationStore';
 		my $simulation_href = retrieve $simulation_href_fn;
 		my $frequencyComparison = {};
@@ -562,17 +643,34 @@ elsif($action eq 'analyzeAll')
 		# variety = fullDB/removeOne_genus ...
 		# label = MetaMap / Kraken ...
 		# category = read category ...
+
 		foreach my $variety (keys %n_reads_correct_byVariety_local)
 		{		
-			foreach my $label (keys %{$n_reads_correct_byVariety_local{$variety}})
+			foreach my $label (keys %{$n_reads_correct_byVariety_local{$variety}}) 
 			{
 				foreach my $category (keys %{$n_reads_correct_byVariety_local{$variety}{$label}})
 				{
+					# die Dumper([keys %{$n_reads_correct_byVariety_local{$variety}{$label}{$category}}]);
+						# 'attachedTo_species',
+						# 'N',
+						# 'missing',
+						# 'correct',
+						# 'attachedToDirectlyMappable'
+					
+					#die Dumper($jobI, $variety, $label, $category);
+					my $variety_forStore = $variety;
+					$variety_forStore =~ s/_\d+$//;
+					
+					if($variety_forStore ne $variety)
+					{
+						# die Dumper($variety, $variety_forStore);
+					}
+					
 					foreach my $key (keys %{$n_reads_correct_byVariety_local{$variety}{$label}{$category}})
 					{
 						my $value = $n_reads_correct_byVariety_local{$variety}{$label}{$category}{$key};
 						die unless(not ref($value));
-						$n_reads_correct_byVariety{$variety}{$label}{$category}{$key} += $value;
+						push(@{$n_reads_correct_byVariety{$variety_forStore}{$label}{$category}{$key}}, $value); # hopefully fixed
 					}
 					
 					my $d = $n_reads_correct_byVariety_local{$variety}{$label}{$category};
@@ -586,9 +684,9 @@ elsif($action eq 'analyzeAll')
 					my $CR = $d->{N} / $N; die unless(($CR >= 0) and ($CR <= 1));
 					my $accuracy = $d->{correct} / $d->{N}; die unless(($accuracy >= 0) and ($accuracy <= 1));
 					
-					$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety}{$label}{$category}{absolute}{CR} = $CR;
-					$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety}{$label}{$category}{absolute}{Accuracy} = $accuracy;
-					push(@{$callRate_and_accuracy_byReadCategory{$category}{$label}{absolute}}, [$CR, $accuracy, $accuracy]);
+					push(@{$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety_forStore}{$label}{$category}{absolute}{CR}}, $CR); # hopefully ok
+					push(@{$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety_forStore}{$label}{$category}{absolute}{Accuracy}}, $accuracy); # hopefully ok
+					push(@{$callRate_and_accuracy_byReadCategory{$category}{$label}{absolute}}, [$CR, $accuracy, $accuracy]); # hopefully ok
 					
 					my @keys_attachedTo = grep {$_ =~ /^attachedTo/} keys %$d;
 					die unless(scalar(@keys_attachedTo));
@@ -596,10 +694,10 @@ elsif($action eq 'analyzeAll')
 					my %localAttachedHash;
 					foreach my $key (@keys_attachedTo)
 					{
-						$localAttachedHash{$key} = $d->{$key} / $d->{N};
+						$localAttachedHash{$key} = $d->{$key} / $d->{N}; # hopefully ok
 					}	
 
-					push(@{$attachedTo_byReadCategory{$category}{$label}{absolute}}, \%localAttachedHash);
+					push(@{$attachedTo_byReadCategory{$category}{$label}{absolute}}, \%localAttachedHash); # hopefully ok
 				}
 			}
 		}
@@ -613,30 +711,35 @@ elsif($action eq 'analyzeAll')
 				{
 					foreach my $level (keys %{$n_reads_correct_byVariety_byLevel_local{$variety}{$label}{$category}})
 					{
+					
+						my $variety_forStore = $variety;
+						$variety_forStore =~ s/_\d+$//;							
+						
 						foreach my $key (keys %{$n_reads_correct_byVariety_byLevel_local{$variety}{$label}{$category}{$level}})
 						{
 							my $value = $n_reads_correct_byVariety_byLevel_local{$variety}{$label}{$category}{$level}{$key};
 							die unless(not ref($value));
-							$n_reads_correct_byVariety_byLevel{$variety}{$label}{$category}{$level}{$key} += $value;
+							push(@{$n_reads_correct_byVariety_byLevel{$variety_forStore}{$label}{$category}{$level}{$key}}, $value); # hopefully fixed
 						}
+
 
 						my $d = $n_reads_correct_byVariety_byLevel_local{$variety}{$label}{$category}{$level};
 						die unless(exists $d->{N});
 						die unless(exists $d->{missing});
 						die unless(exists $d->{correct});
-						die unless(exists $d->{correct_exactlyAtLevel});
+						die unless(exists $d->{correct_exactlyAtLevel}); 
 						my $N = $d->{N} + $d->{missing};
 						die unless($N > 0);
 						die unless($d->{N} > 0);
-						
+						 
 						my $CR = $d->{N} / $N; die unless(($CR >= 0) and ($CR <= 1));
 						my $accuracy = $d->{correct} / $d->{N}; die unless(($accuracy >= 0) and ($accuracy <= 1));
 						my $accuracy_exactlyAtLevel = $d->{correct_exactlyAtLevel} / $d->{N}; die unless(($accuracy_exactlyAtLevel >= 0) and ($accuracy_exactlyAtLevel <= 1));
 						
-						$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety}{$label}{$category}{$level}{CR} = $CR;
-						$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety}{$label}{$category}{$level}{Accuracy} = $accuracy;						
-						$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety}{$label}{$category}{$level}{AccuracyExactlyAtLevel} = $accuracy_exactlyAtLevel;						
-						push(@{$callRate_and_accuracy_byReadCategory{$category}{$label}{$level}}, [$CR, $accuracy, $accuracy_exactlyAtLevel]);						
+						push(@{$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety_forStore}{$label}{$category}{$level}{CR}}, $CR); # hopefully ok
+						push(@{$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety_forStore}{$label}{$category}{$level}{Accuracy}}, $accuracy);  # hopefully ok
+						push(@{$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety_forStore}{$label}{$category}{$level}{AccuracyExactlyAtLevel}}, $accuracy_exactlyAtLevel); # hopefully ok	
+						push(@{$callRate_and_accuracy_byReadCategory{$category}{$label}{$level}}, [$CR, $accuracy, $accuracy_exactlyAtLevel]);	 # hopefully ok			
 						
 						my @keys_attachedTo = grep {$_ =~ /^attachedTo/} keys %$d;
 						die unless(scalar(@keys_attachedTo));
@@ -647,8 +750,7 @@ elsif($action eq 'analyzeAll')
 							$localAttachedHash{$key} = $d->{$key} / $d->{N};
 						}	
 
-						push(@{$attachedTo_byReadCategory{$category}{$label}{$level}}, \%localAttachedHash);			
-
+						push(@{$attachedTo_byReadCategory{$category}{$label}{$level}}, \%localAttachedHash); # hopefully ok
 					}
 					
 					die unless(defined $n_reads_correct_byVariety_byLevel_byLength_local{$variety}{$label}{$category});
@@ -661,7 +763,7 @@ elsif($action eq 'analyzeAll')
 								my $value = $n_reads_correct_byVariety_byLevel_byLength_local{$variety}{$label}{$category}{$level}{$rL}{$key};
 								die Dumper($level, $rL, $key, $n_reads_correct_byVariety_byLevel_byLength_local{$variety}{$label}{$category}) unless(defined $value);
 								die unless(not ref($value));
-								$n_reads_correct_byVariety_byLevel_byLength{$variety}{$label}{$category}{$level}{$rL}{$key} += $value;							
+								push(@{$n_reads_correct_byVariety_byLevel_byLength{$variety}{$label}{$category}{$level}{$rL}{$key}}, $value);	# hopefully fixed
 							}
 							
 							my $d = $n_reads_correct_byVariety_byLevel_byLength_local{$variety}{$label}{$category}{$level}{$rL};
@@ -673,12 +775,18 @@ elsif($action eq 'analyzeAll')
 							my $CR = $d->{N} / $N; die unless(($CR >= 0) and ($CR <= 1));
 							my $accuracy = ($d->{N} > 0) ? ($d->{correct} / $d->{N}) : -1; die unless(($accuracy >= -1) and ($accuracy <= 1));
 							
-							push(@{$callRate_and_accuracy_byReadCategory_byLength{$category}{$label}{$level}{$rL}}, [$CR, $accuracy]);						
+							push(@{$n_reads_correct_byVariety_byLevel_byLength{$variety}{$label}{$category}{$level}{$rL}{totalN}}, $N);
+							push(@{$n_reads_correct_byVariety_byLevel_byLength{$variety}{$label}{$category}{$level}{$rL}{CR}}, $CR);
+							push(@{$n_reads_correct_byVariety_byLevel_byLength{$variety}{$label}{$category}{$level}{$rL}{accuracy}}, $accuracy);
+							
+							push(@{$callRate_and_accuracy_byReadCategory_byLength{$category}{$label}{$level}{$rL}}, [$CR, $accuracy]); # seems OK						
 						}				
 					}
 				}
 			}
 		}
+		
+		# print data for read-length plot
 		
 		open(BYREADLENGTH_FULLDB, '>', $globalOutputDir . '/_forPlot_byReadLength_fullDB') or die;
 		print BYREADLENGTH_FULLDB join("\t", qw/variety readCategory evaluationLevel method readLength Ntotal callRateAvg Ncalled accuracyAvg/), "\n";
@@ -693,15 +801,22 @@ elsif($action eq 'analyzeAll')
 					{
 						foreach my $rL (sort {$a <=> $b} keys %{$n_reads_correct_byVariety_byLevel_byLength{$variety}{$label}{$category}{$level}})
 						{
+							
 							my $d = $n_reads_correct_byVariety_byLevel_byLength{$variety}{$label}{$category}{$level}{$rL};
+							die Dumper('totalN', $level, $rL, $d) unless(exists $d->{totalN});
+							die Dumper('CR', $level, $rL, $d) unless(exists $d->{CR});
+							die Dumper('accuracy', $level, $rL, $d) unless(exists $d->{accuracy});
 							
-							die Dumper('N', $level, $rL, $d) unless(exists $d->{N});
-							die Dumper('missing', $level, $rL, $d) unless(exists $d->{missing});
-							die unless(exists $d->{correct});				
+							die unless(scalar(@{$d->{totalN}}));
+							die unless(scalar(@{$d->{CR}}));
+							die unless(scalar(@{$d->{accuracy}}));
 							
-							my $N = $d->{N} + $d->{missing}; die unless($d > 0);
-							my $CR = $d->{N} / $N; die unless(($CR >= 0) and ($CR <= 1));
-							my $accuracy = ($d->{N} > 0) ? ($d->{correct} / $d->{N}) : -1; die unless(($accuracy >= -1) and ($accuracy <= 1));
+							my $N = Util::mean(@{$d->{totalN}}); die unless($d > 0);
+							my $CR = Util::mean(@{$d->{CR}}); die unless(($CR >= 0) and ($CR <= 1));
+							my $accuracy = Util::mean(@{$d->{accuracy}}); die unless(($accuracy >= -1) and ($accuracy <= 1));
+							
+							die unless(scalar(@{$d->{totalN}}) == scalar(@{$d->{CR}}));
+							die unless(scalar(@{$d->{CR}}) == scalar(@{$d->{accuracy}}));
 							
 							print BYREADLENGTH_FULLDB join("\t",
 								$variety,
@@ -722,12 +837,15 @@ elsif($action eq 'analyzeAll')
 		close(BYREADLENGTH_FULLDB);
 		
 		
+		# the following is no x/y data, but summary stats of accuracy
 		foreach my $variety (keys %freq_byVariety_byLevel_local)
 		{			
 			foreach my $label (keys %{$freq_byVariety_byLevel_local{$variety}})
 			{
 				foreach my $level (keys %{$freq_byVariety_byLevel_local{$variety}{$label}})
 				{
+					#die Dumper("freqOK", $freq_byVariety_byLevel_local{$variety}{$label}) unless(exists $freq_byVariety_byLevel_local{$variety}{$label}{freqOK});
+					#die Dumper("L1", $freq_byVariety_byLevel_local{$variety}{$label}) unless(exists $freq_byVariety_byLevel_local{$variety}{$label}{L1});
 					foreach my $key (keys %{$freq_byVariety_byLevel_local{$variety}{$label}{$level}})
 					{
 						my $value = $freq_byVariety_byLevel_local{$variety}{$label}{$level}{$key};
@@ -735,11 +853,12 @@ elsif($action eq 'analyzeAll')
 						die unless((not ref($value)) or (ref($value) eq 'ARRAY'));
 						if(not ref($value))
 						{
-							$freq_byVariety_byLevel{$variety}{$label}{$level}{$key} += $value;
+							die "This should not happen!";
+							$freq_byVariety_byLevel{$variety}{$label}{$level}{$key} += $value; # this should be OK
 						}
 						else
-						{
-							push(@{$freq_byVariety_byLevel{$variety}{$label}{$level}{$key}}, @$value);
+						{ 
+							push(@{$freq_byVariety_byLevel{$variety}{$label}{$level}{$key}}, @$value); # hopefully fixed
 						}
 					}
 				}
@@ -749,7 +868,10 @@ elsif($action eq 'analyzeAll')
 		push(@n_reads_correct_byVariety_bySimulation, \%n_reads_correct_byVariety_local);
 		push(@n_reads_correct_byVariety_byLevel_bySimulation, \%n_reads_correct_byVariety_byLevel_local);
 		push(@freq_byVariety_byLevel_bySimulation, \%freq_byVariety_byLevel_local);		
-	}
+	} ## end read data from one simulation
+
+	## output summary stats
+
 	
 
 	
@@ -799,17 +921,27 @@ elsif($action eq 'analyzeAll')
 					my $avg_accuracy_exactlyAtLevel = Util::mean(@accuracies_exactlyAtLevel);
 					print BARPLOTSREADCAT join("\t", $readCategory, $level, $label, $avg_callRate, $avg_accuracy, $avg_accuracy_exactlyAtLevel, join(';', @callRates), join(';', @accuracies), join(';', @accuracies_exactlyAtLevel)), "\n";
 					
-					my @attachmentHashes = @{$attachedTo_byReadCategory{$readCategory}{$label}{$level}};
+					my @attachmentHashes = @{$attachedTo_byReadCategory{$readCategory}{$label}{$level}};				
+					foreach my $h (@attachmentHashes)
+					{
+						foreach my $k (keys %$h)
+						{
+							$categories_attachment_forPrint{$k}++;						
+						}
+					}
+					
 					my %valuesInHashes;
 					foreach my $h (@attachmentHashes)
 					{
 						my $s_nonDirectlyAttached = 0;
-						foreach my $k (keys %$h)
+						foreach my $k (keys %categories_attachment_forPrint)
 						{
-							push(@{$valuesInHashes{$k}}, $h->{$k});
+							my $v = (exists $h->{$k}) ? $h->{$k} : 0;
+														
+							push(@{$valuesInHashes{$k}}, $v);
 							if($k ne 'attachedToDirectlyMappable')
 							{
-								$s_nonDirectlyAttached += $h->{$k};
+								$s_nonDirectlyAttached += $v;
 							}
 						}
 						die unless(abs(1 - $s_nonDirectlyAttached) <= 1e-3);
@@ -819,8 +951,15 @@ elsif($action eq 'analyzeAll')
 					{
 						my $v = Util::mean(@{$valuesInHashes{$k}});
 						$values_attachment_forPrint{$readCategory}{$label}{$level}{$k} = $v;
-						$categories_attachment_forPrint{$k}++;
+						die unless(exists $categories_attachment_forPrint{$k});
 					}
+					
+					# my @k_attachedTo = grep {$_ =~ /attachedTo_/) keys %valuesInHashes;
+					# my $n_attachedTo = scalar(@{$valuesInHashes{$k_attachedTo[0]}});
+					# foreach my $k (keys %valuesInHashes)
+					# {
+						# my $n_attachedTo_this = 
+					# }
 					
 					foreach my $rL (sort {$a <=> $b} keys %{$callRate_and_accuracy_byReadCategory_byLength{$readCategory}{$label}{$level}})
 					{
@@ -871,10 +1010,10 @@ elsif($action eq 'analyzeAll')
 				}
 			}
 		}
-		close(BARPLOTS_ATTACHEDTO);
-				
+		close(BARPLOTS_ATTACHEDTO);	
 	}
-
+	
+	# output data for bar plots (full DB?)
 	{
 		my %_methods;
 		my %_readStratification;
@@ -934,8 +1073,8 @@ elsif($action eq 'analyzeAll')
 				my $hf2_before = $#header_fields_2_absolutelyCorrect;
 				foreach my $method (@methods)
 				{
-					push(@header_fields_2_absolutelyCorrect, $method, '', '', '', '');		
-					push(@header_fields_3_absolutelyCorrect, 'Ntotal', 'OKtotal', 'NmadeCall', 'OKmadeCall', 'noCall');
+					push(@header_fields_2_absolutelyCorrect, $method, '', '', '', '', '');		
+					push(@header_fields_3_absolutelyCorrect, 'nExperiments', 'Ntotal_avg', 'OKtotal_avg', 'NmadeCall_avg', 'OKmadeCall_avg', 'noCall_avg');
 				}
 				my $hf2_after = $#header_fields_2_absolutelyCorrect;
 				my $requiredFields = $hf2_after - $hf2_before;
@@ -957,38 +1096,77 @@ elsif($action eq 'analyzeAll')
 				{
 					foreach my $methodName (@methods)
 					{
-						my $missing = 0;
-						my $NmadeCall = 0;
-						my $correct = 0;
+						my @outer_missing;
+						my @outer_NmadeCall;
+						my @outer_correct;
 						
-						my $Ntotal = 0;
-						my $percOK_madeCall = 0;
-						my $percOK_madeCall_fullAccuracy = 0;
-						my $percOK_total = 0;
-						my $perc_missing = 0;
-						my $callRate = 'NA';
+						my @Ntotal;
+						my @percOK_madeCall;
+						my @percOK_madeCall_fullAccuracy;
+						my @percOK_total;
+						my @perc_missing;
+						my @callRate;
 						
 						if(exists $n_reads_correct_byVariety{$variety}{$methodName}{$readLevel})
 						{
-							$missing =  $n_reads_correct_byVariety{$variety}{$methodName}{$readLevel}{missing};
-							$NmadeCall =  $n_reads_correct_byVariety{$variety}{$methodName}{$readLevel}{N};
-							$correct =  $n_reads_correct_byVariety{$variety}{$methodName}{$readLevel}{correct};
+							my @components_missing =  @{$n_reads_correct_byVariety{$variety}{$methodName}{$readLevel}{missing}};
+							my @components_NmadeCall =  @{$n_reads_correct_byVariety{$variety}{$methodName}{$readLevel}{N}};
+							my @components_correct =  @{$n_reads_correct_byVariety{$variety}{$methodName}{$readLevel}{correct}};
 							
-							$Ntotal =  $missing + $NmadeCall;
+							die unless(scalar(@components_missing) == scalar(@components_NmadeCall));
+							die unless(scalar(@components_NmadeCall) == scalar(@components_correct));
 							
-						}
+							for(my $componentI = 0; $componentI <= $#components_missing; $componentI++)
+							{
+								my $i_missing = $components_missing[$componentI];
+								my $i_NmadeCall = $components_NmadeCall[$componentI];
+								my $i_correct = $components_correct[$componentI];
+								
+								my $i_Ntotal =  $i_missing + $i_NmadeCall;
+					
+								my $i_percOK_madeCall = sprintf("%.2f", ($i_correct / $i_NmadeCall)) if($i_NmadeCall > 0);
+								my $i_percOK_madeCall_fullAccuracy = ($i_correct / $i_NmadeCall) if($i_NmadeCall > 0);
+								my $i_percOK_total = sprintf("%.2f", ($i_correct / $i_Ntotal)) if($i_Ntotal > 0);
+								my $i_perc_missing = sprintf("%.2f", ($i_missing / ($i_Ntotal))) if($i_Ntotal > 0);						
+								my $i_callRate = $i_NmadeCall / $i_Ntotal if($i_Ntotal > 0);	
 
-						$percOK_madeCall = sprintf("%.2f", ($correct / $NmadeCall)) if($NmadeCall > 0);
-						$percOK_madeCall_fullAccuracy = ($correct / $NmadeCall) if($NmadeCall > 0);
-						$percOK_total = sprintf("%.2f", ($correct / $Ntotal)) if($Ntotal > 0);
-						$perc_missing = sprintf("%.2f", ($missing / ($Ntotal))) if($Ntotal > 0);
+								if($i_Ntotal > 0)
+								{
+									push(@Ntotal, $i_Ntotal);
+									push(@outer_NmadeCall, $i_NmadeCall);
+									push(@percOK_madeCall, $i_percOK_madeCall);
+									push(@percOK_total, $i_percOK_total);
+									push(@perc_missing, $i_perc_missing);
+									push(@callRate, $i_callRate);
+									push(@percOK_madeCall_fullAccuracy, $i_percOK_madeCall_fullAccuracy);
+								}
+							}
+				
+						}
 						
-						$callRate = $NmadeCall / $Ntotal if($Ntotal > 0);
+						if(scalar(@Ntotal))
+						{
+							die unless(scalar(@outer_NmadeCall) == scalar(@Ntotal));
+							die unless(scalar(@percOK_madeCall) == scalar(@Ntotal));
+							die unless(scalar(@percOK_total) == scalar(@Ntotal));
+							die unless(scalar(@perc_missing) == scalar(@Ntotal));
+							die unless(scalar(@callRate) == scalar(@Ntotal));
+							die unless(scalar(@percOK_madeCall_fullAccuracy) == scalar(@Ntotal));
+						}
 						
-						push(@output_fields_absolutelyCorrect, $Ntotal, $percOK_total, $NmadeCall, $percOK_madeCall, $perc_missing);
+						my $Ntotal = (scalar(@Ntotal)) ? sprintf("%.2f", Util::mean(@Ntotal)) : 'NA';
+						my $NmadeCall = (scalar(@Ntotal)) ? sprintf("%.2f", Util::mean(@outer_NmadeCall)) : 'NA';
+						my $percOK_madeCall = (scalar(@Ntotal)) ? sprintf("%.2f", Util::mean(@percOK_madeCall)) : 'NA';
+						my $percOK_total = (scalar(@Ntotal)) ? sprintf("%.2f", Util::mean(@percOK_total)) : 'NA';
+						my $perc_missing = (scalar(@Ntotal)) ? sprintf("%.2f", Util::mean(@perc_missing)) : 'NA';
+						my $callRate = (scalar(@Ntotal)) ? sprintf("%.2f", Util::mean(@callRate)) : 'NA';
+						my $percOK_madeCall_fullAccuracy = (scalar(@Ntotal)) ? sprintf("%.2f", Util::mean(@percOK_madeCall_fullAccuracy)) : 'NA';
+						
+						push(@output_fields_absolutelyCorrect, scalar(@Ntotal), $Ntotal, $percOK_total, $NmadeCall, $percOK_madeCall, $perc_missing);
 						
 						print BARPLOTSFULLDB join("\t", $readLevel, $variety, $methodName, 'absolute', $callRate, $percOK_madeCall_fullAccuracy), "\n";
 
+						print "Generating ", $globalOutputDir . '/_readsAbsolutelyCorrect', " $readLevel $variety $methodName: averaging over ", scalar(@Ntotal), " iterations.\n";
 					}
 				}
 			
@@ -1010,8 +1188,8 @@ elsif($action eq 'analyzeAll')
 				my $hf2_before = $#header_fields_2_byLevelCorrect;
 				foreach my $method (@methods)
 				{
-					push(@header_fields_2_byLevelCorrect, $method, '', '', '', '');							
-					push(@header_fields_3_byLevelCorrect, 'Ntotal', 'OKtotal', 'NmadeCall', 'OKmadeCall', 'noCall');
+					push(@header_fields_2_byLevelCorrect, $method, '', '', '', '', '');							
+					push(@header_fields_3_byLevelCorrect, 'nExperiments', 'Ntotal_avg', 'OKtotal_avg', 'NmadeCall_avg', 'OKmadeCall_avg', 'noCall_avg');
 				}
 				my $hf2_after = $#header_fields_2_byLevelCorrect;
 				my $requiredFields = $hf2_after - $hf2_before;
@@ -1033,59 +1211,110 @@ elsif($action eq 'analyzeAll')
 					foreach my $variety (@varieties)
 					{
 						foreach my $methodName (@methods)
-						{				
-							my $missing = 0;
+						{											
+							my @N_total;
+							my @N_total_truthDefined;
 							
-							my $N_total = 0;
-							my $N_total_truthDefined = 0;
+							my @N_madeCall;
+							my @N_madeCall_truthDefined;
 							
-							my $N_madeCall = 0;
-							my $N_madeCall_truthDefined = 0;
+							my @correct;
+							my @correct_truthDefined;
+							my @callRate;
 							
-							my $correct = 0;
-							my $correct_truthDefined = 0;
-							my $callRate = 'NA';
-							
-							my $percOK_total = 0;
-							my $percOK_madeCall_fullAccuracy = 0;
-							my $percOK_total_truthDefined = 0;							
-							my $percOK_madeCall = 0;
-							my $percOK_madeCall_truthDefined = 0;
-							my $percMissing = 0;
+							my @percOK_total;
+							my @percOK_madeCall_fullAccuracy;
+							my @percOK_total_truthDefined;							
+							my @percOK_madeCall;
+							my @percOK_madeCall_truthDefined;
+							my @percMissing;
 							
 							if(exists $n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$readLevel}{$evaluationLevel})
 							{
-								$N_madeCall = $n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$readLevel}{$evaluationLevel}{N};
-								$N_madeCall_truthDefined = $n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$readLevel}{$evaluationLevel}{N_truthDefined};
+																
+								my @components_N_madeCall = @{$n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$readLevel}{$evaluationLevel}{N}};
+								my @components_N_truthDefined = @{$n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$readLevel}{$evaluationLevel}{N_truthDefined}};
+								my @components_correct = @{$n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$readLevel}{$evaluationLevel}{correct}};
+								my @components_correct_truthDefined = @{$n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$readLevel}{$evaluationLevel}{correct_truthDefined}};
+								my @components_missing = @{$n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$readLevel}{$evaluationLevel}{missing}};
+								die unless(all{scalar(@$_) == scalar(@components_N_madeCall)} (\@components_N_madeCall, \@components_N_truthDefined, \@components_correct, \@components_N_truthDefined, \@components_missing));
 								
-								$correct = $n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$readLevel}{$evaluationLevel}{correct};
-								$correct_truthDefined = $n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$readLevel}{$evaluationLevel}{correct_truthDefined};
-								
-								$missing = $n_reads_correct_byVariety_byLevel{$variety}{$methodName}{$readLevel}{$evaluationLevel}{missing};
-								
-								$N_total = $N_madeCall + $missing;
-								$N_total_truthDefined = $N_madeCall_truthDefined + $missing;
+								for(my $componentI = 0; $componentI <= $#components_missing; $componentI++)
+								{
+									my $i_N_madeCall = $components_N_madeCall[$componentI];
+									my $i_N_madeCall_truthDefined = $components_N_truthDefined[$componentI];
+									my $i_correct = $components_correct[$componentI];
+									my $i_correct_truthDefined = $components_correct_truthDefined[$componentI];
+									my $i_missing = $components_missing[$componentI];
+									
+									my $i_Ntotal =  $i_missing + $i_N_madeCall;
+						
+									my $i_percOK_madeCall_fullAccuracy = ($i_correct / $i_N_madeCall) if($i_N_madeCall > 0);
+									my $i_percOK_total = ($i_correct / $i_Ntotal) if($i_Ntotal > 0);
+									my $i_perc_missing = ($i_missing / $i_Ntotal) if($i_Ntotal > 0);						
+									
+									# die Dumper("Weird - N is $N, but missing is $missing?", [$readLevel, $evaluationLevel, $variety, $methodName]) unless($missing <= $N);
+																		
+									my $i_N_total_truthDefined = $i_N_madeCall_truthDefined + $i_missing;									
+									
+									my $i_callRate = $i_N_madeCall / $i_Ntotal if($i_Ntotal > 0);
+									my $i_percOK_total_truthDefined = sprintf("%.2f", ($i_correct_truthDefined / $i_N_total_truthDefined)) if($i_N_total_truthDefined > 0);
+									
+									my $i_percOK_madeCall = ($i_correct / $i_N_madeCall) if($i_N_madeCall > 0);
+																
+																
+									my $i_percOK_madeCall_truthDefined = ($i_correct_truthDefined / $i_N_madeCall_truthDefined) if($i_N_madeCall_truthDefined > 0);
+									
+									my $i_percMissing = sprintf("%.2f", ($i_missing / $i_Ntotal)) if($i_Ntotal > 0);
+									
+									push(@N_total, $i_Ntotal);
+									push(@N_total_truthDefined, $i_N_total_truthDefined);
+									push(@N_madeCall, $i_N_madeCall);
+									push(@N_madeCall_truthDefined, $i_N_madeCall_truthDefined);
+									push(@callRate, $i_callRate);
+									push(@percOK_total, $i_percOK_total);
+									push(@percOK_madeCall_fullAccuracy, $i_percOK_madeCall_fullAccuracy);
+									push(@percOK_total_truthDefined, $i_percOK_total_truthDefined);
+									push(@percOK_madeCall, $i_percOK_madeCall);
+									push(@percMissing, $i_percMissing);
+									push(@percOK_madeCall_truthDefined, $i_percOK_madeCall_truthDefined);
+								}
 							}		
 
-							print "N $N_total \n";
-							
-							
-							# die Dumper("Weird - N is $N, but missing is $missing?", [$readLevel, $evaluationLevel, $variety, $methodName]) unless($missing <= $N);
-							
-							$callRate = $N_madeCall / $N_total if($N_total > 0);
-							$percOK_total = sprintf("%.2f", ($correct / $N_total)) if($N_total > 0);
-							$percOK_total_truthDefined = sprintf("%.2f", ($correct_truthDefined / $N_total_truthDefined)) if($N_total_truthDefined > 0);
-							
-							$percOK_madeCall = sprintf("%.2f", ($correct / $N_madeCall)) if($N_madeCall > 0);
-							$percOK_madeCall_fullAccuracy = ($correct / $N_madeCall) if($N_madeCall > 0);
-							$percOK_madeCall_truthDefined = sprintf("%.2f", ($correct_truthDefined / $N_madeCall_truthDefined)) if($N_madeCall_truthDefined > 0);
-							
-							$percMissing = sprintf("%.2f", ($missing / $N_total)) if($N_total > 0);
-														
 							push(@header_fields_3_byLevelCorrect, 'Ntotal', 'OKtotal', 'NmadeCall', 'OKmadeCall', 'noCall');
 
-												
+							if(scalar(@callRate))
+							{
+								die unless(scalar(@percOK_madeCall_fullAccuracy) == scalar(@callRate));
+								die unless(scalar(@N_total) == scalar(@callRate));
+								die unless(scalar(@N_total_truthDefined) == scalar(@callRate));
+								die unless(scalar(@N_madeCall) == scalar(@callRate));
+								die unless(scalar(@N_madeCall_truthDefined) == scalar(@callRate));
+								die unless(scalar(@percOK_total) == scalar(@callRate));
+								die unless(scalar(@percOK_total_truthDefined) == scalar(@callRate));
+								die unless(scalar(@percOK_madeCall) == scalar(@callRate));
+								die unless(scalar(@callRate) == scalar(@callRate));
+								die unless(scalar(@percOK_madeCall_truthDefined) == scalar(@callRate));
+								die unless(scalar(@percMissing) == scalar(@callRate));
+							}
+						
+							my $callRate = (scalar(@callRate)) ? Util::mean(@callRate) : 'NA';
+							my $percOK_madeCall_fullAccuracy = (scalar(@callRate)) ? Util::mean(@percOK_madeCall_fullAccuracy) : 'NA';
+							
+							my $N_total = (scalar(@callRate)) ? Util::mean(@N_total) : 'NA';
+							my $N_total_truthDefined = (scalar(@callRate)) ? Util::mean(@N_total_truthDefined) : 'NA';
+							
+							my $N_madeCall = (scalar(@callRate)) ? Util::mean(@N_madeCall) : 'NA';
+							my $N_madeCall_truthDefined = (scalar(@callRate)) ? Util::mean(@N_madeCall_truthDefined) : 'NA';						 	
+							
+							my $percOK_total = (scalar(@callRate)) ? Util::mean(@percOK_total) : 'NA';
+							my $percOK_total_truthDefined = (scalar(@callRate)) ? Util::mean(@percOK_total_truthDefined) : 'NA';
+							my $percOK_madeCall = (scalar(@callRate)) ? Util::mean(@percOK_madeCall) : 'NA';
+							my $percOK_madeCall_truthDefined = (scalar(@callRate)) ? Util::mean(@percOK_madeCall_truthDefined) : 'NA';
+							my $percMissing = (scalar(@callRate)) ? Util::mean(@percMissing) : 'NA';
+							
 							push(@output_fields_byLevelCorrect,
+								scalar(@callRate),
 								($N_total ne $N_total_truthDefined) ? join(' / ', $N_total, $N_total_truthDefined) : $N_total,
 								($percOK_total ne $percOK_total_truthDefined) ? join(' / ', $percOK_total, $percOK_total_truthDefined) : $percOK_total, 
 								($N_madeCall ne $N_madeCall_truthDefined) ? join(' / ', $N_madeCall, $N_madeCall_truthDefined) : $N_madeCall,
@@ -1093,7 +1322,9 @@ elsif($action eq 'analyzeAll')
 								$percMissing
 							);
 							
-							print BARPLOTSFULLDB join("\t", $readLevel, $variety, $methodName, $evaluationLevel, $callRate, $percOK_madeCall_fullAccuracy), "\n";						
+							print "Generating ", $globalOutputDir . '/_forPlot_barplots_fullDB', " $readLevel $variety $methodName: averaging over ", scalar(@callRate), " iterations.\n";
+						 
+							print BARPLOTSFULLDB join("\t",  $readLevel, $variety, $methodName, $evaluationLevel, $callRate, $percOK_madeCall_fullAccuracy), "\n";						
 						}
 					}
 					print READSCORRECTBYLEVEL join("\t", @output_fields_byLevelCorrect), "\n";
@@ -1102,10 +1333,13 @@ elsif($action eq 'analyzeAll')
 			
 			close(READSCORRECTBYLEVEL);
 		}
+		
+		close(BARPLOTSFULLDB);
+
 	}
 	
-	close(BARPLOTSFULLDB);
 
+	# print frequency evaluation text tables and data for XY plots
 	{
 		my %_methods;
 		my %_readStratification;
@@ -1138,8 +1372,8 @@ elsif($action eq 'analyzeAll')
 			my $hf2_before = $#header_fields_2_freqCorrect;
 			foreach my $method (@methods)
 			{
-				push(@header_fields_2_freqCorrect, $method, '');	
-				push(@header_fields_3_freqCorrect, 'fCorrect', 'L1');					
+				push(@header_fields_2_freqCorrect, $method, '', '');	
+				push(@header_fields_3_freqCorrect, 'nExperiments', 'fCorrect_avg', 'L1_acg');					
 			}
 			
 			my $hf2_after = $#header_fields_2_freqCorrect;
@@ -1161,8 +1395,9 @@ elsif($action eq 'analyzeAll')
 			foreach my $variety (@varieties)
 			{				
 				foreach my $methodName (@methods)
-				{				 
-					my $freqOK = 'NA';
+				{		
+					my $n = 0;
+					my $M_freqOK = 'NA';
 					my $M_AVGRE = 'NA';
 					my $M_RRMSE = 'NA';
 					my $M_L1 = 'NA';
@@ -1170,14 +1405,18 @@ elsif($action eq 'analyzeAll')
 					
 					if(exists $freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel})
 					{
-						$freqOK = $freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{correct}/$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{total};
+						$n = scalar(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{freqOK}});
+						die Dumper("Count mismatch", scalar(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{freqOK}}), scalar(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{L1}})) unless(scalar(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{freqOK}}) == scalar(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{L1}}));
+						
+						# $freqOK = $freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{correct}/$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{total};
+						$M_freqOK = sum(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{freqOK}}) / scalar(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{freqOK}});
 						$M_AVGRE = sum(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{AVGRE}}) / scalar(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{AVGRE}});
 						$M_RRMSE = sum(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{RRMSE}}) / scalar(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{RRMSE}});
 						$M_L1 = sum(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{L1}}) / scalar(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{L1}});
 						$M_L2 = sum(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{L2}}) / scalar(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{L2}});
 					}
 					
-					push(@output_fields_freqCorrect, $freqOK, $M_L1);
+					push(@output_fields_freqCorrect, $n, $M_freqOK, $M_L1);
 				}				
 			}	
 			
@@ -1492,9 +1731,13 @@ sub evaluateOneSimulation
 	my %expected_results_files = get_files_for_evaluation();
 	for(my $varietyI = 0; $varietyI <= $#{$simulation_href->{dbDirs_metamap}}; $varietyI++)
 	{
+		# last if($varietyI > 2);
+		
 		my $varietyName = $simulation_href->{inferenceDBs}[$varietyI][2];
 		print "Analyse $varietyName\n";
-		die if($varietyName =~ /_1/); # we still need to deal with this and remove the numerical indices for storing
+		
+		# die if($varietyName =~ /_1/);
+		# last if($varietyName =~ /_3/);
 		
 		$n_reads_correct_byVariety->{$varietyName} = {} unless(defined $n_reads_correct_byVariety->{$varietyName});
 		$n_reads_correct_byVariety_byLevel->{$varietyName} = {} unless(defined $n_reads_correct_byVariety_byLevel->{$varietyName});
@@ -1967,7 +2210,9 @@ sub doMetaMap
 	my $file_res_classification = $file_mappings . '/resources_classification';
 	
 	die unless(-e $DB.'/DB.fa');
+	# my $cmd_map = qq(/usr/bin/time -v $metamap_bin mapDirectly --all --maxmemory 20 -r $DB/DB.fa -q $reads -m 2000 --pi 80 -o $file_mappings &> file_res_mapping);
 	my $cmd_map = qq(/usr/bin/time -v $metamap_bin mapDirectly --all -r $DB/DB.fa -q $reads -m 2000 --pi 80 -o $file_mappings &> file_res_mapping);
+	print "Now executing: $cmd_map\n"; # todo remove?
 	# $cmd_map = qq(/usr/bin/time -v $metamap_bin mapDirectly --all -r $DB/DB.fa -q $reads -m 2000 --pi 80 -o $file_mappings);
 	system($cmd_map) and die "Cannot execute $cmd_map";
 	die "No MetaMap mappings -- $file_mappings" unless(-e $file_mappings);

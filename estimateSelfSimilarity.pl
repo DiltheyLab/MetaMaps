@@ -86,17 +86,18 @@ elsif($mode eq 'prepareFromScratch')
 	(mkdir($outputDir_results) or die "Cannot mkdir $outputDir") unless(-d $outputDir_results);
 
 	print "Prepare self-similarity computation from scratch - output directory $outputDir\n";
-	
+
 	# read taxonID -> contigs
 	my %taxonID_2_contigs;
 	my %contigLength;
 	Util::read_taxonIDs_and_contigs($DB, \%taxonID_2_contigs, \%contigLength);
-	
+
 	# sanity check: get contig lengths from actual DB
 	my $actualContigLengths_href = Util::extractContigLengths($file_ref);
 	die Dumper("Discrepancy number of contig ID keys", scalar(keys %$actualContigLengths_href), scalar(keys %contigLength)) unless(scalar(keys %$actualContigLengths_href) == scalar(keys %contigLength));
 	die unless(all {$contigLength{$_} == $actualContigLengths_href->{$_}} keys %contigLength);
 
+	
 	# read taxonomy
 	my $taxonomy = taxTree::readTaxonomy($taxonomyDir);
 

@@ -1206,7 +1206,15 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 		std::cerr << "\t" << "Total reads we'd like to add: " << allTaxa_wantAdditionalReads << "; can spread (max.): " << nUnmapped << "; scaling factor: " << addReads_scalingFactor << "\n";
 
 		double leaveUnassigned = nUnmapped - (allTaxa_wantAdditionalReads * addReads_scalingFactor);
-		assert(leaveUnassigned >= 0);
+		if(!(leaveUnassigned >= -1e-5))
+		{
+			std::cerr << "Warning: leaveUnassigned = " << leaveUnassigned << "\n" << std::flush;
+		}
+		assert(leaveUnassigned >= -1e-5);
+		if(leaveUnassigned < 0)
+		{
+			leaveUnassigned = 0; 
+		}
 		double leaveUnassignedProp = leaveUnassigned / nReadsMappable;
 		assert((leaveUnassignedProp >= 0) && (leaveUnassignedProp <= 1));
 
