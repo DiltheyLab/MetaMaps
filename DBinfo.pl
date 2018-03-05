@@ -13,13 +13,15 @@ $| = 1;
 use taxTree;
 use Util;
 
-unless(scalar(@ARGV) == 2)
+unless(scalar(@ARGV) >= 2)
 {
 	print_help();
 }
 
 my $DB = $ARGV[0];
 my $reportLevel = $ARGV[1];
+my $limitTo1 = $ARGV[2];
+my $limitTo2 = $ARGV[3];
 
 my %taxonID_2_contigs;
 my %contigLength;
@@ -43,16 +45,22 @@ foreach my $contigID (keys %contigLength)
 		$taxonID_ranks{$rank} = taxTree::taxon_id_get_name($nodeID, $taxonomy);
 	}
 	
+	if($limitTo1)
+	{
+		next unless($taxonID_ranks{$limitTo1} eq $limitTo2);
+	}
 	$taxonID_ranks{$reportLevel} = 'Undefined' unless(defined $taxonID_ranks{$reportLevel});
 	
 	$report{$taxonID_ranks{$reportLevel}}[0]++;
 	$report{$taxonID_ranks{$reportLevel}}[1] += $contigLength{$contigID};
+	$report{$taxonID_ranks{$reportLevel}}[2]{$taxonID}++;
 }
 
 print "\nDB statistics at level '$reportLevel':\n";
 foreach my $v (sort keys %report)
 {
-	print "\t - ${v}: $report{$v}[0] genomes, ", sprintf("%.2f", $report{$v}[1] / (1024**2)), "mb.\n";
+	my $n_genomes = scalar(keys %{$report{$v}[2]});
+	print "\t - ${v}: $n_genomes genomes ($report{$v}[0] contigs), ", sprintf("%.2f", $report{$v}[1] / (1024**2)), "mb.\n";
 }
 print "\n";
 

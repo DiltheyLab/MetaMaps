@@ -227,6 +227,7 @@ foreach my $config (['bwa_pacbio', '/data/projects/phillippy/projects/mash_map/J
 
 	# gi 2 taxon ID
 
+	# also see /data/projects/phillippy/projects/MetaMap/util/annotateHMPTruthTablesWithNCs.pl, where these files are being used
 	print "Reading gi-2-taxon...\n";
 	unless(-e '/data/projects/phillippy/projects/mashsim/db/gi_taxid_nucl.dmp.HMP')
 	{
@@ -268,6 +269,7 @@ foreach my $config (['bwa_pacbio', '/data/projects/phillippy/projects/mash_map/J
 	$gi_2_taxon{126640109} = '400667';
 	$gi_2_taxon{161510924} = '451516';
 	$gi_2_taxon{32470532} = '176280';
+	
 	# $gi_2_taxon{148642060} = '420247';
 				
 	open(OUT_PERREAD, '>', $fn_out_reads) or die "Cannot open file $fn_out_reads";
