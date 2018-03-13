@@ -5,6 +5,7 @@ use Data::Dumper;
 use List::Util qw/all/;
 use List::MoreUtils qw/mesh/;
 use taxTree;
+use Statistics::Basic qw/correlation/;
 
 my @evaluateAccuracyAtLevels = qw/species genus family superkingdom/;
 {
@@ -20,7 +21,7 @@ sub getEvaluationLevels
 my %_cache_prepare_masterTaxonomy_withX_taxonomies;
 sub prepare_masterTaxonomy_withX
 {
-	my $masterTaxonomy_dir = shift;
+	my $masterTaxonomy_dir = shift; 
 	my $taxonomyWithX = shift;
 
 	my $masterTaxonomy;
@@ -803,6 +804,9 @@ sub distributionLevelComparison
 		
 		my $L1_sum = 0;
 		my $L2_sum = 0;
+		my @is_bigger0;
+		my @should_bigger0;
+		
 		my %joint_taxonIDs = map {$_ => 1} ((keys %{$distribution_inferred->{$lookupKey_level_InInference}}), (keys %{$distribution_truth->{$level}}));
 		foreach my $taxonID (keys %joint_taxonIDs)
 		{
@@ -819,10 +823,19 @@ sub distributionLevelComparison
 			}
 			
 			$frequencyComparison_href->{$label}{$level}{$taxonID} = [$shouldBeFreq, $isFreq];
+			
+			if(($shouldBeFreq > 0) or ($isFreq > 0))
+			{
+				push(@should_bigger0, $shouldBeFreq);			
+				push(@is_bigger0, $isFreq);
+			}
 		}
-		
+		die unless(scalar(@should_bigger0) == scalar(@is_bigger0));
 		my $L1 = $L1_sum;
 		my $L2 = sqrt($L2_sum);
+		my $r = 0+correlation( \@should_bigger0, \@is_bigger0 );
+		die Dumper("Weird r", $r, \@should_bigger0, \@is_bigger0) unless(($r >= -1*(1+1e-5)) and ($r <= 1+1e-5));
+		my $r2 = $r ** 2;
 		
 		my $AVGRE *= (1 / scalar(keys %{$distribution_inferred->{$lookupKey_level_InInference}}));
 		my $RRMSE *= (1 / scalar(keys %{$distribution_inferred->{$lookupKey_level_InInference}}));
@@ -840,9 +853,10 @@ sub distributionLevelComparison
 			
 			push(@{$external_comparison->{$label}{$level}{freqOK}}, $freqOK);
 			push(@{$external_comparison->{$label}{$level}{AVGRE}}, $AVGRE);
-			push(@{$external_comparison->{$label}{$level}{RRMSE}}, $RRMSE);
+			push(@{$external_comparison->{$label}{$level}{RRMSE}}, $RRMSE); 
 			push(@{$external_comparison->{$label}{$level}{L1}}, $L1);
 			push(@{$external_comparison->{$label}{$level}{L2}}, $L2);
+			push(@{$external_comparison->{$label}{$level}{r2}}, $r2);
 		}
 	}		
 }			

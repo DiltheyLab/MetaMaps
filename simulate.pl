@@ -143,6 +143,7 @@ my $coverageMode = "equal";
 my $targetTotalSimulationInGigabytes;
 my $desiredTaxa;
 my $coverageTargetsAreOrganismAbundances = 0;
+my $ignoreFullDB;
 GetOptions (
 	'DB:s' => \$DB,
 	'action:s' => \$action,
@@ -157,6 +158,7 @@ GetOptions (
 	'coverageMode:s' => \$coverageMode,
 	'coverageTargetsAreOrganismAbundances:s' => \$coverageTargetsAreOrganismAbundances,
 	'targetTotalSimulationInGigabytes:s' => \$targetTotalSimulationInGigabytes,
+	'ignoreFullDB:s' => \$ignoreFullDB,
 );
 
 die unless(($coverageMode eq 'equal') or ($coverageMode eq 'logNormal') or ($coverageMode eq 'file'));
@@ -557,7 +559,15 @@ elsif($action eq 'analyzeAll')
 		for(my $varietyI = 0; $varietyI <= $#{$simulation_href->{dbDirs_metamap}}; $varietyI++)
 		{
 			my $varietyName = $simulation_href->{inferenceDBs}[$varietyI][2];
-					
+			
+			if($ignoreFullDB)
+			{
+				if($varietyName =~ /fullDB/)
+				{
+					#die "Skipping job $jobI $varietyName\n";
+					next;
+				}
+			}
 			# print "Check $varietyName\n";
 			# die if($varietyName =~ /_1/); # we still need to deal with this and remove the numerical indices for storing
 
@@ -705,16 +715,15 @@ elsif($action eq 'analyzeAll')
 
 		foreach my $variety (keys %n_reads_correct_byVariety_byLevel_local)
 		{		
+			my $variety_forStore = $variety;
+			$variety_forStore =~ s/_\d+$//;							
+					
 			foreach my $label (keys %{$n_reads_correct_byVariety_byLevel_local{$variety}})
 			{		
 				foreach my $category (keys %{$n_reads_correct_byVariety_byLevel_local{$variety}{$label}})
 				{
 					foreach my $level (keys %{$n_reads_correct_byVariety_byLevel_local{$variety}{$label}{$category}})
 					{
-					
-						my $variety_forStore = $variety;
-						$variety_forStore =~ s/_\d+$//;							
-						
 						foreach my $key (keys %{$n_reads_correct_byVariety_byLevel_local{$variety}{$label}{$category}{$level}})
 						{
 							my $value = $n_reads_correct_byVariety_byLevel_local{$variety}{$label}{$category}{$level}{$key};
@@ -775,9 +784,10 @@ elsif($action eq 'analyzeAll')
 							my $CR = $d->{N} / $N; die unless(($CR >= 0) and ($CR <= 1));
 							my $accuracy = ($d->{N} > 0) ? ($d->{correct} / $d->{N}) : -1; die unless(($accuracy >= -1) and ($accuracy <= 1));
 							
-							push(@{$n_reads_correct_byVariety_byLevel_byLength{$variety}{$label}{$category}{$level}{$rL}{totalN}}, $N);
-							push(@{$n_reads_correct_byVariety_byLevel_byLength{$variety}{$label}{$category}{$level}{$rL}{CR}}, $CR);
-							push(@{$n_reads_correct_byVariety_byLevel_byLength{$variety}{$label}{$category}{$level}{$rL}{accuracy}}, $accuracy);
+							
+							push(@{$n_reads_correct_byVariety_byLevel_byLength{$variety_forStore}{$label}{$category}{$level}{$rL}{totalN}}, $N);
+							push(@{$n_reads_correct_byVariety_byLevel_byLength{$variety_forStore}{$label}{$category}{$level}{$rL}{CR}}, $CR);
+							push(@{$n_reads_correct_byVariety_byLevel_byLength{$variety_forStore}{$label}{$category}{$level}{$rL}{accuracy}}, $accuracy);
 							
 							push(@{$callRate_and_accuracy_byReadCategory_byLength{$category}{$label}{$level}{$rL}}, [$CR, $accuracy]); # seems OK						
 						}				
@@ -800,8 +810,7 @@ elsif($action eq 'analyzeAll')
 					foreach my $level (sort keys %{$n_reads_correct_byVariety_byLevel_byLength{$variety}{$label}{$category}})
 					{
 						foreach my $rL (sort {$a <=> $b} keys %{$n_reads_correct_byVariety_byLevel_byLength{$variety}{$label}{$category}{$level}})
-						{
-							
+						{						
 							my $d = $n_reads_correct_byVariety_byLevel_byLength{$variety}{$label}{$category}{$level}{$rL};
 							die Dumper('totalN', $level, $rL, $d) unless(exists $d->{totalN});
 							die Dumper('CR', $level, $rL, $d) unless(exists $d->{CR});
@@ -836,7 +845,6 @@ elsif($action eq 'analyzeAll')
 		}
 		close(BYREADLENGTH_FULLDB);
 		
-		
 		# the following is no x/y data, but summary stats of accuracy
 		foreach my $variety (keys %freq_byVariety_byLevel_local)
 		{			
@@ -844,6 +852,10 @@ elsif($action eq 'analyzeAll')
 			{
 				foreach my $level (keys %{$freq_byVariety_byLevel_local{$variety}{$label}})
 				{
+				
+					my $variety_forStore = $variety;
+					$variety_forStore =~ s/_\d+$//;
+									
 					#die Dumper("freqOK", $freq_byVariety_byLevel_local{$variety}{$label}) unless(exists $freq_byVariety_byLevel_local{$variety}{$label}{freqOK});
 					#die Dumper("L1", $freq_byVariety_byLevel_local{$variety}{$label}) unless(exists $freq_byVariety_byLevel_local{$variety}{$label}{L1});
 					foreach my $key (keys %{$freq_byVariety_byLevel_local{$variety}{$label}{$level}})
@@ -854,11 +866,11 @@ elsif($action eq 'analyzeAll')
 						if(not ref($value))
 						{
 							die "This should not happen!";
-							$freq_byVariety_byLevel{$variety}{$label}{$level}{$key} += $value; # this should be OK
+							$freq_byVariety_byLevel{$variety_forStore}{$label}{$level}{$key} += $value; # this should be OK
 						}
 						else
 						{ 
-							push(@{$freq_byVariety_byLevel{$variety}{$label}{$level}{$key}}, @$value); # hopefully fixed
+							push(@{$freq_byVariety_byLevel{$variety_forStore}{$label}{$level}{$key}}, @$value); # hopefully fixed
 						}
 					}
 				}
@@ -1057,7 +1069,7 @@ elsif($action eq 'analyzeAll')
 		} keys %_readStratification;
 		# my @evaluationLevels = sort keys %_evaluationLevels;
 		my @evaluationLevels = qw/species genus family/;
-		die Dumper("Missing evaluation levels", \@evaluationLevels, \%_evaluationLevels) unless(all {exists $_evaluationLevels{$_}} @evaluationLevels);
+		die Dumper("Missing evaluation levels I", \@evaluationLevels, \%_evaluationLevels, [\@varieties]) unless(all {exists $_evaluationLevels{$_}} @evaluationLevels);
 		
 		open(BARPLOTSFULLDB, '>', $globalOutputDir . '/_forPlot_barplots_fullDB') or die;
 		print BARPLOTSFULLDB join("\t", qw/readLevel variety method level callRate accuracy/), "\n";
@@ -1360,7 +1372,7 @@ elsif($action eq 'analyzeAll')
 		
 		my @evaluationLevels = qw/species genus family/;
 		# my @evaluationLevels = sort keys %_evaluationLevels;
-		die Dumper("Missing evaluation levels", \@evaluationLevels, \%_evaluationLevels) unless(all {exists $_evaluationLevels{$_}} @evaluationLevels);
+		die Dumper("Missing evaluation levels II", \@evaluationLevels, \%_evaluationLevels, \@varieties, \%_methods, \%freq_byVariety_byLevel) unless(all {exists $_evaluationLevels{$_}} @evaluationLevels);
 				
 		open(FREQEVALUATION, '>', $globalOutputDir . '/_frequenciesCorrectByLevel') or die;
 		my @header_fields_1_freqCorrect = ('EvaluationLevel');
@@ -1373,7 +1385,7 @@ elsif($action eq 'analyzeAll')
 			foreach my $method (@methods)
 			{
 				push(@header_fields_2_freqCorrect, $method, '', '');	
-				push(@header_fields_3_freqCorrect, 'nExperiments', 'fCorrect_avg', 'L1_acg');					
+				push(@header_fields_3_freqCorrect, 'nExperiments', 'L1_avg', 'r2_avg');					
 			}
 			
 			my $hf2_after = $#header_fields_2_freqCorrect;
@@ -1402,6 +1414,7 @@ elsif($action eq 'analyzeAll')
 					my $M_RRMSE = 'NA';
 					my $M_L1 = 'NA';
 					my $M_L2 = 'NA';
+					my $M_r2 = 'NA';
 					
 					if(exists $freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel})
 					{
@@ -1414,9 +1427,10 @@ elsif($action eq 'analyzeAll')
 						$M_RRMSE = sum(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{RRMSE}}) / scalar(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{RRMSE}});
 						$M_L1 = sum(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{L1}}) / scalar(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{L1}});
 						$M_L2 = sum(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{L2}}) / scalar(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{L2}});
+						$M_r2 = sum(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{r2}}) / scalar(@{$freq_byVariety_byLevel{$variety}{$methodName}{$evaluationLevel}{r2}});
 					}
 					
-					push(@output_fields_freqCorrect, $n, $M_freqOK, $M_L1);
+					push(@output_fields_freqCorrect, $n, $M_L1, $M_r2);
 				}				
 			}	
 			
@@ -1734,8 +1748,20 @@ sub evaluateOneSimulation
 		# last if($varietyI > 2);
 		
 		my $varietyName = $simulation_href->{inferenceDBs}[$varietyI][2];
+		if($ignoreFullDB)
+		{
+			if($varietyName =~ /fullDB/)
+			{
+				#die "Skipping job $jobI $varietyName\n";
+				next;
+			}
+		}		
 		print "Analyse $varietyName\n";
-		
+		# if($varietyI >= 3)
+		# {
+			# warn "Fix this!!!!!!!!!!!!!!!!!!";
+			# last;
+		# }	
 		# die if($varietyName =~ /_1/);
 		# last if($varietyName =~ /_3/);
 		

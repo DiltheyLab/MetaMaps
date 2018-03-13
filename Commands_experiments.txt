@@ -28,3 +28,10 @@ Memory testing:
 ./metamap classify --mappings tmp/hmp7_2_miniSeq+H_limitedMemory_20G  --DB databases/miniSeq+H
 
 
+perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix p25_logNormal --ignoreFullDB 1 &&\
+Rscript doPlots.R databases/miniSeq+H/simulations_p25_logNormal
+
+perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix i100_specifiedFrequencies&&\
+Rscript doPlots.R databases/miniSeq+H/i100_specifiedFrequencies
+
+perl util/HMPplot.pl

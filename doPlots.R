@@ -41,7 +41,7 @@ freqD[["freqIs"]] <- as.numeric(freqD[["freqIs"]])
 idx_minmax <- which(freqD[["level"]] %in% freq_levels)
 pC <- list()
 pC[["Unclassified"]] <- "#00FF00"
-pC[["NotLabelledAtLevel"]] <- "#009900"
+# pC[["NotLabelledAtLevel"]] <- "#009900"
 # pC[["Mappable"]] <- barplotPal[[1]]
 # pC[["species"]] <- barplotPal[[2]]
 # pC[["genus"]] <- barplotPal[[3]]
@@ -56,7 +56,7 @@ pC[["novelAdmixture"]] <- "orange"
 
 pCex <- list()
 pCex[["Unclassified"]] <- 2
-pCex[["NotLabelledAtLevel"]] <- 2
+# pCex[["NotLabelledAtLevel"]] <- 2
 pCex[["Mappable"]] <- 2
 pCex[["species"]] <- 2
 pCex[["genus"]] <- 2
@@ -66,7 +66,7 @@ pCex[["Other"]] <- 2
 
 pS <- list()
 pS[["Unclassified"]] <- 19
-pS[["NotLabelledAtLevel"]] <- 19
+# pS[["NotLabelledAtLevel"]] <- 19
 pS[["Mappable"]] <- 3
 pS[["species"]] <- 4
 pS[["genus"]] <- 5
@@ -76,14 +76,18 @@ pS[["Other"]] <- 7
 
 pL <- list()
 pL[["Unclassified"]] <- "Unclassified"
-pL[["NotLabelledAtLevel"]] <- "Unlabelled"
+# pL[["NotLabelledAtLevel"]] <- "Unlabelled"
 pL[["Mappable"]] <- "Genome"
 pL[["species"]] <- "Species"
 pL[["genus"]] <- "Genus"
 pL[["family"]] <- "Family"
 pL[["Other"]] <- ">Family"
 
-frequency_plotTypes <- c("complete")
+frequency_plotTypes <-  c()
+if(any(freqD[["variety"]] == "fullDB"))
+{
+	frequency_plotTypes <- c(frequency_plotTypes, "complete")
+}
 if(any(freqD[["variety"]] != "fullDB"))
 {
 	frequency_plotTypes <- c(frequency_plotTypes, "incomplete")
@@ -132,6 +136,7 @@ for(plotType in frequency_plotTypes)
 					yAxis_max <- max(c(xAxis_values, yAxis_values))
 					yAxis_half <- mean(c(yAxis_min, yAxis_max))
 					yAxis_twoThirds <- yAxis_min + (4/5) * (yAxis_max - yAxis_min)
+					yAxis_twoThirds_2 <- yAxis_min + (3/5) * (yAxis_max - yAxis_min)
 							
 					# cat(paste(m, "@", l, ", ", "fullDB", ", r = ", cor(frTarget, frIs), sep = ""), "\n")
 					
@@ -195,7 +200,9 @@ for(plotType in frequency_plotTypes)
 						points(frTarget, frIs,  pch = pointSymbols, cex = pointCexs, col = pointColours)
 						stopifnot(length(frTarget) == length(pointColours))
 						r <- cor(frTarget, frIs)
+						L1 <- sum(abs(frTarget - frIs))
 						text(xAxis_twoThirds, yAxis_twoThirds, labels = paste("r = ", sprintf("%.3f", r), sep = ""), cex = 1.5)
+						text(xAxis_twoThirds, yAxis_twoThirds_2, labels = paste("L1 = ", sprintf("%.3f", L1), sep = ""), cex = 1.5)
 						axis(2, xaxs = "i", labels = F)			
 						axis(1, xaxs = "i", labels = F)
 						lines(c(xAxis_min, xAxis_max), c(yAxis_min, yAxis_max), col = "gray")
@@ -323,32 +330,35 @@ byReadLengthFile <- paste(prefix, "byReadLength_fullDB", sep = "")
 byReadLengthD <- read.delim(byReadLengthFile, header = T, stringsAsFactors = F)
 stopifnot(all(byReadLengthD[["variety"]] == "fullDB"))
 methodNames_reads <- unique(byReadLengthD[["method"]])
-rL_l_min <- min(byReadLengthD[["readLength"]])
-rL_l_max <- max(byReadLengthD[["readLength"]])
-rL_accuracy_min <- min(byReadLengthD[["accuracyAvg"]])
-rL_accuracy_max <- max(byReadLengthD[["accuracyAvg"]])
-for(mI in 1:length(methodNames))
+if(length(methodNames_reads) > 0)
 {
-	m <- methodNames[[mI]]
-	plot(0, 0, col = "white", main = paste("Reads assignment v/s read length: ", m, sep = ""), xlab = "Read length", xlim = c(rL_l_min, rL_l_max), ylim = c(0, 1), ylab = "")
-	plotLevels <- c("absolute", "species", "genus", "family")
-	for(lI in 1:length(plotLevels))
+	rL_l_min <- min(byReadLengthD[["readLength"]])
+	rL_l_max <- max(byReadLengthD[["readLength"]])
+	rL_accuracy_min <- min(byReadLengthD[["accuracyAvg"]])
+	rL_accuracy_max <- max(byReadLengthD[["accuracyAvg"]])
+	for(mI in 1:length(methodNames_reads))
 	{
-		l <- plotLevels[[lI]]
-		indices <- which((byReadLengthD[["method"]] == m) & (byReadLengthD[["readCategory"]] == "ALL") & (byReadLengthD[["evaluationLevel"]] == l))	
-		indices_validAccuracy <- which((byReadLengthD[["method"]] == m) & (byReadLengthD[["readCategory"]] == "ALL") & (byReadLengthD[["evaluationLevel"]] == l) & (byReadLengthD[["accuracyAvg"]] >= 0))	
-		stopifnot(length(indices) > 0)
-		stopifnot(length(indices_validAccuracy) > 0)
-		if(lI == 1)
+		m <- methodNames_reads[[mI]]
+		plot(0, 0, col = "white", main = paste("Reads assignment v/s read length: ", m, sep = ""), xlab = "Read length", xlim = c(rL_l_min, rL_l_max), ylim = c(0, 1), ylab = "")
+		plotLevels <- c("absolute", "species", "genus", "family")
+		for(lI in 1:length(plotLevels))
 		{
-			points(byReadLengthD[["readLength"]][indices], byReadLengthD[["callRateAvg"]][indices], col = "gray", pch = 2)
-			lines(byReadLengthD[["readLength"]][indices], byReadLengthD[["callRateAvg"]][indices], col = "gray")
+			l <- plotLevels[[lI]]
+			indices <- which((byReadLengthD[["method"]] == m) & (byReadLengthD[["readCategory"]] == "ALL") & (byReadLengthD[["evaluationLevel"]] == l))	
+			indices_validAccuracy <- which((byReadLengthD[["method"]] == m) & (byReadLengthD[["readCategory"]] == "ALL") & (byReadLengthD[["evaluationLevel"]] == l) & (byReadLengthD[["accuracyAvg"]] >= 0))	
+			stopifnot(length(indices) > 0)
+			stopifnot(length(indices_validAccuracy) > 0)
+			if(lI == 1)
+			{
+				points(byReadLengthD[["readLength"]][indices], byReadLengthD[["callRateAvg"]][indices], col = "gray", pch = 2)
+				lines(byReadLengthD[["readLength"]][indices], byReadLengthD[["callRateAvg"]][indices], col = "gray")
+			}
+			
+			points(byReadLengthD[["readLength"]][indices_validAccuracy], byReadLengthD[["accuracyAvg"]][indices_validAccuracy], col = barplotPal[[lI]], pch = 19)		
 		}
+		legend("bottomright", legend = rev(c("Accuracy @ Genome", "Accuracy @ Species", "Accuracy @ Genus", "Accuracy @ Family", "Call rate")),  col = rev(c(barplotPal[1:4], "gray")), lty = c(0, 0, 0, 0, 1), pch = rev(c(19, 19, 19, 19, 2)))
 		
-		points(byReadLengthD[["readLength"]][indices_validAccuracy], byReadLengthD[["accuracyAvg"]][indices_validAccuracy], col = barplotPal[[lI]], pch = 19)		
 	}
-	legend("bottomright", legend = rev(c("Accuracy @ Genome", "Accuracy @ Species", "Accuracy @ Genus", "Accuracy @ Family", "Call rate")),  col = rev(c(barplotPal[1:4], "gray")), lty = c(0, 0, 0, 0, 1), pch = rev(c(19, 19, 19, 19, 2)))
-	
 }
 
 barPlotFile_byLevel <- paste(prefix, "barplots_readCategory", sep = "")

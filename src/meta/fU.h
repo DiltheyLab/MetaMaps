@@ -66,7 +66,8 @@ void produceShiftedHistograms(std::string output_shifted_frequencies_file, ident
 								<< hE.second << "\n";
 			hE_sum += hE.second;
 		}
-		assert(abs(1 - hE_sum) <= 1e-3);	}
+		assert(abs(1 - hE_sum) <= 1e-3);
+	}
 		
 	
 
