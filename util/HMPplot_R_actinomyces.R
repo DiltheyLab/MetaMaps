@@ -1,5 +1,8 @@
 prefix <- "/data/projects/phillippy/projects/MetaMap/tmp/hmp7_2_miniSeq+H"
 
+fn_observed_EM <- paste(prefix, "", sep = "")
+
+
 fn_shifted_U <- paste(prefix, ".U.shiftedHistogramsPerTaxonID", sep = "")
 fn_observed_U <- paste(prefix, ".U.lengthAndIdentitiesPerTaxonID", sep = "")
 
@@ -8,7 +11,7 @@ D_observed_U <- read.delim(fn_observed_U, stringsAsFactors = F)
 D_observed_U[["identityIndex"]] <- round(D_observed_U[["Identity"]]*100)+1
 
 
-fn_output <- paste(prefix, '.unknownPlot.pdf', sep = "")
+fn_output <- paste(prefix, '.identities_MetaMapUnknown.pdf', sep = "")
 pdf(fn_output, width = 20, height = 5)
 
 one_taxonID_direct <- D_shifted_U[["taxonID"]][D_shifted_U[["directIndirect"]] == "direct"]
@@ -26,7 +29,6 @@ for(plotTaxonID in c(1654))
 	names(vector_baseline) <- 0:100
 	for(idxI in idx_baseline_U)
 	{
-		cat(idxI, "\n")
 		idt <- as.integer(round(D_shifted_U[["identity"]][[idxI]]))+1
 		stopifnot(idt <= 100)
 		vector_baseline[[idt]] <- D_shifted_U[["P"]][[idxI]]
@@ -41,7 +43,6 @@ for(plotTaxonID in c(1654))
 	names(vector_expected) <- 0:100
 	for(idxI in idx_shifted_U)
 	{
-		cat(idxI, "\n")
 		idt <- as.integer(round(D_shifted_U[["identity"]][[idxI]]))+1
 		stopifnot(idt <= 100)
 		vector_expected[[idt]] <- D_shifted_U[["P"]][[idxI]]
@@ -70,6 +71,6 @@ for(plotTaxonID in c(1654))
 
 	#plot(D_shifted_U[["identity"]][idx_shifted_U], D_shifted_U[["P"]][idx_shifted_U], main = "Expected identities")
 	
-	title(paste("MetaMap-U for ", taxonName, " (taxon ID ", plotTaxonID, ")", sep = ""), outer=TRUE)
+	title(paste("MetaMap-Unknown for ", taxonName, " (taxon ID ", plotTaxonID, ")", sep = ""), outer=TRUE)
 }
 dev.off()

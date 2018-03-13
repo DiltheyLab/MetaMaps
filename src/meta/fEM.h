@@ -638,11 +638,16 @@ void doEM(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestC
 					windowLength = size_last_window.at(taxonData.first).at(contigData.first);
 				}
 
+				size_t windowStart = windowI * coverage_windowSize;
+				size_t windowStop = (windowI+1) * coverage_windowSize - 1;
+			
 				size_t nBases = coverage_per_contigID.at(taxonData.first).at(contigData.first).at(windowI);
 				strout_coverage <<
 						taxonData.first << "\t" <<
 						T.getNode(taxonData.first).name.scientific_name << "\t" <<
 						contigData.first << "\t" <<
+						windowStart << "\t" <<
+						windowStop << "\t" <<
 						nBases << "\t" <<
 						(double)nBases/(double)windowLength << "\n";
 
@@ -654,7 +659,6 @@ void doEM(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestC
 				{
 					contigID_2_taxon[contigData.first] = taxonData.first;
 				}
-
 			}
 		}
 	}
