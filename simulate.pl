@@ -804,7 +804,7 @@ elsif($action eq 'analyzeAll')
 								my $value = $n_reads_correct_byVariety_byLevel_byLength_local{$variety}{$label}{$category}{$level}{$rL}{$key};
 								die Dumper($level, $rL, $key, $n_reads_correct_byVariety_byLevel_byLength_local{$variety}{$label}{$category}) unless(defined $value);
 								die unless(not ref($value));
-								push(@{$n_reads_correct_byVariety_byLevel_byLength{$variety}{$label}{$category}{$level}{$rL}{$key}}, $value);	# hopefully fixed
+								#push(@{$n_reads_correct_byVariety_byLevel_byLength{$variety}{$label}{$category}{$level}{$rL}{$key}}, $value);	# hopefully fixed
 							}
 							
 							my $d = $n_reads_correct_byVariety_byLevel_byLength_local{$variety}{$label}{$category}{$level}{$rL};
@@ -856,6 +856,7 @@ elsif($action eq 'analyzeAll')
 							die unless(scalar(@{$d->{totalN}}));
 							die unless(scalar(@{$d->{CR}}));
 							die unless(scalar(@{$d->{accuracy}}));
+							die unless(scalar(@{$d->{N}}) == scalar(@{$d->{accuracy}}));
 							
 							my $N = Util::mean(@{$d->{N}}); die unless($N >= 0);
 							my $totalN = Util::mean(@{$d->{totalN}}); die unless($totalN >= 0);
@@ -1115,7 +1116,7 @@ elsif($action eq 'analyzeAll')
 		die Dumper("Missing evaluation levels I", \@evaluationLevels, \%_evaluationLevels, [\@varieties]) unless(all {exists $_evaluationLevels{$_}} @evaluationLevels);
 		
 		open(BARPLOTSFULLDB, '>', $globalOutputDir . '/_forPlot_barplots_fullDB') or die;
-		print BARPLOTSFULLDB join("\t", qw/readLevel variety method level callRate accuracy/), "\n";
+		print BARPLOTSFULLDB join("\t", qw/readLevel variety method level callRate accuracy averagedOver/), "\n";
 			
 		{
 			open(READSABSOLUTELYCORRECT, '>', $globalOutputDir . '/_readsAbsolutelyCorrect') or die;
@@ -1219,7 +1220,7 @@ elsif($action eq 'analyzeAll')
 						
 						push(@output_fields_absolutelyCorrect, scalar(@Ntotal), $Ntotal, $percOK_total, $NmadeCall, $percOK_madeCall, $perc_missing);
 						
-						print BARPLOTSFULLDB join("\t", $readLevel, $variety, $methodName, 'absolute', $callRate, $percOK_madeCall_fullAccuracy), "\n";
+						print BARPLOTSFULLDB join("\t", $readLevel, $variety, $methodName, 'absolute', $callRate, $percOK_madeCall_fullAccuracy, scalar(@Ntotal)), "\n";
 
 						print "Generating ", $globalOutputDir . '/_readsAbsolutelyCorrect', " $readLevel $variety $methodName: averaging over ", scalar(@Ntotal), " iterations.\n";
 					}
@@ -1379,7 +1380,7 @@ elsif($action eq 'analyzeAll')
 							
 							print "Generating ", $globalOutputDir . '/_forPlot_barplots_fullDB', " $readLevel $variety $methodName: averaging over ", scalar(@callRate), " iterations.\n";
 						 
-							print BARPLOTSFULLDB join("\t",  $readLevel, $variety, $methodName, $evaluationLevel, $callRate, $percOK_madeCall_fullAccuracy), "\n";						
+							print BARPLOTSFULLDB join("\t",  $readLevel, $variety, $methodName, $evaluationLevel, $callRate, $percOK_madeCall_fullAccuracy, scalar(@N_total)), "\n";						
 						}
 					}
 					print READSCORRECTBYLEVEL join("\t", @output_fields_byLevelCorrect), "\n";
