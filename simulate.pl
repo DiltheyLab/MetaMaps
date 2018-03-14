@@ -720,18 +720,22 @@ elsif($action eq 'analyzeAll')
 					
 					push(@{$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety_forStore}{$label}{$category}{absolute}{CR}}, $CR); # hopefully ok
 					push(@{$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety_forStore}{$label}{$category}{absolute}{Accuracy}}, $accuracy); # hopefully ok
-					push(@{$callRate_and_accuracy_byReadCategory{$category}{$label}{absolute}}, [$CR, $accuracy, $accuracy]); # hopefully ok
 					
-					my @keys_attachedTo = grep {$_ =~ /^attachedTo/} keys %$d;
-					die unless(scalar(@keys_attachedTo));
-					
-					my %localAttachedHash;
-					foreach my $key (@keys_attachedTo)
+					if(($variety !~ /allCombined/) and ($variety !~ /incompleteCombined/))
 					{
-						$localAttachedHash{$key} = $d->{$key} / $d->{N}; # hopefully ok
-					}	
+						push(@{$callRate_and_accuracy_byReadCategory{$category}{$label}{absolute}}, [$CR, $accuracy, $accuracy]); # hopefully ok
+						
+						my @keys_attachedTo = grep {$_ =~ /^attachedTo/} keys %$d;
+						die unless(scalar(@keys_attachedTo));
+						
+						my %localAttachedHash;
+						foreach my $key (@keys_attachedTo)
+						{
+							$localAttachedHash{$key} = $d->{$key} / $d->{N}; # hopefully ok
+						}	
 
-					push(@{$attachedTo_byReadCategory{$category}{$label}{absolute}}, \%localAttachedHash); # hopefully ok
+						push(@{$attachedTo_byReadCategory{$category}{$label}{absolute}}, \%localAttachedHash); # hopefully ok
+					}
 				}
 			}
 		}
@@ -772,18 +776,22 @@ elsif($action eq 'analyzeAll')
 						push(@{$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety_forStore}{$label}{$category}{$level}{CR}}, $CR); # hopefully ok
 						push(@{$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety_forStore}{$label}{$category}{$level}{Accuracy}}, $accuracy);  # hopefully ok
 						push(@{$highLevel_stats_keptSeparate_bySimulation[$jobI]{$variety_forStore}{$label}{$category}{$level}{AccuracyExactlyAtLevel}}, $accuracy_exactlyAtLevel); # hopefully ok	
-						push(@{$callRate_and_accuracy_byReadCategory{$category}{$label}{$level}}, [$CR, $accuracy, $accuracy_exactlyAtLevel]);	 # hopefully ok			
-						
-						my @keys_attachedTo = grep {$_ =~ /^attachedTo/} keys %$d;
-						die unless(scalar(@keys_attachedTo));
-						
-						my %localAttachedHash;
-						foreach my $key (@keys_attachedTo)
+						 
+						if(($variety !~ /allCombined/) and ($variety !~ /incompleteCombined/))
 						{
-							$localAttachedHash{$key} = $d->{$key} / $d->{N};
-						}	
+							push(@{$callRate_and_accuracy_byReadCategory{$category}{$label}{$level}}, [$CR, $accuracy, $accuracy_exactlyAtLevel]);	 # hopefully ok			
+							
+							my @keys_attachedTo = grep {$_ =~ /^attachedTo/} keys %$d;
+							die unless(scalar(@keys_attachedTo));
+							
+							my %localAttachedHash;
+							foreach my $key (@keys_attachedTo)
+							{
+								$localAttachedHash{$key} = $d->{$key} / $d->{N};
+							}	
 
-						push(@{$attachedTo_byReadCategory{$category}{$label}{$level}}, \%localAttachedHash); # hopefully ok
+							push(@{$attachedTo_byReadCategory{$category}{$label}{$level}}, \%localAttachedHash); # hopefully ok
+						}
 					}
 					
 					die unless(defined $n_reads_correct_byVariety_byLevel_byLength_local{$variety}{$label}{$category});
@@ -809,11 +817,15 @@ elsif($action eq 'analyzeAll')
 							my $accuracy = ($d->{N} > 0) ? ($d->{correct} / $d->{N}) : -1; die unless(($accuracy >= -1) and ($accuracy <= 1));
 							
 							
+							push(@{$n_reads_correct_byVariety_byLevel_byLength{$variety_forStore}{$label}{$category}{$level}{$rL}{N}}, $d->{N});
 							push(@{$n_reads_correct_byVariety_byLevel_byLength{$variety_forStore}{$label}{$category}{$level}{$rL}{totalN}}, $N);
 							push(@{$n_reads_correct_byVariety_byLevel_byLength{$variety_forStore}{$label}{$category}{$level}{$rL}{CR}}, $CR);
 							push(@{$n_reads_correct_byVariety_byLevel_byLength{$variety_forStore}{$label}{$category}{$level}{$rL}{accuracy}}, $accuracy);
 							
-							push(@{$callRate_and_accuracy_byReadCategory_byLength{$category}{$label}{$level}{$rL}}, [$CR, $accuracy]); # seems OK						
+							if(($variety !~ /allCombined/) and ($variety !~ /incompleteCombined/))
+							{							
+								push(@{$callRate_and_accuracy_byReadCategory_byLength{$category}{$label}{$level}{$rL}}, [$CR, $accuracy]); # seems OK						
+							}
 						}				
 					}
 				}
@@ -823,7 +835,7 @@ elsif($action eq 'analyzeAll')
 		# print data for read-length plot
 		
 		open(BYREADLENGTH_FULLDB, '>', $globalOutputDir . '/_forPlot_byReadLength_fullDB') or die;
-		print BYREADLENGTH_FULLDB join("\t", qw/variety readCategory evaluationLevel method readLength Ntotal callRateAvg Ncalled accuracyAvg/), "\n";
+		print BYREADLENGTH_FULLDB join("\t", qw/variety readCategory evaluationLevel method readLength averagedOver Ntotal callRateAvg Ncalled accuracyAvg/), "\n";
 		foreach my $variety (sort keys %n_reads_correct_byVariety_byLevel_byLength)
 		{	
 			next unless($variety eq 'fullDB');
@@ -840,14 +852,16 @@ elsif($action eq 'analyzeAll')
 							die Dumper('CR', $level, $rL, $d) unless(exists $d->{CR});
 							die Dumper('accuracy', $level, $rL, $d) unless(exists $d->{accuracy});
 							
+							die unless(scalar(@{$d->{N}}));
 							die unless(scalar(@{$d->{totalN}}));
 							die unless(scalar(@{$d->{CR}}));
 							die unless(scalar(@{$d->{accuracy}}));
 							
-							my $N = Util::mean(@{$d->{totalN}}); die unless($d > 0);
+							my $N = Util::mean(@{$d->{N}}); die unless($N >= 0);
+							my $totalN = Util::mean(@{$d->{totalN}}); die unless($totalN >= 0);
 							my $CR = Util::mean(@{$d->{CR}}); die unless(($CR >= 0) and ($CR <= 1));
 							my $accuracy = Util::mean(@{$d->{accuracy}}); die unless(($accuracy >= -1) and ($accuracy <= 1));
-							
+							 
 							die unless(scalar(@{$d->{totalN}}) == scalar(@{$d->{CR}}));
 							die unless(scalar(@{$d->{CR}}) == scalar(@{$d->{accuracy}}));
 							
@@ -857,9 +871,10 @@ elsif($action eq 'analyzeAll')
 								$level,
 								$label,
 								$rL,
-								$N,
+								scalar(@{$d->{N}}),
+								$totalN,
 								$CR,
-								$d->{N},
+								$N,
 								$accuracy
 							), "\n";
 						}
@@ -922,13 +937,14 @@ elsif($action eq 'analyzeAll')
 	
 	{
 		open(BARPLOTSREADCAT, '>', $globalOutputDir . '/_forPlot_barplots_readCategory') or die;
-		print BARPLOTSREADCAT join("\t", qw/readCategory evaluationLevel method callRateAvg accuracyAvg accuracyAvgExactltAtLevel callRate_raw accuracy_raw accuracy_raw_exactltyAtLevel/), "\n";
+		print BARPLOTSREADCAT join("\t", qw/readCategory evaluationLevel method N callRateAvg accuracyAvg accuracyAvgExactltAtLevel callRate_raw accuracy_raw accuracy_raw_exactltyAtLevel/), "\n";
 		
 		#open(BYREADLENGTH, '>', $globalOutputDir . '/_forPlot_byReadLength') or die;
 		#print BYREADLENGTH join("\t", qw/readCategory evaluationLevel method readLength callRateAvg accuracyAvg accuracyAvgExactltAtLevel/), "\n";
 
 		my %categories_attachment_forPrint = map {'attachedTo_' . $_ => 1} qw/species genus family superfamily/;
 		my %values_attachment_forPrint;
+		my %values_attachment_forPrint_N;
 		
 		foreach my $readCategory (sort keys %callRate_and_accuracy_byReadCategory)
 		{
@@ -949,10 +965,12 @@ elsif($action eq 'analyzeAll')
 					die unless(scalar(@callRates));
 					die unless(scalar(@accuracies));
 					die unless(scalar(@accuracies_exactlyAtLevel));
+					die unless(scalar(@callRates) == scalar(@accuracies));
+					die unless(scalar(@callRates) == scalar(@accuracies_exactlyAtLevel));
 					my $avg_callRate = Util::mean(@callRates);
 					my $avg_accuracy = Util::mean(@accuracies);
 					my $avg_accuracy_exactlyAtLevel = Util::mean(@accuracies_exactlyAtLevel);
-					print BARPLOTSREADCAT join("\t", $readCategory, $level, $label, $avg_callRate, $avg_accuracy, $avg_accuracy_exactlyAtLevel, join(';', @callRates), join(';', @accuracies), join(';', @accuracies_exactlyAtLevel)), "\n";
+					print BARPLOTSREADCAT join("\t", $readCategory, $level, $label, scalar(@callRates), $avg_callRate, $avg_accuracy, $avg_accuracy_exactlyAtLevel, join(';', @callRates), join(';', @accuracies), join(';', @accuracies_exactlyAtLevel)), "\n";
 					
 					my @attachmentHashes = @{$attachedTo_byReadCategory{$readCategory}{$label}{$level}};				
 					foreach my $h (@attachmentHashes)
@@ -984,6 +1002,7 @@ elsif($action eq 'analyzeAll')
 					{
 						my $v = Util::mean(@{$valuesInHashes{$k}});
 						$values_attachment_forPrint{$readCategory}{$label}{$level}{$k} = $v;
+						$values_attachment_forPrint_N{$readCategory}{$label}{$level}{$k} = scalar(@{$valuesInHashes{$k}});
 						die unless(exists $categories_attachment_forPrint{$k});
 					}
 					
@@ -1021,7 +1040,7 @@ elsif($action eq 'analyzeAll')
 		open(BARPLOTS_ATTACHEDTO, '>', $globalOutputDir . '/_forPlot_barplots_attachedTo') or die;
 		my @keys_attachedTo = sort keys %categories_attachment_forPrint;
 		# print BARPLOTS_ATTACHEDTO join("\t", qw/readCategory method/, @keys_attachedTo), "\n";
-		print BARPLOTS_ATTACHEDTO join("\t", qw/readCategory method/, @keys_attachedTo), "\n";
+		print BARPLOTS_ATTACHEDTO join("\t", qw/readCategory method/, map {$_, 'N_' . $_ } @keys_attachedTo), "\n";
 		foreach my $readCategory (sort keys %values_attachment_forPrint)
 		{
 			foreach my $label (sort keys %{$values_attachment_forPrint{$readCategory}})
@@ -1033,11 +1052,14 @@ elsif($action eq 'analyzeAll')
 					foreach my $k (@keys_attachedTo)
 					{
 						my $v = 0;
+						my $N = 0;
 						if(exists $values_attachment_forPrint{$readCategory}{$label}{$level}{$k})
 						{
 							$v = $values_attachment_forPrint{$readCategory}{$label}{$level}{$k};
+							$N = $values_attachment_forPrint_N{$readCategory}{$label}{$level}{$k};
 						}
 						push(@values_forPrint, $v);
+						push(@values_forPrint, $N);
 					}
 					print BARPLOTS_ATTACHEDTO join("\t", @values_forPrint), "\n";
 				}
@@ -1769,17 +1791,17 @@ sub evaluateOneSimulation
 	# my %truth_raw_taxonIDs;
 	# $truth_raw_taxonIDs{$taxonID_master}++;
 	
-	my %expected_results_files = get_files_for_evaluation();
+	my %expected_results_files = get_files_for_evaluation(); 
 	for(my $varietyI = 0; $varietyI <= $#{$simulation_href->{dbDirs_metamap}}; $varietyI++)
 	{
 		# last if($varietyI > 2);
 		
 		my $varietyName = $simulation_href->{inferenceDBs}[$varietyI][2];
 		my @varietyNames_forStorage = ($varietyName);
-		push(@varietyNames_forStorage, 'allCombined');
+		push(@varietyNames_forStorage, 'allCombined_' . $varietyI);
 		if($varietyName =~ /remove/)
 		{
-			push(@varietyNames_forStorage, 'incompleteCombined');
+			push(@varietyNames_forStorage, 'incompleteCombined_' . $varietyI);
 		}
 
 		if($ignoreFullDB)

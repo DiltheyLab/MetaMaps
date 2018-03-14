@@ -39,3 +39,7 @@ perl util/HMPplot.pl
 
 perl simulate.pl --DB databases/miniSeq+H --action inferenceJobI --jobI 0 --suffix i100_specifiedFrequencies_limitedMemory --maxMemory 20 --skipKraken 1
 perl simulate.pl --DB databases/miniSeq+H --action inferenceJobI --jobI 0 --suffix i100_specifiedFrequencies --skipKraken 1
+
+For testing:
+
+perl simulate.pl --action analyzeAll --suffix logNormal

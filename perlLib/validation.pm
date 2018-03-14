@@ -822,6 +822,7 @@ sub distributionLevelComparison
 				# print join("\t", "VALUE IN COMPARSION for $label // $level: ", $taxonID, $shouldBeFreq, $isFreq), "\n";
 			}
 			
+			die if(defined $frequencyComparison_href->{$label}{$level}{$taxonID});
 			$frequencyComparison_href->{$label}{$level}{$taxonID} = [$shouldBeFreq, $isFreq];
 			
 			if(($shouldBeFreq > 0) or ($isFreq > 0))
