@@ -144,6 +144,8 @@ my $targetTotalSimulationInGigabytes;
 my $desiredTaxa;
 my $coverageTargetsAreOrganismAbundances = 0;
 my $ignoreFullDB;
+my $skipKraken;
+my $maxMemory;
 GetOptions (
 	'DB:s' => \$DB,
 	'action:s' => \$action,
@@ -159,6 +161,8 @@ GetOptions (
 	'coverageTargetsAreOrganismAbundances:s' => \$coverageTargetsAreOrganismAbundances,
 	'targetTotalSimulationInGigabytes:s' => \$targetTotalSimulationInGigabytes,
 	'ignoreFullDB:s' => \$ignoreFullDB,
+	'skipKraken:s' => \$skipKraken,
+	'maxMemory:s' => \$maxMemory,
 );
 
 die unless(($coverageMode eq 'equal') or ($coverageMode eq 'logNormal') or ($coverageMode eq 'file'));
@@ -509,13 +513,33 @@ elsif($action eq 'inferenceJobI')
 	die"Please specify --jobI" unless(defined $jobI);
 	my $simulation_href_fn = $globalOutputDir . '/' . $jobI . '/simulationStore';
 	my $simulation_href = retrieve $simulation_href_fn;
-	inferenceOneSimulation($simulation_href);
+	unless($simulation_href->{outputDirectory} eq $globalOutputDir . '/' . $jobI)
+	{
+		die Dumper("I think you were too smart", $simulation_href->{outputDirectory}, $globalOutputDir . '/' . $jobI);
+	}
+	foreach my $dir (@{$simulation_href->{dbDirs_metamap}})
+	{
+		unless($dir eq $globalOutputDir . '/' . $jobI  . '/DB_fullDB')
+		{
+			die Dumper("I think you were too smart", $simulation_href->{dbDirs_metamap}, $globalOutputDir . '/' . $jobI  . '/DB_fullDB');
+		}	
+	}
+					
+	inferenceOneSimulation($simulation_href, $skipKraken, $maxMemory);
 }
 elsif($action eq 'analyzeJobI')
 {
 	die"Please specify --jobI" unless(defined $jobI);
 	my $simulation_href_fn = $globalOutputDir . '/' . $jobI . '/simulationStore';
-	my $simulation_href = retrieve $simulation_href_fn;
+	my $simulation_href = retrieve $simulation_href_fn;			
+	unless($simulation_href->{outputDirectory} eq $globalOutputDir . '/' . $jobI)
+	{
+		die Dumper("I think you were too smart", $simulation_href->{outputDirectory}, $globalOutputDir . '/' . $jobI);
+	}
+	unless($simulation_href->{dbDirs_metamap} eq $globalOutputDir . '/' . $jobI  . '/DB_fullDB')
+	{
+		die Dumper("I think you were too smart", $simulation_href->{dbDirs_metamap}, $globalOutputDir . '/' . $jobI  . '/DB_fullDB');
+	}		
 	evaluateOneSimulation($simulation_href);
 }
 elsif($action eq 'printVarietiesAndDirectories')
@@ -884,10 +908,7 @@ elsif($action eq 'analyzeAll')
 
 	## output summary stats
 
-	
-
-	
-	my @varieties = qw/fullDB removeOne_self removeOne_species removeOne_genus/;
+	my @varieties = qw/allCombined fullDB incompleteCombined removeOne_self removeOne_species removeOne_genus/;
 	@varieties = grep {exists $n_reads_correct_byVariety{$_}} @varieties;
 	#die Dumper(\@varieties, \%n_reads_correct_byVariety) unless(scalar(@varieties) == scalar(keys %n_reads_correct_byVariety));
 	die Dumper(\@varieties, [keys %n_reads_correct_byVariety], "Issue I") unless(all {exists $n_reads_correct_byVariety{$_}} @varieties);
@@ -1492,6 +1513,7 @@ elsif($action eq 'analyzeAll')
 				next unless(defined $frequencyComparisons_bySimulation[$simulationI]);
 				foreach my $variety (keys %{$frequencyComparisons_bySimulation[$simulationI]})
 				{
+					next unless(exists $frequencyComparisons_details_bySimulation[$simulationI]{$variety});
 					die unless(defined $frequencyComparisons_details_bySimulation[$simulationI]{$variety});
 					die unless(defined $frequencyComparisons_details_bySimulation[$simulationI]{$variety}{mappable});
 					die unless(defined $frequencyComparisons_details_bySimulation[$simulationI]{$variety}{truthReadsNovelTree});
@@ -1647,7 +1669,9 @@ cd $FindBin::Bin
 sub inferenceOneSimulation
 {
 	my $simulation_href = shift;
-	
+	my $skipKraken = shift;
+	my $maxMemory = shift;
+
 	my $fullTaxonomy = taxTree::readTaxonomy($masterTaxonomy_dir);
 	
 	for(my $varietyI = 0; $varietyI <= $#{$simulation_href->{dbDirs_metamap}}; $varietyI++)
@@ -1668,11 +1692,14 @@ sub inferenceOneSimulation
 		
 		print "Doing inference in $DB_target_dir\n";
 		 
-		doMetaMap($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq});
-		SimulationsKraken::doKraken($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $krakenDBTemplate, $kraken_binPrefix, $Bracken_dir);
-		if($simulation_href->{inferenceDBs}[$varietyI][2] eq 'fullDB')
+		doMetaMap($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $maxMemory);
+		unless($skipKraken)
 		{
-			# SimulationsMetaPalette::doMetaPalette($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $metaPalette_installation_dir, $jellyfish_2_bin, $masterTaxonomy_dir);			
+			SimulationsKraken::doKraken($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $krakenDBTemplate, $kraken_binPrefix, $Bracken_dir);
+			if($simulation_href->{inferenceDBs}[$varietyI][2] eq 'fullDB')
+			{
+				# SimulationsMetaPalette::doMetaPalette($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $metaPalette_installation_dir, $jellyfish_2_bin, $masterTaxonomy_dir);			
+			}
 		}
 	} 
 	
@@ -1748,6 +1775,13 @@ sub evaluateOneSimulation
 		# last if($varietyI > 2);
 		
 		my $varietyName = $simulation_href->{inferenceDBs}[$varietyI][2];
+		my @varietyNames_forStorage = ($varietyName);
+		push(@varietyNames_forStorage, 'allCombined');
+		if($varietyName =~ /remove/)
+		{
+			push(@varietyNames_forStorage, 'incompleteCombined');
+		}
+
 		if($ignoreFullDB)
 		{
 			if($varietyName =~ /fullDB/)
@@ -1765,12 +1799,14 @@ sub evaluateOneSimulation
 		# die if($varietyName =~ /_1/);
 		# last if($varietyName =~ /_3/);
 		
-		$n_reads_correct_byVariety->{$varietyName} = {} unless(defined $n_reads_correct_byVariety->{$varietyName});
-		$n_reads_correct_byVariety_byLevel->{$varietyName} = {} unless(defined $n_reads_correct_byVariety_byLevel->{$varietyName});
-		$n_reads_correct_byVariety_byLevel_byLength->{$varietyName} = {} unless(defined $n_reads_correct_byVariety_byLevel_byLength->{$varietyName});
-		$freq_byVariety_byLevel->{$varietyName} = {} unless(defined $freq_byVariety_byLevel->{$varietyName});
-		$frequencyComparison_href->{$varietyName} = {} unless(defined $frequencyComparison_href->{$varietyName});
-		
+		foreach my $varietyName_forStorage (@varietyNames_forStorage)
+		{
+			$n_reads_correct_byVariety->{$varietyName_forStorage} = {} unless(defined $n_reads_correct_byVariety->{$varietyName_forStorage});
+			$n_reads_correct_byVariety_byLevel->{$varietyName_forStorage} = {} unless(defined $n_reads_correct_byVariety_byLevel->{$varietyName_forStorage});
+			$n_reads_correct_byVariety_byLevel_byLength->{$varietyName_forStorage} = {} unless(defined $n_reads_correct_byVariety_byLevel_byLength->{$varietyName_forStorage});
+			$freq_byVariety_byLevel->{$varietyName_forStorage} = {} unless(defined $freq_byVariety_byLevel->{$varietyName_forStorage});
+			$frequencyComparison_href->{$varietyName_forStorage} = {} unless(defined $frequencyComparison_href->{$varietyName_forStorage});
+		}
 		my $simulation_results_dir = $simulation_href->{outputDirectory} . '/inference_' . $varietyName;
 		my $DBdir = $simulation_href->{outputDirectory} . '/DB_' . $varietyName;
 		
@@ -1792,6 +1828,7 @@ sub evaluateOneSimulation
 		{
 			$directlyMappable_href->{$varietyName}{$tID} = 1;
 		}
+		
 		# reduce master taxonomy
 		my $specificTaxonomy = dclone $extendedMaster;
 		taxTree::removeUnmappableParts($specificTaxonomy, \%reduced_taxonID_master_2_contigs);
@@ -1858,14 +1895,21 @@ sub evaluateOneSimulation
 					my @missing_readIDs = grep {not exists $truth_raw_reads_href->{$_}} keys %$inferred_reads;
 					die Dumper("Missing some reads in truth file $truth_fn (inference file $f)", @missing_readIDs[0 .. 5]);
 				}
-				validation::readLevelComparison($extendedMaster, $truth_raw_reads_href, $truth_mappingDatabase_reads, $inferred_reads, $methodName, $n_reads_correct_byVariety->{$varietyName}, $n_reads_correct_byVariety_byLevel->{$varietyName}, $n_reads_correct_byVariety_byLevel_byLength->{$varietyName}, \%reduced_taxonID_master_2_contigs, $readLengths_href);
+				
+				foreach my $varietyName_forStorage (@varietyNames_forStorage)
+				{				
+					validation::readLevelComparison($extendedMaster, $truth_raw_reads_href, $truth_mappingDatabase_reads, $inferred_reads, $methodName, $n_reads_correct_byVariety->{$varietyName_forStorage}, $n_reads_correct_byVariety_byLevel->{$varietyName_forStorage}, $n_reads_correct_byVariety_byLevel_byLength->{$varietyName_forStorage}, \%reduced_taxonID_master_2_contigs, $readLengths_href);
+				}
 			}
-			else
+			else 
 			{
 				print "Read $f\n";
 				my $inferred_distribution = validation::readInferredDistribution($extendedMaster, $extendedMaster_merged, $f);
 				print "Analyse $f\n";
-				validation::distributionLevelComparison($extendedMaster, $truth_mappingDatabase_distribution, $inferred_distribution, $methodName, $freq_byVariety_byLevel->{$varietyName}, $frequencyComparison_href->{$varietyName});
+				foreach my $varietyName_forStorage (@varietyNames_forStorage)
+				{
+					validation::distributionLevelComparison($extendedMaster, $truth_mappingDatabase_distribution, $inferred_distribution, $methodName, $freq_byVariety_byLevel->{$varietyName_forStorage}, $frequencyComparison_href->{$varietyName_forStorage});
+				}
 				print "Done $f\n\n";
 			}
 			
@@ -1909,9 +1953,9 @@ sub evaluateOneSimulation
 		foreach my $taxonID (keys %reduced_taxonID_original_2_contigs)
 		{
 			$unknown_and_frequencyContributions_href->{$varietyName}{mappable}{$taxonID} = 1;
-			$unknown_and_frequencyContributions_href->{$varietyName}{truthReadsNovelTree} = $truth_reads_novelTree;
-			$unknown_and_frequencyContributions_href->{$varietyName}{nReads} = scalar(keys %$truth_raw_reads_href);
 		}
+		$unknown_and_frequencyContributions_href->{$varietyName}{truthReadsNovelTree} = $truth_reads_novelTree;
+		$unknown_and_frequencyContributions_href->{$varietyName}{nReads} = scalar(keys %$truth_raw_reads_href);		
 	}
 }
 
@@ -2215,6 +2259,7 @@ sub doMetaMap
 	my $dir = shift;
 	my $DB = shift;
 	my $reads = shift;
+	my $maxMemory = shift;
 	
 	print "Carry out MetaMap mapping and classification\n";
 	print "\tDB   : $DB\n";
@@ -2232,12 +2277,18 @@ sub doMetaMap
 	mkdir($metamap_output_dir) or die "Cannot mkdir $metamap_output_dir";
 	
 	my $file_mappings = $metamap_output_dir . '/metamap';
-	my $file_res_mapping = $file_mappings . '/resources_mapping';
-	my $file_res_classification = $file_mappings . '/resources_classification';
+	my $file_res_mapping = $metamap_output_dir . '/resources_mapping';
+	my $file_res_classification = $metamap_output_dir . '/resources_classification';
 	
 	die unless(-e $DB.'/DB.fa');
 	# my $cmd_map = qq(/usr/bin/time -v $metamap_bin mapDirectly --all --maxmemory 20 -r $DB/DB.fa -q $reads -m 2000 --pi 80 -o $file_mappings &> file_res_mapping);
-	my $cmd_map = qq(/usr/bin/time -v $metamap_bin mapDirectly --all -r $DB/DB.fa -q $reads -m 2000 --pi 80 -o $file_mappings &> file_res_mapping);
+	my $maxmemory_switch = '';
+	if($maxMemory)
+	{
+		$maxmemory_switch = " --maxmemory $maxMemory "
+	}
+	my $cmd_map = qq(/usr/bin/time -v $metamap_bin mapDirectly --all ${maxmemory_switch}-r $DB/DB.fa -q $reads -m 2000 --pi 80 -o $file_mappings &> $file_res_mapping);
+
 	print "Now executing: $cmd_map\n"; # todo remove?
 	# $cmd_map = qq(/usr/bin/time -v $metamap_bin mapDirectly --all -r $DB/DB.fa -q $reads -m 2000 --pi 80 -o $file_mappings);
 	system($cmd_map) and die "Cannot execute $cmd_map";
@@ -2249,7 +2300,7 @@ sub doMetaMap
 		warn "Assume that we're using a very small simulation DB, set --minReads to 1";
 		$minReads = 1;
 	}	
-	my $cmd_classify = qq(/usr/bin/time -v $metamap_bin classify --DB $DB --mappings $file_mappings --minreads $minReads &> file_res_classification);
+	my $cmd_classify = qq(/usr/bin/time -v $metamap_bin classify --DB $DB --mappings $file_mappings --minreads $minReads &> $file_res_classification);
 	$cmd_classify = qq(/usr/bin/time -v $metamap_bin classify --DB $DB --mappings $file_mappings --minreads $minReads); 
 	system($cmd_classify) and die "Cannot execute $cmd_classify";
 	

@@ -192,6 +192,24 @@ protected:
 			boost::filesystem::wpath F(resultsFile);
 			assert(boost::filesystem::remove(F));
 		}		
+		
+		std::ofstream parametersStream(unifiedOutputFN+".parameters");
+		assert(parametersStream.is_open());
+		
+		parametersStream << "kmerSize" << " " << param.kmerSize << "\n";
+		parametersStream << "windowSize" << " " << param.windowSize << "\n";
+		parametersStream << "minReadLength" << " " << param.minReadLength << "\n";
+		parametersStream << "alphabetSize" << " " << param.alphabetSize << "\n";
+		parametersStream << "referenceSize" << " " << param.referenceSize << "\n";
+		parametersStream << "percentageIdentity" << " " << param.percentageIdentity << "\n";
+		parametersStream << "p_value" << " " << param.p_value << "\n";
+		parametersStream << "refSequences" << " " << param.refSequences << "\n";
+		parametersStream << "querySequences" << " " << param.querySequences << "\n";
+		parametersStream << "outFileName" << " " << param.outFileName << "\n";
+		parametersStream << "reportAll" << " " << param.reportAll << "\n";
+		parametersStream << "index" << " " << param.index << "\n";
+		parametersStream << "maximumMemory" << " " << param.maximumMemory << "\n";
+			
 	}
 
 	void addMappingQualities(const skch::Parameters& param, std::vector<std::string>& lines)

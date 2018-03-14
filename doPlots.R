@@ -90,10 +90,14 @@ if(any(freqD[["variety"]] == "fullDB"))
 }
 if(any(freqD[["variety"]] != "fullDB"))
 {
-	frequency_plotTypes <- c(frequency_plotTypes, "incomplete")
+	frequency_plotTypes <- c(frequency_plotTypes, "incompleteSummary")
 }
+varieties_nonFullDB <- sort(unique(freqD[["variety"]][freqD[["variety"]] != "fullDB"]))
+frequency_plotTypes <- c(frequency_plotTypes, varieties_nonFullDB)
 for(plotType in frequency_plotTypes)
 {
+	frequency_varities <- c("Summary")
+
 	for(l in freq_levels)
 	{
 		xAxis_values <- c()
@@ -114,10 +118,15 @@ for(plotType in frequency_plotTypes)
 					pC[["Mappable"]] <- "blue"			
 					indices <- which((freqD[["method"]] == m) & (freqD[["level"]] == l_lookup) & (freqD[["variety"]] == "fullDB"))
 				}
-				else
+				else if(plotType == "incompleteSummary")
 				{
 					pC[["Mappable"]] <- "gray"			
 					indices <- which((freqD[["method"]] == m) & (freqD[["level"]] == l_lookup) & (freqD[["variety"]] != "fullDB"))
+				}
+				else
+				{
+					pC[["Mappable"]] <- "gray"			
+					indices <- which((freqD[["method"]] == m) & (freqD[["level"]] == l_lookup) & (freqD[["variety"]] == plotType))				
 				}
 				
 				if(iteration == "defineAxes")
@@ -201,7 +210,7 @@ for(plotType in frequency_plotTypes)
 						stopifnot(length(frTarget) == length(pointColours))
 						r <- cor(frTarget, frIs)
 						L1 <- sum(abs(frTarget - frIs))
-						text(xAxis_twoThirds, yAxis_twoThirds, labels = paste("r = ", sprintf("%.3f", r), sep = ""), cex = 1.5)
+						text(xAxis_twoThirds, yAxis_twoThirds, labels = paste("r**2 = ", sprintf("%.3f", r**2), sep = ""), cex = 1.5)
 						text(xAxis_twoThirds, yAxis_twoThirds_2, labels = paste("L1 = ", sprintf("%.3f", L1), sep = ""), cex = 1.5)
 						axis(2, xaxs = "i", labels = F)			
 						axis(1, xaxs = "i", labels = F)
@@ -249,10 +258,14 @@ for(plotType in frequency_plotTypes)
 	{
 		mtext("Inference with complete DB", side = 3, line = 2.2, outer = TRUE, cex = 1.5)
 	}
+	else if(plotType == "incompleteSummary")
+	{
+		mtext("Inference with incomplete DB (summary)", side = 3, line = 2.2, outer = TRUE, cex = 1.5)	
+	}
 	else
 	{
-		mtext("Inference with incomplete DB", side = 3, line = 2.2, outer = TRUE, cex = 1.5)	
-	}
+		mtext(paste("Inference for ", plotType, sep = ""), side = 3, line = 2.2, outer = TRUE, cex = 1.5)		
+	}				
 }
 
 dev.off()
