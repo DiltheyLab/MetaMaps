@@ -32,13 +32,18 @@ perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix p25_logNo
 Rscript doPlots.R databases/miniSeq+H/simulations_p25_logNormal
 
 perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix i100_specifiedFrequencies&&\
-Rscript doPlots.R databases/miniSeq+H/i100_specifiedFrequencies
+Rscript doPlots.R databases/miniSeq+H/simulations_i100_specifiedFrequencies
+
+perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix i100_specifiedFrequencies_limitedMemory&&\
+Rscript doPlots.R databases/miniSeq+H/simulations_i100_specifiedFrequencies_limitedMemory
 
 perl util/HMPplot.pl
 
 
 perl simulate.pl --DB databases/miniSeq+H --action inferenceJobI --jobI 0 --suffix i100_specifiedFrequencies_limitedMemory --maxMemory 20 --skipKraken 1
 perl simulate.pl --DB databases/miniSeq+H --action inferenceJobI --jobI 0 --suffix i100_specifiedFrequencies --skipKraken 1
+
+
 
 For testing:
 
