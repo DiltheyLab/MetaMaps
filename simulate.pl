@@ -2321,10 +2321,10 @@ sub doMetaMap
 	if($DB =~ /miniSeq_100/)
 	{
 		warn "Assume that we're using a very small simulation DB, set --minReads to 1";
-		$minReads = 1;
+		$minReads = 1; 
 	}	
 	my $cmd_classify = qq(/usr/bin/time -v $metamap_bin classify --DB $DB --mappings $file_mappings --minreads $minReads &> $file_res_classification);
-	$cmd_classify = qq(/usr/bin/time -v $metamap_bin classify --DB $DB --mappings $file_mappings --minreads $minReads); 
+	$cmd_classify = qq(/usr/bin/time -v $metamap_bin classify --DB $DB --mappings $file_mappings --minreads $minReads &> $file_res_classification); 
 	system($cmd_classify) and die "Cannot execute $cmd_classify";
 	
 
