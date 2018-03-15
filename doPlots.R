@@ -433,7 +433,13 @@ for(rC in rCs)
 			accuracies_by_Method_byLevel[[iM]][[eL]] <- barplotD_byLevel[["accuracyAvg"]][relevantIndices[[1]]]
 		}
 		callRate <- callRates_iM[[1]]
-		stopifnot(all(callRates_iM == callRate))
+		if(!all(abs(callRates_iM - callRate) <= 1e-5))
+		{
+			print("Call rate mismatch")
+			print(callRate)
+			print(callRates_iM)
+		}
+		stopifnot(all(abs(callRates_iM - callRate) <= 1e-5))
 		callRates_by_Method <- c(callRates_by_Method, callRate)
 		callRates_by_Method_list[[iM]] <- callRate
 	}
