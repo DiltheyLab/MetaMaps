@@ -260,6 +260,7 @@ sub truthReadsToTruthSummary
 		{
 			$taxonID_translation{$taxonID} = getAllRanksForTaxon_withUnclassified($taxonomy, $taxonID, $mappableTaxonIDs_href);
 			$taxonID_translation{$taxonID}{definedAndHypotheticalGenomes} = $taxonID;
+			$taxonID_translation{$taxonID}{absolute} = $taxonID;
 		}
 		
 		foreach my $rank (keys %{$taxonID_translation{$taxonID}})
@@ -563,7 +564,7 @@ sub readLevelComparison
 				$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{correct} = 0;			
 			}	
 
-			foreach my $level (@evaluateAccuracyAtLevels)
+			foreach my $level ('absolute', @evaluateAccuracyAtLevels)
 			{
 				unless(defined $n_reads_correct_byLevel{$category}{$level}{N})
 				{
@@ -592,6 +593,9 @@ sub readLevelComparison
 			my $lightning_truth = $getLightning->($trueTaxonID_inUsedDB);
 			my $lightning_inferred = $getLightning->($inferredTaxonID);
 			my $attachedTo_inInference = $get_read_assignedToLevel->($readID);
+			
+			$lightning_truth->{absolute} = $trueTaxonID_inUsedDB;
+			$lightning_inferred->{absolute} = $inferredTaxonID;
 			
 			foreach my $category (@read_categories)
 			{
@@ -624,7 +628,7 @@ sub readLevelComparison
 				print "\tinferredTaxonID     : ", $inferredTaxonID, "\n";
 				print "\tabsolute truth      : ", $reads_truth_absolute->{$readID}, "\n";
 			}
-			foreach my $level (@evaluateAccuracyAtLevels)
+			foreach my $level ('absolute', @evaluateAccuracyAtLevels)
 			{
 				die unless((defined $lightning_truth->{$level}) and (defined defined $lightning_inferred->{$level}));
 				if($printRead)
@@ -637,7 +641,10 @@ sub readLevelComparison
 				{					
 					$n_reads_correct_byLevel{$category}{$level}{N}++;
 					$n_reads_correct_byLevel{$category}{$level}{N_truthDefined}++ if($lightning_truth->{$level} ne 'NotLabelledAtLevel');
-					$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{N}++;
+					if($level ne 'absolute')
+					{
+						$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{N}++;
+					}
 					
 					$n_reads_correct_byLevel{$category}{$level}{'attachedTo_' . $attachedTo_inInference}++;
 					$n_reads_correct_byLevel{$category}{$level}{'attachedToDirectlyMappable'} += ((exists $mappableTaxonIDs->{$inferredTaxonID}) ? 1 : 0);
@@ -645,8 +652,10 @@ sub readLevelComparison
 					if($lightning_truth->{$level} eq $lightning_inferred->{$level})
 					{
 						$n_reads_correct_byLevel{$category}{$level}{correct}++;
-						$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{correct}++;						
-						
+						if($level ne 'absolute')
+						{						
+							$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{correct}++;						
+						}
 						if($inferredTaxonID eq $trueTaxonID_inUsedDB)
 						{
 							$n_reads_correct_byLevel{$category}{$level}{correct_exactly}++;
@@ -673,12 +682,15 @@ sub readLevelComparison
 				die unless($n_reads_correct{$category}{missing} <= scalar(@readIDs));
 				$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{missing}++;
 				
-				foreach my $level (@evaluateAccuracyAtLevels)
+				foreach my $level ('absolute', @evaluateAccuracyAtLevels)
 				{
 					$n_reads_correct_byLevel{$category}{$level}{missing}++;
 					die unless($n_reads_correct_byLevel{$category}{$level}{missing} <= scalar(@readIDs));
 					
-					$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{missing}++;
+					if($level ne 'absolute')
+					{
+						$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{missing}++;
+					}
 				}
 			}
 		}
@@ -753,12 +765,29 @@ sub distributionLevelComparison
 	my $external_comparison = shift;
 	my $frequencyComparison_href = shift;
 	
-	foreach my $level ('definedGenomes', 'definedAndHypotheticalGenomes', @evaluateAccuracyAtLevels)
+	foreach my $level ('absolute', 'definedGenomes', 'definedAndHypotheticalGenomes', @evaluateAccuracyAtLevels)
 	{
 		my $lookupKey_level_InInference = $level;
 		if(($level eq 'definedAndHypotheticalGenomes') and (not defined $distribution_inferred->{$lookupKey_level_InInference}))
 		{
 			$lookupKey_level_InInference = 'definedGenomes';
+		}
+		
+		if($level eq 'absolute')
+		{
+			if(defined $distribution_inferred->{'definedAndHypotheticalGenomes'})
+			{	
+				$lookupKey_level_InInference = 'definedAndHypotheticalGenomes';
+				# die unless(defined $distribution_inferred->{'definedGenomes'});
+			}
+			elsif(defined $distribution_inferred->{'definedGenomes'})
+			{
+				$lookupKey_level_InInference = 'definedGenomes';
+			}
+			else
+			{
+				die if(defined $distribution_inferred->{$level});
+			}
 		}
 		next unless(defined $distribution_inferred->{$lookupKey_level_InInference});
 		die unless(defined $distribution_truth->{$level});

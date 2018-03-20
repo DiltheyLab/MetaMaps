@@ -203,4 +203,5 @@ perl simulate.pl --DB databases/miniSeq_100 --action prepare --n_simulations 2 -
 
 perl simulate.pl --DB databases/miniSeq_100 --action prepare --n_simulations 1 --suffix logNormal --coverageMode logNormal
 perl simulate.pl --DB databases/miniSeq_100 --action prepareII --suffix logNormal 
-perl simulate.pl --DB databases/miniSeq_100 --action analyzeAll --suffix logNormal 
+perl simulate.pl --action analyzeAll --suffix logNormal 
+

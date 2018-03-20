@@ -573,6 +573,14 @@ elsif($action eq 'analyzeAll')
 	close(N);
 	die unless($realizedN =~ /^\d+$/);
 
+	my $outputDir_allSimulations = $DB;
+	
+	my $assumeHaveHeader_READSCORRECTBYLEVEL_ALL = ((-e $outputDir_allSimulations . '/_readsCorrectByLevel') && (-s $outputDir_allSimulations . '/_readsCorrectByLevel'));
+	my $assumeHaveHeader_FREQEVALUATION_ALL = ((-e $outputDir_allSimulations . '/_frequenciesCorrectByLevel') && (-s $outputDir_allSimulations . '/_frequenciesCorrectByLevel'));
+	
+	open(READSCORRECTBYLEVEL_ALL, '>>', $outputDir_allSimulations . '/_readsCorrectByLevel') or die;
+	open(FREQEVALUATION_ALL, '>>', $outputDir_allSimulations . '/_frequenciesCorrectByLevel') or die;
+
 	# check that required files are present
 	my $haveAllFiles = 1;
 	for(my $jobI = 0; $jobI < $realizedN; $jobI++)  
@@ -1112,7 +1120,7 @@ elsif($action eq 'analyzeAll')
 			}
 		} keys %_readStratification;
 		# my @evaluationLevels = sort keys %_evaluationLevels;
-		my @evaluationLevels = qw/species genus family/;
+		my @evaluationLevels = qw/absolute species genus family/;
 		die Dumper("Missing evaluation levels I", \@evaluationLevels, \%_evaluationLevels, [\@varieties]) unless(all {exists $_evaluationLevels{$_}} @evaluationLevels);
 		
 		open(BARPLOTSFULLDB, '>', $globalOutputDir . '/_forPlot_barplots_fullDB') or die;
@@ -1143,7 +1151,7 @@ elsif($action eq 'analyzeAll')
 			print READSABSOLUTELYCORRECT join("\t", @header_fields_1_absolutelyCorrect), "\n";
 			print READSABSOLUTELYCORRECT join("\t", @header_fields_2_absolutelyCorrect), "\n";
 			print READSABSOLUTELYCORRECT join("\t", @header_fields_3_absolutelyCorrect), "\n";
-			
+
 			foreach my $readLevel (@readLevels)
 			{
 				my @output_fields_absolutelyCorrect = ($readLevel);
@@ -1226,8 +1234,7 @@ elsif($action eq 'analyzeAll')
 					}
 				}
 			
-				print READSABSOLUTELYCORRECT join("\t", @output_fields_absolutelyCorrect), "\n";
-			}	
+				print READSABSOLUTELYCORRECT join("\t", @output_fields_absolutelyCorrect), "\n";			}	
 			
 
 			close(READSABSOLUTELYCORRECT);
@@ -1258,7 +1265,14 @@ elsif($action eq 'analyzeAll')
 			print READSCORRECTBYLEVEL join("\t", @header_fields_1_byLevelCorrect), "\n";
 			print READSCORRECTBYLEVEL join("\t", @header_fields_2_byLevelCorrect), "\n";
 			print READSCORRECTBYLEVEL join("\t", @header_fields_3_byLevelCorrect), "\n";
-
+			
+			# unless($assumeHaveHeader_READSCORRECTBYLEVEL_ALL)
+			{
+				print READSCORRECTBYLEVEL_ALL join("\t", 'Experiment', @header_fields_1_byLevelCorrect), "\n";
+				print READSCORRECTBYLEVEL_ALL join("\t", '', @header_fields_2_byLevelCorrect), "\n";
+				print READSCORRECTBYLEVEL_ALL join("\t", '', @header_fields_3_byLevelCorrect), "\n";
+			}
+						
 			foreach my $readLevel (@readLevels)
 			{
 				foreach my $evaluationLevel (@evaluationLevels)
@@ -1314,14 +1328,14 @@ elsif($action eq 'analyzeAll')
 									my $i_N_total_truthDefined = $i_N_madeCall_truthDefined + $i_missing;									
 									
 									my $i_callRate = $i_N_madeCall / $i_Ntotal if($i_Ntotal > 0);
-									my $i_percOK_total_truthDefined = sprintf("%.2f", ($i_correct_truthDefined / $i_N_total_truthDefined)) if($i_N_total_truthDefined > 0);
+									my $i_percOK_total_truthDefined = ($i_correct_truthDefined / $i_N_total_truthDefined) if($i_N_total_truthDefined > 0);
 									
 									my $i_percOK_madeCall = ($i_correct / $i_N_madeCall) if($i_N_madeCall > 0);
 																
 																
 									my $i_percOK_madeCall_truthDefined = ($i_correct_truthDefined / $i_N_madeCall_truthDefined) if($i_N_madeCall_truthDefined > 0);
 									
-									my $i_percMissing = sprintf("%.2f", ($i_missing / $i_Ntotal)) if($i_Ntotal > 0);
+									my $i_percMissing = ($i_missing / $i_Ntotal) if($i_Ntotal > 0);
 									
 									push(@N_total, $i_Ntotal);
 									push(@N_total_truthDefined, $i_N_total_truthDefined);
@@ -1353,7 +1367,7 @@ elsif($action eq 'analyzeAll')
 								die unless(scalar(@percOK_madeCall_truthDefined) == scalar(@callRate));
 								die unless(scalar(@percMissing) == scalar(@callRate));
 							}
-						
+						 
 							my $callRate = (scalar(@callRate)) ? Util::mean(@callRate) : 'NA';
 							my $percOK_madeCall_fullAccuracy = (scalar(@callRate)) ? Util::mean(@percOK_madeCall_fullAccuracy) : 'NA';
 							
@@ -1384,6 +1398,7 @@ elsif($action eq 'analyzeAll')
 						}
 					}
 					print READSCORRECTBYLEVEL join("\t", @output_fields_byLevelCorrect), "\n";
+					print READSCORRECTBYLEVEL_ALL join("\t", $suffix, @output_fields_byLevelCorrect), "\n";
 				}
 			}
 			
@@ -1414,7 +1429,7 @@ elsif($action eq 'analyzeAll')
 		
 		my @methods = sort keys %_methods;
 		
-		my @evaluationLevels = qw/species genus family/;
+		my @evaluationLevels = qw/absolute species genus family/;
 		# my @evaluationLevels = sort keys %_evaluationLevels;
 		die Dumper("Missing evaluation levels II", \@evaluationLevels, \%_evaluationLevels, \@varieties, \%_methods, \%freq_byVariety_byLevel) unless(all {exists $_evaluationLevels{$_}} @evaluationLevels);
 				
@@ -1443,11 +1458,19 @@ elsif($action eq 'analyzeAll')
 		print FREQEVALUATION join("\t", @header_fields_1_freqCorrect), "\n";
 		print FREQEVALUATION join("\t", @header_fields_2_freqCorrect), "\n";
 		print FREQEVALUATION join("\t", @header_fields_3_freqCorrect), "\n";
+	
+
+		# unless($assumeHaveHeader_FREQEVALUATION_ALL)
+		{
+			print FREQEVALUATION_ALL join("\t", 'Experiment', @header_fields_1_freqCorrect), "\n";
+			print FREQEVALUATION_ALL join("\t", '', @header_fields_2_freqCorrect), "\n";
+			print FREQEVALUATION_ALL join("\t", '', @header_fields_3_freqCorrect), "\n";
+		}
 		 
 		foreach my $evaluationLevel (@evaluationLevels)
 		{		
 			my @output_fields_freqCorrect = ($evaluationLevel);	
-		
+		 
 			foreach my $variety (@varieties)
 			{				
 				foreach my $methodName (@methods)
@@ -1479,6 +1502,7 @@ elsif($action eq 'analyzeAll')
 			}	
 			
 			print FREQEVALUATION join("\t", @output_fields_freqCorrect), "\n";
+			print FREQEVALUATION_ALL join("\t", $suffix, @output_fields_freqCorrect), "\n";
 		}
 		
 		close(FREQEVALUATION);
@@ -1545,6 +1569,7 @@ elsif($action eq 'analyzeAll')
 					{
 						foreach my $level (keys %{$frequencyComparisons_bySimulation[$simulationI]{$variety}{$label}})
 						{
+							next if($level eq 'absolute');
 							foreach my $taxonID (keys %{$frequencyComparisons_bySimulation[$simulationI]{$variety}{$label}{$level}})
 							{
 								my $taxonID_label = (($taxonID eq 'Unclassified') or ($taxonID eq 'NotLabelledAtLevel')) ? $taxonID : taxTree::taxon_id_get_name($taxonID, $fullTaxonomy_simulation);

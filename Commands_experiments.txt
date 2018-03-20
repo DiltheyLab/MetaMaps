@@ -48,3 +48,8 @@ perl simulate.pl --DB databases/miniSeq+H --action inferenceJobI --jobI 0 --suff
 For testing:
 
 perl simulate.pl --action analyzeAll --suffix logNormal
+
+perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix i100_specifiedFrequencies && \
+perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix i100_specifiedFrequencies_limitedMemory && \
+perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix p25_logNormal 
+
