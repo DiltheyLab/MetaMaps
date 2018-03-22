@@ -38,7 +38,7 @@ freq_methods <- c("Kraken-Dist", "Bracken-Dist", "MetaMap-EM-Dist", "MetaMap-U-D
 freq_levels <- c("definedGenomes", "species", "genus", "family")
 freqD[["freqTarget"]] <- as.numeric(freqD[["freqTarget"]])
 freqD[["freqIs"]] <- as.numeric(freqD[["freqIs"]])
-idx_minmax <- which(freqD[["level"]] %in% freq_levels)
+# idx_minmax <- which(freqD[["level"]] %in% freq_levels)
 pC <- list()
 pC[["Unclassified"]] <- "#00FF00"
 # pC[["NotLabelledAtLevel"]] <- "#009900"
