@@ -1394,7 +1394,10 @@ elsif($action eq 'analyzeAll')
 							
 							print "Generating ", $globalOutputDir . '/_forPlot_barplots_fullDB', " $readLevel $variety $methodName: averaging over ", scalar(@callRate), " iterations.\n";
 						 
-							print BARPLOTSFULLDB join("\t",  $readLevel, $variety, $methodName, $evaluationLevel, $callRate, $percOK_madeCall_fullAccuracy, scalar(@N_total)), "\n";						
+							if($evaluationLevel ne 'absolute')
+							{
+								print BARPLOTSFULLDB join("\t",  $readLevel, $variety, $methodName, $evaluationLevel, $callRate, $percOK_madeCall_fullAccuracy, scalar(@N_total)), "\n";						
+							}
 						}
 					}
 					print READSCORRECTBYLEVEL join("\t", @output_fields_byLevelCorrect), "\n";
@@ -1823,6 +1826,7 @@ sub evaluateOneSimulation
 		# last if($varietyI > 2);
 		
 		my $varietyName = $simulation_href->{inferenceDBs}[$varietyI][2];
+		
 		my @varietyNames_forStorage = ($varietyName);
 		push(@varietyNames_forStorage, 'allCombined_' . $varietyI);
 		if($varietyName =~ /remove/)

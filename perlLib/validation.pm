@@ -545,6 +545,8 @@ sub readLevelComparison
 	foreach my $readID (@readIDs)
 	{
 		my @read_categories = $get_read_categories->($readID);
+		# my %_read_categories = map {$_ => 1} @read_categories;
+		
 		die unless(defined $readLengths_href->{$readID});
 		my $readLengthBin = $getLengthBinForLength->($readLengths_href->{$readID});
 		
@@ -651,6 +653,11 @@ sub readLevelComparison
 					
 					if($lightning_truth->{$level} eq $lightning_inferred->{$level})
 					{
+						# if(($level eq 'absolute') and ($category eq 'novel') and ($label =~ /Metamap-EM-Reads/))
+						# {
+							# die Dumper("How can this be?", $readID, \@read_categories, $level, $lightning_truth->{$level}, $lightning_inferred->{$level}, $lightning_truth, $lightning_inferred);
+						# }
+						
 						$n_reads_correct_byLevel{$category}{$level}{correct}++;
 						if($level ne 'absolute')
 						{						

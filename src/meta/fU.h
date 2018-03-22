@@ -991,7 +991,7 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 			
 			if(ll_relative_imp < 0.0001)
 			{
-				continueEM = false;
+				// continueEM = false;
 			}
 						
 		/*

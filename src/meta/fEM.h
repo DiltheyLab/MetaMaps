@@ -480,7 +480,7 @@ void doEM(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestC
 			
 			if(ll_relative_imp < 0.0001)
 			{
-				continueEM = false;
+				//continueEM = false;
 			}
 			
 			if((ll_diff < 20) || (EMiteration > 30))
