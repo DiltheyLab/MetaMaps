@@ -6,6 +6,7 @@ use List::Util qw/all sum min max/;
 use List::MoreUtils qw/mesh/;
 use taxTree;
 use Statistics::Basic qw/correlation/;
+use Storable qw/dclone store retrieve/;
 
 my @evaluateAccuracyAtLevels = qw/species genus family superkingdom/;
 {
@@ -907,6 +908,9 @@ sub analyseAndAddOneExperiment
 	
 	my $varietyName_forStorage = shift;
 	
+	die unless(defined $extendedMaster);
+	die unless(defined $varietyName_forStorage);
+	
 	my $allSimulations_data_href = getEmptyGlobalResltsStore();
 
 	my $frequencyComparison = {};
@@ -940,6 +944,8 @@ sub analyseAndAddOneExperiment
 	my $truth_mappingDatabase_distribution = validation::truthReadsToTruthSummary($mappableTaxonomy, $truth_reads_href_noUnknown, $reduced_taxonID_master_2_contigs_href);
 
 	die unless($#{$inferred_reads_aref} == $#{$methodNames_aref});
+	die unless($#{$inferred_reads_aref} == $#{$inferred_distributions_aref});
+	
 	for(my $methodI = 0; $methodI <= $#{$inferred_reads_aref}; $methodI++)
 	{
 		if(defined $inferred_reads_aref->[$methodI])
@@ -976,6 +982,7 @@ sub analyseAndAddOneExperiment
 	my %taxonIDs_in_direct_truth = map {$_ => 1} values %$truth_reads_href;
 	foreach my $taxonID (keys %taxonIDs_in_direct_truth)
 	{
+		next if($taxonID eq '0');
 		my @descendants = taxTree::descendants($extendedMaster, $taxonID);
 		foreach my $descendantID (@descendants)
 		{
@@ -1304,6 +1311,7 @@ sub distributionLevelComparison
 				# print join("\t", "Debug output level $level", $inferredTaxonID, $isFreq, $shouldBeFreq), "\n";
 			}	
 		}
+
 		die Dumper("Weird total freq", $label, $totalFreq, $level) unless(abs(1 - $totalFreq) <= 1e-3);
 		
 		my $S_AVGRE = 0;
@@ -1401,6 +1409,7 @@ sub readInferredDistribution
 	my $header_line = <I>;
 	chomp($header_line);
 	my @header_fields = split(/\t/, $header_line);
+	my %freq_per_level;
 	while(<I>)
 	{
 		my $line = $_;
@@ -1439,6 +1448,7 @@ sub readInferredDistribution
 		$inference{$line{AnalysisLevel}}{$taxonID_master}[0] += $line{Absolute};
 		die unless(exists $line{PotFrequency});
 		$inference{$line{AnalysisLevel}}{$taxonID_master}[1] += $line{PotFrequency};
+		$freq_per_level{$line{AnalysisLevel}} += $line{PotFrequency};  
 		
 		# if(exists $line{EMFrequency})
 		# {
@@ -1450,6 +1460,15 @@ sub readInferredDistribution
 		# }
 	}
 	close(I);	
+	
+	foreach my $level (keys %freq_per_level)
+	{
+		my $S = $freq_per_level{$level};
+		unless(abs($S - 1) <= 1e-3)
+		{
+			die "Weird sum of frequencies in file $f for level $level";
+		}
+	}	
 	
 	return \%inference;
 }

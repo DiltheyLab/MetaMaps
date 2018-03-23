@@ -48,8 +48,10 @@ foreach my $resultsSet (@resultsSets)
 	my %resultsFiles = (
 		'MetaMap-EM' => [$MetaMap_results . '.EM.reads2Taxon',  $MetaMap_results . '.EM.WIMP'],
 		'MetaMap-U' => [$MetaMap_results . '.U.reads2Taxon', $MetaMap_results . '.U.WIMP'],
-		'Kraken' => [$kraken_results_dir . '/results_kraken.txt.reads2Taxon', $kraken_results_dir . '/results_kraken.txt.ignoreUnclassified'],
-		'Bracken' => [undef, $kraken_results_dir . '/results_bracken.txt.ignoreUnclassified'],
+		#'Kraken' => [$kraken_results_dir . '/results_kraken.txt.reads2Taxon', $kraken_results_dir . '/results_kraken.txt.ignoreUnclassified'],
+		#'Bracken' => [undef, $kraken_results_dir . '/results_bracken.txt.ignoreUnclassified'],
+		'Kraken' => [$kraken_results_dir . '/results_kraken.txt.reads2Taxon', $kraken_results_dir . '/results_kraken.txt'],
+		'Bracken' => [undef, $kraken_results_dir . '/results_bracken.txt'],
 	);
 
 	my $missingFiles = 0;
@@ -103,15 +105,19 @@ foreach my $resultsSet (@resultsSets)
 
 	my @methodNames;
 	my @inferred_reads;
-	my @inferred_distributions;
+	my @inferred_distributions; 
 	foreach my $method (keys %resultsFiles)
 	{
+		push(@methodNames, $method);
+		
 		my $fn_inference_reads = $resultsFiles{$method}[0];
 		my $fn_inference_distribution = $resultsFiles{$method}[1];
 		
 		if(defined $fn_inference_reads)
 		{
 			my $inferred_reads = validation::readInferredFileReads($extendedMaster, $extendedMaster_merged, $fn_inference_reads);
+			my @keys_with_defined_truth = grep {exists $truth_reads_href_noUnknown->{$_}} keys %$inferred_reads;
+			$inferred_reads = {map {$_ => $inferred_reads->{$_}} @keys_with_defined_truth};
 			push(@inferred_reads, $inferred_reads);
 		}
 		else
@@ -133,7 +139,7 @@ foreach my $resultsSet (@resultsSets)
 	my $allSimulations_data_href = validation::analyseAndAddOneExperiment(
 		$extendedMaster,
 		\%reduced_taxonID_master_2_contigs,
-		$truth_reads_href,
+		$truth_reads_href_noUnknown,
 		$readLengths_href, 
 		\@methodNames,
 		\@inferred_reads,
