@@ -907,6 +907,7 @@ sub evaluateOneSimulation
 			$n_reads_correct_byVariety_byLevel_byLength->{$varietyName_forStorage} = {} unless(defined $n_reads_correct_byVariety_byLevel_byLength->{$varietyName_forStorage});
 			$freq_byVariety_byLevel->{$varietyName_forStorage} = {} unless(defined $freq_byVariety_byLevel->{$varietyName_forStorage});
 			$frequencyComparison_href->{$varietyName_forStorage} = {} unless(defined $frequencyComparison_href->{$varietyName_forStorage});
+			$n_reads_unknownStats_byLevel_href->{$varietyName_forStorage} = {} unless(defined $n_reads_unknownStats_byLevel_href->{$varietyName_forStorage});
 		}
 		my $simulation_results_dir = $simulation_href->{outputDirectory} . '/inference_' . $varietyName;
 		my $DBdir = $simulation_href->{outputDirectory} . '/DB_' . $varietyName;

@@ -568,6 +568,14 @@ sub readLevelComparison
 				$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{N} = 0;
 				$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{correct} = 0;			
 			}	
+			
+			unless(defined $n_reads_unknownStats_byLevel{$category}{'genome'}{N_unclassified_should0_is0})
+			{
+				$n_reads_unknownStats_byLevel{$category}{'genome'}{N_unclassified_should0_is0} = 0;
+				$n_reads_unknownStats_byLevel{$category}{'genome'}{N_unclassified_should0_is1} = 0;
+				$n_reads_unknownStats_byLevel{$category}{'genome'}{N_unclassified_should1_is0} = 0;
+				$n_reads_unknownStats_byLevel{$category}{'genome'}{N_unclassified_should1_is1} = 0;			
+			}
 
 			foreach my $level ('absolute', @evaluateAccuracyAtLevels)
 			{
@@ -1062,7 +1070,7 @@ sub addResultsToGlobalStore
 			}
 		}
 	}
-	
+		
 	foreach my $variety (keys %$n_reads_correct_byVariety_local_href)
 	{		
 		foreach my $label (keys %{$n_reads_correct_byVariety_local_href->{$variety}}) 
@@ -1526,6 +1534,9 @@ sub produceValidationOutputFiles
 	
 	open(READSCORRECTBYLEVEL_ALL, '>>', $outputDir_allSimulations . '/_readsCorrectByLevel') or die;
 	open(FREQEVALUATION_ALL, '>>', $outputDir_allSimulations . '/_frequenciesCorrectByLevel') or die;
+	open(UNCLASSIFIED_ALL, '>>', $outputDir_allSimulations . '/_unclassifiedSummary_reads') or die;
+	open(UNCLASSIFIED_FREQ_ALL, '>>', $outputDir_allSimulations . '/_unclassifiedSummary_frequencies') or die;
+	
 
 	my @varieties = qw/allCombined fullDB incompleteCombined removeOne_self removeOne_species removeOne_genus/;
 	@varieties = grep {exists $allSimulations_data_href->{n_reads_correct_byVariety}->{$_}} @varieties;
@@ -1537,6 +1548,74 @@ sub produceValidationOutputFiles
 	for(my $levelI = 0; $levelI <= $#levels_ordered; $levelI++)
 	{
 		$level_to_i{$levels_ordered[$levelI]} = $levelI;
+	}
+	
+	{
+		my $fn_unclassified =  $prefix_for_outputFiles . '_unclassifiedSummary_reads';
+		open(UNCLASSIFIED, '>', $fn_unclassified) or die;		
+		
+		print UNCLASSIFIED join("\t", qw/variety readCategory evaluationLevel method averagedOver nAvg sensitivityAvg PPVAvg specificityAvg/), "\n";
+		print UNCLASSIFIED_ALL join("\t", qw/Experiment variety readCategory evaluationLevel method averagedOver nAvg sensitivityAvg PPVAvg specificityAvg/), "\n";
+					
+		foreach my $variety (sort keys %{$allSimulations_data_href->{n_reads_unknownStats_byLevel}})
+		{
+			foreach my $label (sort keys %{$allSimulations_data_href->{n_reads_unknownStats_byLevel}->{$variety}})
+			{
+				foreach my $category (sort keys %{$allSimulations_data_href->{n_reads_unknownStats_byLevel}->{$variety}{$label}})
+				{				
+					foreach my $level (sort keys %{$allSimulations_data_href->{n_reads_unknownStats_byLevel}->{$variety}{$label}{$category}})
+					{
+						my $v = $allSimulations_data_href->{n_reads_unknownStats_byLevel}->{$variety}{$label}{$category}{$level};
+					
+						my @Ns;
+						my @sensitivities;
+						my @PPVs;
+						my @specificities;
+
+						my $n_experiments = $#{$v->{N_unclassified_should1_is1}}+1;
+						
+						for(my $i = 0; $i < $n_experiments; $i++)
+						{
+							die unless(defined $v->{N_unclassified_should0_is0}[$i]);
+							die unless(defined $v->{N_unclassified_should0_is1}[$i]);
+							die unless(defined $v->{N_unclassified_should1_is0}[$i]);
+							die unless(defined $v->{N_unclassified_should1_is1}[$i]);
+							my $N = $v->{N_unclassified_should0_is0}[$i] + $v->{N_unclassified_should0_is1}[$i] + $v->{N_unclassified_should1_is0}[$i] + $v->{N_unclassified_should1_is1}[$i];
+							my $sensitivity = -1;
+							if(($v->{N_unclassified_should1_is0}[$i]+$v->{N_unclassified_should1_is1}[$i]) > 0)
+							{
+								$sensitivity = $v->{N_unclassified_should1_is1}[$i] / ($v->{N_unclassified_should1_is0}[$i]+$v->{N_unclassified_should1_is1}[$i]);
+							}
+							my $PPV = -1;
+							if(($v->{N_unclassified_should1_is1}[$i]+$v->{N_unclassified_should0_is1}[$i]) > 0)
+							{
+								$PPV = $v->{N_unclassified_should1_is1}[$i] / ($v->{N_unclassified_should1_is1}[$i]+$v->{N_unclassified_should0_is1}[$i]);
+							}
+							my $specificity = -1;
+							if(($v->{N_unclassified_should0_is1}[$i]+$v->{N_unclassified_should0_is0}[$i]) > 0)
+							{
+								$specificity = $v->{N_unclassified_should0_is1}[$i] / ($v->{N_unclassified_should0_is1}[$i]+$v->{N_unclassified_should0_is0}[$i]);
+							}	
+							push(@Ns, $N);
+							push(@sensitivities, $sensitivity) if($sensitivity != 1);
+							push(@PPVs, $PPV) if($PPV != -1);
+							push(@specificities, $specificity) if($specificity != -1);											
+						}	
+
+						my $averagedOver = scalar(@Ns);
+						my $avg_N = (scalar(@Ns)) ? Util::mean(@Ns) : 'NA';
+						my $avg_sensitivity = (scalar(@sensitivities)) ? Util::mean(@sensitivities) : 'NA';
+						my $avg_PPVs = (scalar(@PPVs)) ? Util::mean(@PPVs) : 'NA';
+						my $avg_specificity = (scalar(@specificities)) ? Util::mean(@specificities) : 'NA';
+		
+						print UNCLASSIFIED join("\t", $variety, $category, $level, $label, $averagedOver, $avg_N, $avg_sensitivity, $avg_PPVs, $avg_specificity), "\n";
+						print UNCLASSIFIED_ALL join("\t", $suffix, $variety, $category, $level, $label, $averagedOver, $avg_N, $avg_sensitivity, $avg_PPVs, $avg_specificity), "\n";
+					}
+				}
+			}
+		}
+				
+		close(UNCLASSIFIED);
 	}
 	
 	{
@@ -2153,6 +2232,7 @@ sub produceValidationOutputFiles
 	
 			open(XYPLOTS, '>', $prefix_for_outputFiles . '_forPlot_frequencies_xy') or die;
 			print XYPLOTS join("\t", qw/simulationI variety method level taxonID taxonLabel taxonIDCategory isMappable freqTarget freqIs proportionNovelDirectly proportionNovelTotal/), "\n";
+			my %unclassified_is_shouldBe;
 			for(my $simulationI = 0; $simulationI < $allSimulations_data_href->{realizedN}; $simulationI++)  
 			{
 				next unless(defined $allSimulations_data_href->{frequencyComparisons_bySimulation}->[$simulationI]);
@@ -2167,6 +2247,17 @@ sub produceValidationOutputFiles
 					{
 						foreach my $level (keys %{$allSimulations_data_href->{frequencyComparisons_bySimulation}->[$simulationI]{$variety}{$label}})
 						{
+							my $unclassified_shouldBe = 0;						
+							my $unclassified_is = 0;
+
+							if(exists $allSimulations_data_href->{frequencyComparisons_bySimulation}->[$simulationI]{$variety}{$label}{$level}{'Unclassified'})
+							{
+								$unclassified_shouldBe = $allSimulations_data_href->{frequencyComparisons_bySimulation}->[$simulationI]{$variety}{$label}{$level}{'Unclassified'}[0];
+								$unclassified_is = $allSimulations_data_href->{frequencyComparisons_bySimulation}->[$simulationI]{$variety}{$label}{$level}{'Unclassified'}[1];
+							}	
+							
+							push(@{$unclassified_is_shouldBe{$variety}{$label}{$level}}, [$unclassified_shouldBe, $unclassified_is]);
+							
 							next if($level eq 'absolute');
 							foreach my $taxonID (keys %{$allSimulations_data_href->{frequencyComparisons_bySimulation}->[$simulationI]{$variety}{$label}{$level}})
 							{
@@ -2209,6 +2300,49 @@ sub produceValidationOutputFiles
 				}
 			}
 			close(XYPLOTS);
+			
+		
+		
+		
+			my $fn_unclassified_frequencues =  $prefix_for_outputFiles . '_unclassifiedSummary_frequencies';
+			open(UNCLASSIFIED_FREQ, '>', $fn_unclassified_frequencues) or die;		
+		
+			print UNCLASSIFIED_FREQ join("\t", qw/variety label level averagedOver avgUnclassifiedFreqTarget avgUnclassifiedFreqIs avgUnclassifiedFreqAbsDiff/), "\n";
+			print UNCLASSIFIED_FREQ_ALL join("\t", qw/Experiment variety label level averagedOver avgUnclassifiedFreqTarget avgUnclassifiedFreqIs avgUnclassifiedFreqDiff/), "\n";
+			
+			foreach my $variety (keys %unclassified_is_shouldBe)
+			{
+				foreach my $label (keys %{$unclassified_is_shouldBe{$variety}})
+				{
+					foreach my $level (keys %{$unclassified_is_shouldBe{$variety}{$label}})
+					{
+
+						next if($level eq 'definedAndHypotheticalGenomes');
+						next if($level eq 'absolute');
+											
+						my $averagedOver = scalar(@{$unclassified_is_shouldBe{$variety}{$label}{$level}});
+						my @all_shouldbe;
+						my @all_is;
+						my @all_diff;
+						for(my $i = 0; $i < $averagedOver; $i++)
+						{
+							push(@all_shouldbe, $unclassified_is_shouldBe{$variety}{$label}{$level}[$i][0]);
+							push(@all_is, $unclassified_is_shouldBe{$variety}{$label}{$level}[$i][1]);
+							push(@all_diff,  abs($unclassified_is_shouldBe{$variety}{$label}{$level}[$i][0] - $unclassified_is_shouldBe{$variety}{$label}{$level}[$i][1]));
+						}
+						
+						my $avg_shouldBe = (scalar(@all_shouldbe)) ? Util::mean(@all_shouldbe) : 'NA';
+						my $avg_is = (scalar(@all_is)) ? Util::mean(@all_is) : 'NA';
+						my $avg_diff =  (scalar(@all_diff)) ? Util::mean(@all_diff) : 'NA';
+						
+						print UNCLASSIFIED_FREQ join("\t", $variety, $label, $level, scalar(@all_shouldbe), $avg_shouldBe, $avg_is, $avg_diff), "\n";
+						print UNCLASSIFIED_FREQ_ALL join("\t", $suffix, $variety, $label, $level, scalar(@all_shouldbe), $avg_shouldBe, $avg_is, $avg_diff), "\n";
+						
+					}			
+				}
+			}
+		
+		
 		}
 	}
 	
