@@ -19,16 +19,17 @@ $| = 1;
 
 my $masterTaxonomy_dir = '/data/projects/phillippy/projects/MetaMap/downloads/taxonomy';
 my $DB = 'databases/miniSeq+H';
+
 # my $MetaMap_results = '/scratch/tmp/MetaMap/hmp_set7';
 
 my @resultsSets = (
-	[
-		'Nanopore',
-		'tmp/hmp-nanopore_miniSeq+H',
-		'/scratch/tmp/hmp_nanopore_set7_combined_kraken_results',
-		'tmp/truthHMP7_bwa_nanopore',
-		'/scratch/tmp/hmp-nanopore.fasta.fastq'
-	],
+	# [
+		# 'Nanopore',
+		# 'tmp/hmp-nanopore_miniSeq+H',
+		# '/scratch/tmp/hmp_nanopore_set7_combined_kraken_results',
+		# 'tmp/truthHMP7_bwa_nanopore',
+		# '/scratch/tmp/hmp-nanopore.fasta.fastq'
+	# ],
 	[
 		'PacBio',
 		'tmp/hmp7_2_miniSeq+H',
@@ -75,6 +76,8 @@ foreach my $resultsSet (@resultsSets)
 	(my $extendedMaster, my $extendedMaster_merged) = validation::prepare_masterTaxonomy_withX($masterTaxonomy_dir, $taxonomy_usedForInference);
 
 	my $truth_reads_href = validation::readTruthFileReads($extendedMaster, $extendedMaster_merged, $truth . '.perRead');
+	my $truth_reads_href_noUnknown = { map {$_ => $truth_reads_href->{$_}} grep {$truth_reads_href->{$_}} keys %$truth_reads_href };
+	
 	my $readLengths_href = Util::getReadLengths($fastq, 1);
 	
 	my $mappableTaxonomy;
@@ -97,11 +100,36 @@ foreach my $resultsSet (@resultsSets)
 		taxTree::removeUnmappableParts($mappableTaxonomy, \%reduced_taxonID_master_2_contigs);
 
 		# translate truth into reduced representation
-		$truth_reads_mappable = validation::translateReadsTruthToReducedTaxonomy($extendedMaster, $mappableTaxonomy, $truth_reads_href);
+		$truth_reads_mappable = validation::translateReadsTruthToReducedTaxonomy($extendedMaster, $mappableTaxonomy, $truth_reads_href_noUnknown);
 	}
-
-	my $truth_reads_href_noUnknown = { map {$_ => $truth_reads_mappable->{$_}} grep {$truth_reads_mappable->{$_}} keys %$truth_reads_mappable };
-	die unless(all {exists $mappableTaxonomy->{$_}} values %$truth_reads_href_noUnknown);
+	
+	my $reads_below_2000 = 0;
+	my %changedTaxonIDMap;
+	foreach my $readID (keys %$truth_reads_href_noUnknown)
+	{
+		my $original_taxon_ID = $truth_reads_href_noUnknown->{$readID};
+		my $new_taxon_ID = $truth_reads_mappable->{$readID};
+		if($original_taxon_ID ne $new_taxon_ID)
+		{
+			$changedTaxonIDMap{$original_taxon_ID}{$new_taxon_ID}++;
+		}
+		die unless(exists $readLengths_href->{$readID});
+		if($readLengths_href->{$readID} < 2000)
+		{
+			$reads_below_2000++;
+		}
+	}	
+	print "Set $resultsSet->[0]\n";
+	print "\tOf ", scalar(keys %$truth_reads_href_noUnknown), " reads, $reads_below_2000 are < 2000 in length\n";
+	print "\tChanged taxon IDs:\n";
+	foreach my $oldTaxon (sort keys %changedTaxonIDMap)
+	{
+		foreach my $newTaxon (sort keys %{$changedTaxonIDMap{$oldTaxon}})
+		{
+			print "\t\t", $oldTaxon, '[', ($changedTaxonIDMap{$oldTaxon} ? 1 : 0), '] -> ', $newTaxon, '[', ($changedTaxonIDMap{$newTaxon} ? 1 : 0), ']: ', $changedTaxonIDMap{$oldTaxon}{$newTaxon}, " reads.\n";
+		}
+	}
+	# die unless(all {exists $mappableTaxonomy->{$_}} values %$truth_reads_href_noUnknown);
 
 	my @methodNames;
 	my @inferred_reads;

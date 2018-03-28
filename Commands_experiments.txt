@@ -53,3 +53,5 @@ perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix i100_spec
 perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix i100_specifiedFrequencies_limitedMemory && \
 perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix p25_logNormal 
 
+perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix i100_specifiedFrequencies && \
+perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix p25_logNormal 

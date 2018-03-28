@@ -548,7 +548,7 @@ sub readLevelComparison
 	foreach my $readID (@readIDs)
 	{
 		my @read_categories = $get_read_categories->($readID);
-		# my %_read_categories = map {$_ => 1} @read_categories;
+		my %_read_categories = map {$_ => 1} @read_categories;
 		
 		die unless(defined $readLengths_href->{$readID});
 		my $readLengthBin = $getLengthBinForLength->($readLengths_href->{$readID});
@@ -674,6 +674,19 @@ sub readLevelComparison
 						$unclassified_key = 'N_unclassified_should1_is1';
 					}
 										
+					if($_read_categories{'truthLeafInDB'})
+					{
+						open(MISSING, '>>missingTaxa') or die;
+						print MISSING $reads_truth_absolute->{$readID}, "\n";
+						close(MISSING);
+						 
+						# die Dumper(
+							# "Weird - read $readID", "Not sure whether mappable or not?",
+							# "trueTaxonID_inUsedDB $trueTaxonID_inUsedDB",
+							# "reads_truth_mappingDB->{readID} <=> reads_truth_absolute->{readID}: $reads_truth_mappingDB->{$readID} //  $reads_truth_absolute->{$readID}"
+						# ) unless($mappable_absolute_truth);
+					}
+					
 					$n_reads_unknownStats_byLevel{$category}{'genome'}{$unclassified_key}++;
 				}
 			}
@@ -1550,24 +1563,101 @@ sub produceValidationOutputFiles
 		$level_to_i{$levels_ordered[$levelI]} = $levelI;
 	}
 	
-	{
+	{					
+		my %_methods;
+		my %_readStratification;
+		my %_evaluationLevels;
+		foreach my $variety (@varieties)
+		{
+			foreach my $methodName (keys %{$allSimulations_data_href->{n_reads_unknownStats_byLevel}->{$variety}})
+			{
+				$_methods{$methodName}++;
+				foreach my $category (keys %{$allSimulations_data_href->{n_reads_unknownStats_byLevel}->{$variety}{$methodName}})
+				{
+					$_readStratification{$category}++;
+					
+					if(exists $allSimulations_data_href->{n_reads_unknownStats_byLevel}->{$variety}{$methodName}{$category})
+					{
+						foreach my $k (keys %{$allSimulations_data_href->{n_reads_unknownStats_byLevel}->{$variety}{$methodName}{$category}})
+						{
+							$_evaluationLevels{$k}++;
+						}
+					}
+				}
+			}
+		}
+		
+		die unless(all {$_methods{$_} == scalar(@varieties)} keys %_methods);
+		my @methods = sort keys %_methods;
+		my @readLevels = sort {
+		if(($a =~ /novel_to/) and ($b =~ /novel_to/))
+		{
+			die unless($a =~ /novel_to_(.+)/);
+			my $a_level = $1;
+			die unless($b =~ /novel_to_(.+)/);
+			my $b_level = $1;
+			die "Undefined level $a_level" unless(defined $level_to_i{$a_level});				
+			die "Undefined level $b_level" unless(defined $level_to_i{$b_level});				
+			$level_to_i{$a_level} <=> $level_to_i{$b_level}
+		}
+		else
+		{
+			$a cmp $b
+		}} keys %_readStratification;
+		
+		# my @evaluationLevels = sort keys %_evaluationLevels;
+		my @evaluationLevels = qw/genome species genus family/;
+		die Dumper("Missing evaluation levels I", \@evaluationLevels, \%_evaluationLevels, [\@varieties]) unless(all {exists $_evaluationLevels{$_}} @evaluationLevels);
+		
+			
 		my $fn_unclassified =  $prefix_for_outputFiles . '_unclassifiedSummary_reads';
 		open(UNCLASSIFIED, '>', $fn_unclassified) or die;		
 		
-		print UNCLASSIFIED join("\t", qw/variety readCategory evaluationLevel method averagedOver nAvg sensitivityAvg PPVAvg specificityAvg/), "\n";
-		print UNCLASSIFIED_ALL join("\t", qw/Experiment variety readCategory evaluationLevel method averagedOver nAvg sensitivityAvg PPVAvg specificityAvg/), "\n";
-					
-		foreach my $variety (sort keys %{$allSimulations_data_href->{n_reads_unknownStats_byLevel}})
+		my @header_fields_1_byLevelUnknown = ('ReadLevel', 'EvaluationLevel');
+		my @header_fields_2_byLevelUnknown = ('', '');
+		my @header_fields_3_byLevelUnknown = ('', '');	
+		
+		foreach my $variety (@varieties)
 		{
-			foreach my $label (sort keys %{$allSimulations_data_href->{n_reads_unknownStats_byLevel}->{$variety}})
+			my $hf2_before = $#header_fields_2_byLevelUnknown;
+			foreach my $method (@methods)
 			{
-				foreach my $category (sort keys %{$allSimulations_data_href->{n_reads_unknownStats_byLevel}->{$variety}{$label}})
-				{				
-					foreach my $level (sort keys %{$allSimulations_data_href->{n_reads_unknownStats_byLevel}->{$variety}{$label}{$category}})
-					{
-						my $v = $allSimulations_data_href->{n_reads_unknownStats_byLevel}->{$variety}{$label}{$category}{$level};
-					
+				push(@header_fields_2_byLevelUnknown, $method, '', '', '', '', '', '');							
+				push(@header_fields_3_byLevelUnknown, 'averagedOver', 'readsAvg', 'shouldBeUnclassifiedAvg', 'isUnclassifiedAvg', 'sensitivityAvg', 'PPVAvg', 'specificityAvg');
+			}
+			my $hf2_after = $#header_fields_2_byLevelUnknown;
+			my $requiredFields = $hf2_after - $hf2_before;
+			die unless($requiredFields > 0);
+			my @addToHeader1 = ($variety, (('') x ($requiredFields - 1)));
+			die unless(scalar(@addToHeader1) == $requiredFields);
+			push(@header_fields_1_byLevelUnknown, @addToHeader1);
+		}
+		
+		print UNCLASSIFIED join("\t", @header_fields_1_byLevelUnknown), "\n";
+		print UNCLASSIFIED join("\t", @header_fields_2_byLevelUnknown), "\n";
+		print UNCLASSIFIED join("\t", @header_fields_3_byLevelUnknown), "\n";
+		
+		# unless($assumeHaveHeader_READSCORRECTBYLEVEL_ALL)
+		{
+			print UNCLASSIFIED_ALL join("\t", 'Experiment', @header_fields_1_byLevelUnknown), "\n";
+			print UNCLASSIFIED_ALL join("\t", '', @header_fields_2_byLevelUnknown), "\n";
+			print UNCLASSIFIED_ALL join("\t", '', @header_fields_3_byLevelUnknown), "\n";
+		}
+							
+		foreach my $readLevel (@readLevels)
+		{
+			foreach my $evaluationLevel (@evaluationLevels)
+			{
+				my @output_fields_byLevelUnknown = ($readLevel, $evaluationLevel);
+				foreach my $variety (@varieties)
+				{
+					foreach my $methodName (@methods)
+					{		
+						my $v = $allSimulations_data_href->{n_reads_unknownStats_byLevel}->{$variety}{$methodName}{$readLevel}{$evaluationLevel};
+						
 						my @Ns;
+						my @shouldBeUnclassified;
+						my @isUnclassified;
 						my @sensitivities;
 						my @PPVs;
 						my @specificities;
@@ -1580,6 +1670,9 @@ sub produceValidationOutputFiles
 							die unless(defined $v->{N_unclassified_should0_is1}[$i]);
 							die unless(defined $v->{N_unclassified_should1_is0}[$i]);
 							die unless(defined $v->{N_unclassified_should1_is1}[$i]);
+							die unless(scalar(keys %{$v}) == 4);
+							my $shouldBeUnclassified = $v->{N_unclassified_should1_is0}[$i] + $v->{N_unclassified_should1_is1}[$i];
+							my $isUnclassified = $v->{N_unclassified_should0_is1}[$i] + $v->{N_unclassified_should1_is1}[$i];
 							my $N = $v->{N_unclassified_should0_is0}[$i] + $v->{N_unclassified_should0_is1}[$i] + $v->{N_unclassified_should1_is0}[$i] + $v->{N_unclassified_should1_is1}[$i];
 							my $sensitivity = -1;
 							if(($v->{N_unclassified_should1_is0}[$i]+$v->{N_unclassified_should1_is1}[$i]) > 0)
@@ -1594,24 +1687,29 @@ sub produceValidationOutputFiles
 							my $specificity = -1;
 							if(($v->{N_unclassified_should0_is1}[$i]+$v->{N_unclassified_should0_is0}[$i]) > 0)
 							{
-								$specificity = $v->{N_unclassified_should0_is1}[$i] / ($v->{N_unclassified_should0_is1}[$i]+$v->{N_unclassified_should0_is0}[$i]);
+								$specificity = $v->{N_unclassified_should0_is0}[$i] / ($v->{N_unclassified_should0_is1}[$i]+$v->{N_unclassified_should0_is0}[$i]);
 							}	
 							push(@Ns, $N);
-							push(@sensitivities, $sensitivity) if($sensitivity != 1);
+							push(@shouldBeUnclassified, $shouldBeUnclassified);
+							push(@isUnclassified, $isUnclassified);
+							push(@sensitivities, $sensitivity) if($sensitivity != -1);
 							push(@PPVs, $PPV) if($PPV != -1);
 							push(@specificities, $specificity) if($specificity != -1);											
 						}	
 
 						my $averagedOver = scalar(@Ns);
 						my $avg_N = (scalar(@Ns)) ? Util::mean(@Ns) : 'NA';
+						my $avg_shouldBeUnclassified = (scalar(@shouldBeUnclassified)) ? Util::mean(@shouldBeUnclassified) : 'NA';
+						my $avg_isUnclassified = (scalar(@isUnclassified)) ? Util::mean(@isUnclassified) : 'NA';
 						my $avg_sensitivity = (scalar(@sensitivities)) ? Util::mean(@sensitivities) : 'NA';
 						my $avg_PPVs = (scalar(@PPVs)) ? Util::mean(@PPVs) : 'NA';
 						my $avg_specificity = (scalar(@specificities)) ? Util::mean(@specificities) : 'NA';
-		
-						print UNCLASSIFIED join("\t", $variety, $category, $level, $label, $averagedOver, $avg_N, $avg_sensitivity, $avg_PPVs, $avg_specificity), "\n";
-						print UNCLASSIFIED_ALL join("\t", $suffix, $variety, $category, $level, $label, $averagedOver, $avg_N, $avg_sensitivity, $avg_PPVs, $avg_specificity), "\n";
+						
+						push(@output_fields_byLevelUnknown, $averagedOver, $avg_N, $avg_shouldBeUnclassified, $avg_isUnclassified, $avg_sensitivity, $avg_PPVs, $avg_specificity);
 					}
 				}
+				print UNCLASSIFIED join("\t", @output_fields_byLevelUnknown), "\n";
+				print UNCLASSIFIED_ALL join("\t", $suffix, @output_fields_byLevelUnknown), "\n";
 			}
 		}
 				
@@ -2105,85 +2203,13 @@ sub produceValidationOutputFiles
 		}
 		
 		my @methods = sort keys %_methods;
-		
+		 
 		my @evaluationLevels = qw/absolute species genus family/;
 		# my @evaluationLevels = sort keys %_evaluationLevels;
 		die Dumper("Missing evaluation levels II", \@evaluationLevels, \%_evaluationLevels, \@varieties, \%_methods, $allSimulations_data_href->{freq_byVariety_byLevel}) unless(all {exists $_evaluationLevels{$_}} @evaluationLevels);
+			
+		my %unclassified_is_shouldBe;
 				
-		open(FREQEVALUATION, '>', $prefix_for_outputFiles . '_frequenciesCorrectByLevel') or die;
-		my @header_fields_1_freqCorrect = ('EvaluationLevel');
-		my @header_fields_2_freqCorrect = ('');
-		my @header_fields_3_freqCorrect = ('');
-		
-		foreach my $variety (@varieties)
-		{
-			my $hf2_before = $#header_fields_2_freqCorrect;
-			foreach my $method (@methods)
-			{
-				push(@header_fields_2_freqCorrect, $method, '', '');	
-				push(@header_fields_3_freqCorrect, 'nExperiments', 'L1_avg', 'r2_avg');					
-			}
-			
-			my $hf2_after = $#header_fields_2_freqCorrect;
-			my $requiredFields = $hf2_after - $hf2_before;
-			die unless($requiredFields > 0);
-			my @addToHeader1 = ($variety, (('') x ($requiredFields - 1)));
-			die unless(scalar(@addToHeader1) == $requiredFields);
-			push(@header_fields_1_freqCorrect, @addToHeader1);
-		}
-		
-		print FREQEVALUATION join("\t", @header_fields_1_freqCorrect), "\n";
-		print FREQEVALUATION join("\t", @header_fields_2_freqCorrect), "\n";
-		print FREQEVALUATION join("\t", @header_fields_3_freqCorrect), "\n";
-	
-
-		# unless($assumeHaveHeader_FREQEVALUATION_ALL)
-		{
-			print FREQEVALUATION_ALL join("\t", 'Experiment', @header_fields_1_freqCorrect), "\n";
-			print FREQEVALUATION_ALL join("\t", '', @header_fields_2_freqCorrect), "\n";
-			print FREQEVALUATION_ALL join("\t", '', @header_fields_3_freqCorrect), "\n";
-		}
-		 
-		foreach my $evaluationLevel (@evaluationLevels)
-		{		
-			my @output_fields_freqCorrect = ($evaluationLevel);	
-		 
-			foreach my $variety (@varieties)
-			{				
-				foreach my $methodName (@methods)
-				{		
-					my $n = 0;
-					my $M_freqOK = 'NA';
-					my $M_AVGRE = 'NA';
-					my $M_RRMSE = 'NA';
-					my $M_L1 = 'NA';
-					my $M_L2 = 'NA';
-					my $M_r2 = 'NA';
-					
-					if(exists $allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel})
-					{
-						$n = scalar(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{freqOK}});
-						die Dumper("Count mismatch", scalar(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{freqOK}}), scalar(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{L1}})) unless(scalar(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{freqOK}}) == scalar(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{L1}}));
-						
-						# $freqOK = $allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{correct}/$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{total};
-						$M_freqOK = sum(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{freqOK}}) / scalar(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{freqOK}});
-						$M_AVGRE = sum(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{AVGRE}}) / scalar(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{AVGRE}});
-						$M_RRMSE = sum(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{RRMSE}}) / scalar(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{RRMSE}});
-						$M_L1 = sum(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{L1}}) / scalar(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{L1}});
-						$M_L2 = sum(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{L2}}) / scalar(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{L2}});
-						$M_r2 = sum(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{r2}}) / scalar(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{r2}});
-					}
-					
-					push(@output_fields_freqCorrect, $n, $M_L1, $M_r2);
-				}				
-			}	
-			
-			print FREQEVALUATION join("\t", @output_fields_freqCorrect), "\n";
-			print FREQEVALUATION_ALL join("\t", $suffix, @output_fields_freqCorrect), "\n";
-		}
-		
-		close(FREQEVALUATION);
-	
 		{		
 			my @evaluateAccuracyAtLevels = validation::getEvaluationLevels();
 			
@@ -2232,12 +2258,31 @@ sub produceValidationOutputFiles
 	
 			open(XYPLOTS, '>', $prefix_for_outputFiles . '_forPlot_frequencies_xy') or die;
 			print XYPLOTS join("\t", qw/simulationI variety method level taxonID taxonLabel taxonIDCategory isMappable freqTarget freqIs proportionNovelDirectly proportionNovelTotal/), "\n";
-			my %unclassified_is_shouldBe;
 			for(my $simulationI = 0; $simulationI < $allSimulations_data_href->{realizedN}; $simulationI++)  
 			{
 				next unless(defined $allSimulations_data_href->{frequencyComparisons_bySimulation}->[$simulationI]);
 				foreach my $variety (keys %{$allSimulations_data_href->{frequencyComparisons_bySimulation}->[$simulationI]})
 				{
+					(my $variety_forStore = $variety) =~ s/_\d+$//;		
+				
+					foreach my $label (keys %{$allSimulations_data_href->{frequencyComparisons_bySimulation}->[$simulationI]{$variety}})
+					{
+						foreach my $level (keys %{$allSimulations_data_href->{frequencyComparisons_bySimulation}->[$simulationI]{$variety}{$label}})
+						{
+							my $unclassified_shouldBe = 0;						
+							my $unclassified_is = 0;
+
+							if(exists $allSimulations_data_href->{frequencyComparisons_bySimulation}->[$simulationI]{$variety}{$label}{$level}{'Unclassified'}) 
+							{
+								$unclassified_shouldBe = $allSimulations_data_href->{frequencyComparisons_bySimulation}->[$simulationI]{$variety}{$label}{$level}{'Unclassified'}[0];
+								$unclassified_is = $allSimulations_data_href->{frequencyComparisons_bySimulation}->[$simulationI]{$variety}{$label}{$level}{'Unclassified'}[1];
+							}	
+							
+							push(@{$unclassified_is_shouldBe{$variety_forStore}{$label}{$level}}, [$unclassified_shouldBe, $unclassified_is]);
+							
+						}
+					}
+					
 					next unless(exists $allSimulations_data_href->{frequencyComparisons_details_bySimulation}->[$simulationI]{$variety});
 					die unless(defined $allSimulations_data_href->{frequencyComparisons_details_bySimulation}->[$simulationI]{$variety});
 					die unless(defined $allSimulations_data_href->{frequencyComparisons_details_bySimulation}->[$simulationI]{$variety}{mappable});
@@ -2247,17 +2292,6 @@ sub produceValidationOutputFiles
 					{
 						foreach my $level (keys %{$allSimulations_data_href->{frequencyComparisons_bySimulation}->[$simulationI]{$variety}{$label}})
 						{
-							my $unclassified_shouldBe = 0;						
-							my $unclassified_is = 0;
-
-							if(exists $allSimulations_data_href->{frequencyComparisons_bySimulation}->[$simulationI]{$variety}{$label}{$level}{'Unclassified'})
-							{
-								$unclassified_shouldBe = $allSimulations_data_href->{frequencyComparisons_bySimulation}->[$simulationI]{$variety}{$label}{$level}{'Unclassified'}[0];
-								$unclassified_is = $allSimulations_data_href->{frequencyComparisons_bySimulation}->[$simulationI]{$variety}{$label}{$level}{'Unclassified'}[1];
-							}	
-							
-							push(@{$unclassified_is_shouldBe{$variety}{$label}{$level}}, [$unclassified_shouldBe, $unclassified_is]);
-							
 							next if($level eq 'absolute');
 							foreach my $taxonID (keys %{$allSimulations_data_href->{frequencyComparisons_bySimulation}->[$simulationI]{$variety}{$label}{$level}})
 							{
@@ -2300,50 +2334,169 @@ sub produceValidationOutputFiles
 				}
 			}
 			close(XYPLOTS);
+		}				
+		
+		{
+				
+			open(FREQEVALUATION, '>', $prefix_for_outputFiles . '_frequenciesCorrectByLevel') or die;
+			my @header_fields_1_freqCorrect = ('EvaluationLevel');
+			my @header_fields_2_freqCorrect = ('');
+			my @header_fields_3_freqCorrect = ('');
 			
-		
-		
-		
-			my $fn_unclassified_frequencues =  $prefix_for_outputFiles . '_unclassifiedSummary_frequencies';
-			open(UNCLASSIFIED_FREQ, '>', $fn_unclassified_frequencues) or die;		
-		
-			print UNCLASSIFIED_FREQ join("\t", qw/variety label level averagedOver avgUnclassifiedFreqTarget avgUnclassifiedFreqIs avgUnclassifiedFreqAbsDiff/), "\n";
-			print UNCLASSIFIED_FREQ_ALL join("\t", qw/Experiment variety label level averagedOver avgUnclassifiedFreqTarget avgUnclassifiedFreqIs avgUnclassifiedFreqDiff/), "\n";
-			
-			foreach my $variety (keys %unclassified_is_shouldBe)
+			foreach my $variety (@varieties)
 			{
-				foreach my $label (keys %{$unclassified_is_shouldBe{$variety}})
+				my $hf2_before = $#header_fields_2_freqCorrect;
+				foreach my $method (@methods)
 				{
-					foreach my $level (keys %{$unclassified_is_shouldBe{$variety}{$label}})
-					{
+					push(@header_fields_2_freqCorrect, $method, '', '');	
+					push(@header_fields_3_freqCorrect, 'nExperiments', 'L1_avg', 'r2_avg');					
+				}
+				
+				my $hf2_after = $#header_fields_2_freqCorrect;
+				my $requiredFields = $hf2_after - $hf2_before;
+				die unless($requiredFields > 0);
+				my @addToHeader1 = ($variety, (('') x ($requiredFields - 1)));
+				die unless(scalar(@addToHeader1) == $requiredFields);
+				push(@header_fields_1_freqCorrect, @addToHeader1);
+			}
+			
+			print FREQEVALUATION join("\t", @header_fields_1_freqCorrect), "\n";
+			print FREQEVALUATION join("\t", @header_fields_2_freqCorrect), "\n";
+			print FREQEVALUATION join("\t", @header_fields_3_freqCorrect), "\n";
+		
 
-						next if($level eq 'definedAndHypotheticalGenomes');
-						next if($level eq 'absolute');
-											
-						my $averagedOver = scalar(@{$unclassified_is_shouldBe{$variety}{$label}{$level}});
+			# unless($assumeHaveHeader_FREQEVALUATION_ALL)
+			{
+				print FREQEVALUATION_ALL join("\t", 'Experiment', @header_fields_1_freqCorrect), "\n";
+				print FREQEVALUATION_ALL join("\t", '', @header_fields_2_freqCorrect), "\n";
+				print FREQEVALUATION_ALL join("\t", '', @header_fields_3_freqCorrect), "\n";
+			}
+			
+			
+
+			foreach my $evaluationLevel ('definedGenomes', @evaluationLevels)
+			{		
+				my @output_fields_freqCorrect = ($evaluationLevel);	
+			 
+				foreach my $variety (@varieties)
+				{				
+					foreach my $methodName (@methods)
+					{		
+						my $n = 0;
+						my $M_freqOK = 'NA';
+						my $M_AVGRE = 'NA';
+						my $M_RRMSE = 'NA';
+						my $M_L1 = 'NA';
+						my $M_L2 = 'NA';
+						my $M_r2 = 'NA';
+						
+						if(exists $allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel})
+						{
+							# die Dumper(keys %{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}});
+							$n = scalar(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{freqOK}});
+							die Dumper("Count mismatch", scalar(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{freqOK}}), scalar(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{L1}})) unless(scalar(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{freqOK}}) == scalar(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{L1}}));
+							
+							# $freqOK = $allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{correct}/$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{total};
+							$M_freqOK = sum(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{freqOK}}) / scalar(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{freqOK}});
+							$M_AVGRE = sum(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{AVGRE}}) / scalar(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{AVGRE}});
+							$M_RRMSE = sum(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{RRMSE}}) / scalar(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{RRMSE}});
+							$M_L1 = sum(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{L1}}) / scalar(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{L1}});
+							$M_L2 = sum(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{L2}}) / scalar(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{L2}});
+							$M_r2 = sum(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{r2}}) / scalar(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{r2}});
+						}
+						
+						push(@output_fields_freqCorrect, $n, $M_L1, $M_r2);
+					}				
+				}	
+				
+				print FREQEVALUATION join("\t", @output_fields_freqCorrect), "\n";
+				print FREQEVALUATION_ALL join("\t", $suffix, @output_fields_freqCorrect), "\n";
+			}
+			
+			close(FREQEVALUATION);
+		}
+		
+		
+		
+		{
+			my $fn_unclassified_frequencues =  $prefix_for_outputFiles . '_unclassifiedSummary_frequencies';
+			open(UNCLASSIFIED_FREQ, '>', $fn_unclassified_frequencues) or die;				 
+		 
+			my @header_fields_1_freqUnknown = ('EvaluationLevel');
+			my @header_fields_2_freqUnknown = ('');
+			my @header_fields_3_freqUnknown = ('');
+			
+			foreach my $variety (@varieties)
+			{
+				my $hf2_before = $#header_fields_2_freqUnknown;
+				foreach my $method (@methods)
+				{
+					push(@header_fields_2_freqUnknown, $method, '', '', '');	
+					push(@header_fields_3_freqUnknown, 'averagedOver', 'avgUnknownTarget', 'avgUnknownIs', 'avgUnknownFreqDiff');					
+				}
+				
+				my $hf2_after = $#header_fields_2_freqUnknown;
+				my $requiredFields = $hf2_after - $hf2_before;
+				die unless($requiredFields > 0);
+				my @addToHeader1 = ($variety, (('') x ($requiredFields - 1)));
+				die unless(scalar(@addToHeader1) == $requiredFields);
+				push(@header_fields_1_freqUnknown, @addToHeader1);
+			}
+			
+			print UNCLASSIFIED_FREQ join("\t", @header_fields_1_freqUnknown), "\n";
+			print UNCLASSIFIED_FREQ join("\t", @header_fields_2_freqUnknown), "\n";
+			print UNCLASSIFIED_FREQ join("\t", @header_fields_3_freqUnknown), "\n";
+		
+
+			# unless($assumeHaveHeader_FREQEVALUATION_ALL)
+			{
+				print UNCLASSIFIED_FREQ_ALL join("\t", 'Experiment', @header_fields_1_freqUnknown), "\n";
+				print UNCLASSIFIED_FREQ_ALL join("\t", '', @header_fields_2_freqUnknown), "\n";
+				print UNCLASSIFIED_FREQ_ALL join("\t", '', @header_fields_3_freqUnknown), "\n";
+			}
+			
+
+			foreach my $evaluationLevel (@evaluationLevels)
+			{		
+				next if($evaluationLevel eq 'definedAndHypotheticalGenomes');
+				next if($evaluationLevel eq 'absolute');			
+				my @output_fields_freqCorrect = ($evaluationLevel);	
+			 
+				foreach my $variety (@varieties)
+				{				
+					foreach my $methodName (@methods)
+					{		
 						my @all_shouldbe;
 						my @all_is;
 						my @all_diff;
-						for(my $i = 0; $i < $averagedOver; $i++)
+						
+						if(defined $unclassified_is_shouldBe{$variety}{$methodName}{$evaluationLevel})
 						{
-							push(@all_shouldbe, $unclassified_is_shouldBe{$variety}{$label}{$level}[$i][0]);
-							push(@all_is, $unclassified_is_shouldBe{$variety}{$label}{$level}[$i][1]);
-							push(@all_diff,  abs($unclassified_is_shouldBe{$variety}{$label}{$level}[$i][0] - $unclassified_is_shouldBe{$variety}{$label}{$level}[$i][1]));
+							my $averagedOver = scalar(@{$unclassified_is_shouldBe{$variety}{$methodName}{$evaluationLevel}});
+							
+							for(my $i = 0; $i < $averagedOver; $i++)
+							{ 
+								push(@all_shouldbe, $unclassified_is_shouldBe{$variety}{$methodName}{$evaluationLevel}[$i][0]);
+								push(@all_is, $unclassified_is_shouldBe{$variety}{$methodName}{$evaluationLevel}[$i][1]);
+								push(@all_diff,  abs($unclassified_is_shouldBe{$variety}{$methodName}{$evaluationLevel}[$i][0] - $unclassified_is_shouldBe{$variety}{$methodName}{$evaluationLevel}[$i][1]));
+							}
 						}
 						
 						my $avg_shouldBe = (scalar(@all_shouldbe)) ? Util::mean(@all_shouldbe) : 'NA';
 						my $avg_is = (scalar(@all_is)) ? Util::mean(@all_is) : 'NA';
 						my $avg_diff =  (scalar(@all_diff)) ? Util::mean(@all_diff) : 'NA';
-						
-						print UNCLASSIFIED_FREQ join("\t", $variety, $label, $level, scalar(@all_shouldbe), $avg_shouldBe, $avg_is, $avg_diff), "\n";
-						print UNCLASSIFIED_FREQ_ALL join("\t", $suffix, $variety, $label, $level, scalar(@all_shouldbe), $avg_shouldBe, $avg_is, $avg_diff), "\n";
-						
-					}			
-				}
+					
+						push(@output_fields_freqCorrect, scalar(@all_shouldbe), $avg_shouldBe, $avg_is, $avg_diff);
+					}				
+				}	
+				
+				print UNCLASSIFIED_FREQ join("\t", @output_fields_freqCorrect), "\n";
+				print UNCLASSIFIED_FREQ_ALL join("\t", $suffix, @output_fields_freqCorrect), "\n";
 			}
-		
-		
+			
+			close(UNCLASSIFIED_FREQ);
 		}
+		
 	}
 	
 	{
