@@ -679,9 +679,6 @@ elsif($action eq 'analyzeAll')
 		my %freq_details_byVariety_byLevel_local;	
 		my %directlyMappable;
 		evaluateOneSimulation($simulation_href, \%n_reads_correct_byVariety_local, \%n_reads_correct_byVariety_byLevel_local, \%n_reads_correct_byVariety_byLevel_byLength_local, \%freq_byVariety_byLevel_local, $frequencyComparison, $frequencyComparison_details, \%directlyMappable, \%n_reads_unknownStats_byLevel);
-		push(@{$allSimulations_data_href->{frequencyComparisons_bySimulation}}, $frequencyComparison);
-		push(@{$allSimulations_data_href->{frequencyComparisons_details_bySimulation}}, $frequencyComparison_details);
-		push(@{$allSimulations_data_href->{directlyMappable_bySimulation}}, \%directlyMappable);
 
 		validation::addResultsToGlobalStore(
 			$jobI,

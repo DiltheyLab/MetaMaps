@@ -959,8 +959,10 @@ sub analyseAndAddOneExperiment
 	taxTree::removeUnmappableParts($mappableTaxonomy, $reduced_taxonID_master_2_contigs_href);
 		
 	my $truth_reads_mappable = validation::translateReadsTruthToReducedTaxonomy($extendedMaster, $mappableTaxonomy, $truth_reads_href);
-
+	
 	my $truth_reads_href_noUnknown = { map {$_ => $truth_reads_mappable->{$_}} grep {$truth_reads_mappable->{$_}} keys %$truth_reads_mappable };
+	die Dumper("Did you input undefined reads?", scalar(keys %{$truth_reads_href_noUnknown}), scalar(keys %{$truth_reads_href})) unless(scalar(keys %{$truth_reads_href_noUnknown}) == scalar(keys %{$truth_reads_href}));
+	
 	die unless(all {exists $mappableTaxonomy->{$_}} values %$truth_reads_href_noUnknown);
 	my $truth_mappingDatabase_distribution = validation::truthReadsToTruthSummary($mappableTaxonomy, $truth_reads_href_noUnknown, $reduced_taxonID_master_2_contigs_href);
 
@@ -1022,7 +1024,7 @@ sub analyseAndAddOneExperiment
 	$unknown_and_frequencyContributions_href->{$varietyName_forStorage}{truthReadsNovelTree} = $truth_reads_novelTree;
 	$unknown_and_frequencyContributions_href->{$varietyName_forStorage}{nReads} = scalar(keys %$truth_reads_href);		
 	my $frequencyComparison_details = $unknown_and_frequencyContributions_href;
-								
+		
 	validation::addResultsToGlobalStore(
 		0,
 		$allSimulations_data_href, 
@@ -1262,11 +1264,15 @@ sub addResultsToGlobalStore
 			}
 		}
 	}				
-
+		
 	push(@{$allSimulations_data_href->{n_reads_correct_byVariety_bySimulation}}, $n_reads_correct_byVariety_local_href);
 	push(@{$allSimulations_data_href->{n_reads_correct_byVariety_byLevel_bySimulation}}, $n_reads_correct_byVariety_byLevel_local_href);
 	push(@{$allSimulations_data_href->{n_reads_correct_byVariety_byLevel_byLength_bySimulation}}, $n_reads_correct_byVariety_byLevel_byLength_local_href);
 	push(@{$allSimulations_data_href->{freq_byVariety_byLevel_bySimulation}}, $freq_byVariety_byLevel_local_href);			
+	
+	push(@{$allSimulations_data_href->{frequencyComparisons_bySimulation}}, $frequencyComparison);
+	push(@{$allSimulations_data_href->{frequencyComparisons_details_bySimulation}}, $frequencyComparison_details);
+	push(@{$allSimulations_data_href->{directlyMappable_bySimulation}}, $directlyMappable_href);	
 }
 
 sub distributionLevelComparison
@@ -1277,7 +1283,7 @@ sub distributionLevelComparison
 	my $label = shift;
 	my $external_comparison = shift;
 	my $frequencyComparison_href = shift;
-	my $distributionLevelComparison = shift;
+	# my $distributionLevelComparison = shift;
 
 	foreach my $level ('absolute', 'definedGenomes', 'definedAndHypotheticalGenomes', @evaluateAccuracyAtLevels)
 	{
@@ -1352,8 +1358,8 @@ sub distributionLevelComparison
 		my @should_bigger0;
 		
 				
-		my $unclassified_is = 0;
-		my $unclassified_shouldBe = 0;
+		# my $unclassified_is = 0;
+		# my $unclassified_shouldBe = 0;
 		
 		my %joint_taxonIDs = map {$_ => 1} ((keys %{$distribution_inferred->{$lookupKey_level_InInference}}), (keys %{$distribution_truth->{$level}}));
 		foreach my $taxonID (keys %joint_taxonIDs)
@@ -1379,11 +1385,11 @@ sub distributionLevelComparison
 				push(@is_bigger0, $isFreq);
 			}
 			
-			if($taxonID eq 'Unclassified')
-			{
-				$unclassified_shouldBe = $shouldBeFreq;
-				$unclassified_is = $isFreq;
-			}
+			# if($taxonID eq 'Unclassified')
+			# {
+				# $unclassified_shouldBe = $shouldBeFreq;
+				# $unclassified_is = $isFreq;
+			# }
 		}
 		
 		die unless(scalar(@should_bigger0) == scalar(@is_bigger0));
@@ -1533,7 +1539,7 @@ sub readInferredFileReads
 	return \%inferred_raw_reads;	
 }
 
-
+ 
 sub produceValidationOutputFiles
 {
 	my $allSimulations_data_href = shift;
@@ -1545,10 +1551,10 @@ sub produceValidationOutputFiles
 	my $assumeHaveHeader_READSCORRECTBYLEVEL_ALL = ((-e $outputDir_allSimulations . '/_readsCorrectByLevel') && (-s $outputDir_allSimulations . '/_readsCorrectByLevel'));
 	my $assumeHaveHeader_FREQEVALUATION_ALL = ((-e $outputDir_allSimulations . '/_frequenciesCorrectByLevel') && (-s $outputDir_allSimulations . '/_frequenciesCorrectByLevel'));
 	
-	open(READSCORRECTBYLEVEL_ALL, '>>', $outputDir_allSimulations . '/_readsCorrectByLevel') or die;
-	open(FREQEVALUATION_ALL, '>>', $outputDir_allSimulations . '/_frequenciesCorrectByLevel') or die;
-	open(UNCLASSIFIED_ALL, '>>', $outputDir_allSimulations . '/_unclassifiedSummary_reads') or die;
-	open(UNCLASSIFIED_FREQ_ALL, '>>', $outputDir_allSimulations . '/_unclassifiedSummary_frequencies') or die;
+	open(READSCORRECTBYLEVEL_ALL, '>>', $outputDir_allSimulations . '/_all_readsCorrectByLevel') or die;
+	open(FREQEVALUATION_ALL, '>>', $outputDir_allSimulations . '/_all_frequenciesCorrectByLevel') or die;
+	open(UNCLASSIFIED_ALL, '>>', $outputDir_allSimulations . '/_all_unclassifiedSummary_reads') or die;
+	open(UNCLASSIFIED_FREQ_ALL, '>>', $outputDir_allSimulations . '/_all_unclassifiedSummary_frequencies') or die;
 	
 
 	my @varieties = qw/allCombined fullDB incompleteCombined removeOne_self removeOne_species removeOne_genus/;
@@ -2258,6 +2264,8 @@ sub produceValidationOutputFiles
 	
 			open(XYPLOTS, '>', $prefix_for_outputFiles . '_forPlot_frequencies_xy') or die;
 			print XYPLOTS join("\t", qw/simulationI variety method level taxonID taxonLabel taxonIDCategory isMappable freqTarget freqIs proportionNovelDirectly proportionNovelTotal/), "\n";
+			# die Dumper($allSimulations_data_href->{frequencyComparisons_bySimulation}->[0], $allSimulations_data_href->{realizedN});
+			
 			for(my $simulationI = 0; $simulationI < $allSimulations_data_href->{realizedN}; $simulationI++)  
 			{
 				next unless(defined $allSimulations_data_href->{frequencyComparisons_bySimulation}->[$simulationI]);
@@ -2267,6 +2275,7 @@ sub produceValidationOutputFiles
 				
 					foreach my $label (keys %{$allSimulations_data_href->{frequencyComparisons_bySimulation}->[$simulationI]{$variety}})
 					{
+						# die Dumper([keys %{$allSimulations_data_href->{frequencyComparisons_bySimulation}->[$simulationI]{$variety}{$label}}]);
 						foreach my $level (keys %{$allSimulations_data_href->{frequencyComparisons_bySimulation}->[$simulationI]{$variety}{$label}})
 						{
 							my $unclassified_shouldBe = 0;						
@@ -2374,7 +2383,7 @@ sub produceValidationOutputFiles
 			
 			
 
-			foreach my $evaluationLevel ('definedGenomes', @evaluationLevels)
+			foreach my $evaluationLevel (@evaluationLevels)
 			{		
 				my @output_fields_freqCorrect = ($evaluationLevel);	
 			 
@@ -2456,7 +2465,7 @@ sub produceValidationOutputFiles
 			}
 			
 
-			foreach my $evaluationLevel (@evaluationLevels)
+			foreach my $evaluationLevel ('definedGenomes', @evaluationLevels)
 			{		
 				next if($evaluationLevel eq 'definedAndHypotheticalGenomes');
 				next if($evaluationLevel eq 'absolute');			

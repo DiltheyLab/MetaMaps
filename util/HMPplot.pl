@@ -164,6 +164,7 @@ foreach my $resultsSet (@resultsSets)
 		}		
 	}
 	
+	
 	my $allSimulations_data_href = validation::analyseAndAddOneExperiment(
 		$extendedMaster,
 		\%reduced_taxonID_master_2_contigs,
@@ -175,6 +176,8 @@ foreach my $resultsSet (@resultsSets)
 		'fullDB',
 	);	
 
+	$allSimulations_data_href->{realizedN} = 1;
+	
 	validation::produceValidationOutputFiles($allSimulations_data_href, $extendedMaster, 'HMPresults/' . $resultsSet->[0], 'HMPresults/', $resultsSet->[0]);
 
 	
@@ -207,22 +210,91 @@ foreach my $resultsSet (@resultsSets)
 		
 		
 		
-	# my @evaluateAccuracyAtLevels = validation::getEvaluationLevels();
+	my @evaluateAccuracyAtLevels = validation::getEvaluationLevels();
 
-	# my %distributions_byLevel_byLabel;
+	print "A\n";
+	my $truth_mappingDatabase_distribution = validation::truthReadsToTruthSummary($mappableTaxonomy, $truth_reads_href_noUnknown, \%reduced_taxonID_master_2_contigs);
+	print "B\n";
+	my %distributions_byLevel_byLabel;
 
-	# my %union_taxonIDs_byLevel;
+	my %union_taxonIDs_byLevel;
 
-	# foreach my $level (@evaluateAccuracyAtLevels)
-	# {
-		# die unless(defined $truth_mappingDatabase_distribution->{$level});
-		# foreach my $trueTaxonID (keys %{$truth_mappingDatabase_distribution->{$level}})
-		# {
-			# $union_taxonIDs_byLevel{$level}{$trueTaxonID}++;
-			# $distributions_byLevel_byLabel{$level}{'truth'}{$trueTaxonID} = $truth_mappingDatabase_distribution->{$level}{$trueTaxonID};
-		# }	
-	# }
+	foreach my $level (@evaluateAccuracyAtLevels)
+	{
+		die unless(defined $truth_mappingDatabase_distribution->{$level});
+		foreach my $trueTaxonID (keys %{$truth_mappingDatabase_distribution->{$level}})
+		{
+			$union_taxonIDs_byLevel{$level}{$trueTaxonID}++;
+			$distributions_byLevel_byLabel{$level}{'truth'}{$trueTaxonID} = $truth_mappingDatabase_distribution->{$level}{$trueTaxonID};
+		}	
+	}
 
+	my $freq_byVariety_byLevel = {};
+	for(my $methodI = 0; $methodI <= $#methodNames; $methodI++)
+	{
+		my $methodName = $methodNames[$methodI];
+		my $inferred_distribution = $inferred_distributions[$methodI];
+		
+		print "Analysing $methodName -- at level of distribution!\n";
+
+		$freq_byVariety_byLevel->{$methodName} = {} unless(defined $freq_byVariety_byLevel->{$methodName});
+
+		foreach my $level (@evaluateAccuracyAtLevels)
+		{		
+			if(defined $inferred_distribution->{$level})
+			{
+				foreach my $inferredTaxonID (keys %{$inferred_distribution->{$level}})  
+				{
+					$union_taxonIDs_byLevel{$level}{$inferredTaxonID}++;
+					$distributions_byLevel_byLabel{$level}{$methodName}{$inferredTaxonID} = $inferred_distribution->{$level}{$inferredTaxonID}[1];
+				}
+			}
+		}			
+	}
+	
+
+
+	my $fn_output = '_HMP_distributions_' . $resultsSet->[0] . '.txt';
+	open(F, '>', $fn_output) or die "Cannot open $fn_output";
+	print F join("\t", "Level", "Source", "taxonID", "taxonLabel", "F"), "\n";
+	foreach my $level (keys %union_taxonIDs_byLevel)
+	{
+		foreach my $label (keys %{$distributions_byLevel_byLabel{$level}})
+		{
+			foreach my $taxonID (keys %{$union_taxonIDs_byLevel{$level}})
+			{
+				$distributions_byLevel_byLabel{$level}{$label}{$taxonID} = 0 if(not defined $distributions_byLevel_byLabel{$level}{$label}{$taxonID});
+				$distributions_byLevel_byLabel{$level}{$label}{$taxonID} = 0 if(not defined $distributions_byLevel_byLabel{$level}{$label}{$taxonID});
+			}
+			foreach my $taxonID (keys %{$distributions_byLevel_byLabel{$level}{$label}})
+			{
+				my $taxonLabel;
+				my $taxonID2 = $taxonID;
+				if($taxonID eq 'Unclassified')
+				{
+					$taxonID2 = 0;
+					$taxonLabel = 'Unclassified';
+				}
+				elsif($taxonID eq 'Undefined')
+				{
+					die;
+					$taxonLabel = 'Undefined';
+				}
+				elsif($taxonID eq 'NotLabelledAtLevel')
+				{
+					die;
+					$taxonLabel = 'NotLabelledAtLevel';
+				}			
+				else
+				{
+					print "C\n";
+					$taxonLabel = taxTree::taxon_id_get_name($taxonID, $master_taxonomy);			
+				}
+				print F join("\t", $level, $label, $taxonID2, $taxonLabel, $distributions_byLevel_byLabel{$level}{$label}{$taxonID}), "\n";
+			}
+		}
+	}
+	
 	# foreach my $label (keys %results_distribution)
 	# {
 		# print "Analysing $label -- at level of distribution!\n";
@@ -230,7 +302,7 @@ foreach my $resultsSet (@resultsSets)
 		# $freq_byVariety_byLevel->{$label} = {} unless(defined $freq_byVariety_byLevel->{$label});
 
 		# my $inferred_distribution = validation::readInferredDistribution($extendedMaster, $extendedMaster_merged, $results_distribution{$label});	
-
+ 
 		
 		# foreach my $level (@evaluateAccuracyAtLevels)
 		# {		
@@ -243,47 +315,7 @@ foreach my $resultsSet (@resultsSets)
 				# }
 			# }
 		# }	
-	# }
-
-	# my $fn_output = '_HMP_distributions_' . $resultsSet->[0] . '.txt';
-	# open(F, '>', $fn_output) or die "Cannot open $fn_output";
-	# print F join("\t", "Level", "Source", "taxonID", "taxonLabel", "F"), "\n";
-	# foreach my $level (keys %union_taxonIDs_byLevel)
-	# {
-		# foreach my $label (keys %{$distributions_byLevel_byLabel{$level}})
-		# {
-			# foreach my $taxonID (keys %{$union_taxonIDs_byLevel{$level}})
-			# {
-				# $distributions_byLevel_byLabel{$level}{$label}{$taxonID} = 0 if(not defined $distributions_byLevel_byLabel{$level}{$label}{$taxonID});
-				# $distributions_byLevel_byLabel{$level}{$label}{$taxonID} = 0 if(not defined $distributions_byLevel_byLabel{$level}{$label}{$taxonID});
-			# }
-			# foreach my $taxonID (keys %{$distributions_byLevel_byLabel{$level}{$label}})
-			# {
-				# my $taxonLabel;
-				# my $taxonID2 = $taxonID;
-				# if($taxonID eq 'Unclassified')
-				# {
-					# $taxonID2 = 0;
-					# $taxonLabel = 'Unclassified';
-				# }
-				# elsif($taxonID eq 'Undefined')
-				# {
-					# die;
-					# $taxonLabel = 'Undefined';
-				# }
-				# elsif($taxonID eq 'NotLabelledAtLevel')
-				# {
-					# die;
-					# $taxonLabel = 'NotLabelledAtLevel';
-				# }			
-				# else
-				# {
-					# $taxonLabel = taxTree::taxon_id_get_name($taxonID, $master_taxonomy);			
-				# }
-				# print F join("\t", $level, $label, $taxonID2, $taxonLabel, $distributions_byLevel_byLabel{$level}{$label}{$taxonID}), "\n";
-			# }
-		# }
-	# }
+	# }	
 }
 				
 			
