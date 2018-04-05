@@ -1,6 +1,7 @@
 pdf("HMPplot.pdf", width = 10, height = 5)
 sources_nonTruth_order <- c("Kraken", "Bracken", "MetaMap-EM", "MetaMap-U")
-for(v in c("PacBio", "Nanopore"))
+#for(v in c("PacBio", "Nanopore"))
+for(v in c("PacBio"))
 {
 	D <- read.delim(paste("_HMP_distributions_", v, ".txt", sep = ""), stringsAsFactors = F)
 
@@ -30,7 +31,7 @@ for(v in c("PacBio", "Nanopore"))
 		for(tI in taxonIDs)
 		{
 			i <- which((D_level[["Source"]] == "truth") & (D_level[["taxonID"]] == tI))
-			stopifnot(length(i) == 1)
+			stopifnot(length(i) == 1) 
 			if(D_level[["F"]][[i]] != 0)
 			{
 				taxonIDs_true <- c(taxonIDs_true, tI)
@@ -54,6 +55,8 @@ for(v in c("PacBio", "Nanopore"))
 			if(!(abs(1 - sum(D_level[["F"]][(D_level[["Source"]] == S)])) <= 1e-5))
 			{
 				cat("Error - truth doesn't add up\n")
+				cat("Source ", S, "\n")
+				cat(analysisLevel, "\n")
 				cat("sum(D_level[[F]][(D_level[[Source]] == S)]) = ", sum(D_level[["F"]][(D_level[["Source"]] == S)]), "\n")
 			}
 			stopifnot(abs(1 - sum(D_level[["F"]][(D_level[["Source"]] == S)])) <= 1e-5)
@@ -97,7 +100,7 @@ for(v in c("PacBio", "Nanopore"))
 		xyPlot_max <- max(D_level[["F"]])
 		
 		
-		plot(0, 0, xlim = c(0, xyPlot_max), ylim = c(0, xyPlot_max), main = paste(v, ": Abundance estimates [", analysisLevel, "]", sep = ""), col = "white")
+		plot(0, 0, xlim = c(0, xyPlot_max), ylim = c(0, xyPlot_max), main = paste(v, ": Abundance estimates [", analysisLevel, "]", sep = ""), col = "white", xlab = "Truth", ylab = "Estimation")
 
 		labels_for_xyLegend <- c()
 		for(Si in 1:length(sources_nonTruth))
@@ -118,7 +121,8 @@ for(v in c("PacBio", "Nanopore"))
 			points(x_values, y_values, col = colors_for_legend[[Si+1]])
 			
 			r <- sprintf("%.3f", cor(x_values, y_values))
-			labels_for_xyLegend <- c(labels_for_xyLegend, paste(sources_nonTruth[[Si]], " - r = ", r, sep = ""))
+			# labels_for_xyLegend <- c(labels_for_xyLegend, paste(sources_nonTruth[[Si]], " - r = ", r, sep = ""))
+			labels_for_xyLegend <- c(labels_for_xyLegend, paste(sources_nonTruth[[Si]], sep = ""))
 		}
 		lines(c(0, xyPlot_max), c(0, xyPlot_max), col = "gray")
 		

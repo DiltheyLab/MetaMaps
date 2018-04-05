@@ -212,9 +212,9 @@ foreach my $resultsSet (@resultsSets)
 		
 	my @evaluateAccuracyAtLevels = validation::getEvaluationLevels();
 
-	print "A\n";
-	my $truth_mappingDatabase_distribution = validation::truthReadsToTruthSummary($mappableTaxonomy, $truth_reads_href_noUnknown, \%reduced_taxonID_master_2_contigs);
-	print "B\n";
+	# print "A\n";
+	my $truth_mappingDatabase_distribution = validation::truthReadsToTruthSummary($mappableTaxonomy, $truth_reads_mappable, \%reduced_taxonID_master_2_contigs);
+	# print "B\n";
 	my %distributions_byLevel_byLabel;
 
 	my %union_taxonIDs_byLevel;
@@ -281,13 +281,13 @@ foreach my $resultsSet (@resultsSets)
 					$taxonLabel = 'Undefined';
 				}
 				elsif($taxonID eq 'NotLabelledAtLevel')
-				{
+				{ 
 					die;
 					$taxonLabel = 'NotLabelledAtLevel';
 				}			
 				else
 				{
-					print "C\n";
+					# print "C\n";
 					$taxonLabel = taxTree::taxon_id_get_name($taxonID, $master_taxonomy);			
 				}
 				print F join("\t", $level, $label, $taxonID2, $taxonLabel, $distributions_byLevel_byLabel{$level}{$label}{$taxonID}), "\n";
