@@ -310,7 +310,7 @@ oneMappingLocation_U getBestMapping_U(const std::vector<oneMappingLocation_U>& l
 }
 
 
-std::vector<oneMappingLocation_U> getMappingLocations_U(identityManager& iM, const std::map<std::string, std::vector<std::string>>& indirectUpwardNodes, const std::pair<std::map<std::string, double>, std::map<std::string, double>>& f, const std::vector<std::string>& readLines)
+std::vector<oneMappingLocation_U> getMappingLocations_U(identityManager& iM, const std::map<std::string, std::vector<std::string>>& indirectUpwardNodes, const std::map<std::string, int> indirectUpwardNodes_nSourceGenomes, const std::pair<std::map<std::string, double>, std::map<std::string, double>>& f, const std::vector<std::string>& readLines)
 {
 	assert(readLines.size() > 0);
 
@@ -405,6 +405,7 @@ std::vector<oneMappingLocation_U> getMappingLocations_U(identityManager& iM, con
 		
 		for(auto indirectTaxon : indirectUpwardNodes.at(contig_taxonID))
 		{
+			double likelihood_adjustment_factor_sourceGenomes = (double)1.0/(double)indirectUpwardNodes_nSourceGenomes.at(indirectTaxon);
 			oneMappingLocation_U lI;
 			lI.taxonID = indirectTaxon;
 			lI.contigID = "";
@@ -414,7 +415,7 @@ std::vector<oneMappingLocation_U> getMappingLocations_U(identityManager& iM, con
 			lI.readLength = readLength;
 			lI.identity = identity;
 			lI.direct = false;
-			lI.l = f.second.at(indirectTaxon) * iM.getIdentityP(identityInt, indirectTaxon, readLength, false);
+			lI.l = f.second.at(indirectTaxon) * likelihood_adjustment_factor_sourceGenomes * iM.getIdentityP(identityInt, indirectTaxon, readLength, false);
 			
 			if((bestInDirectMappings.count(indirectTaxon) == 0) || (bestInDirectMappings.at(indirectTaxon).identity < lI.identity))
 			{
@@ -605,6 +606,7 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 	std::set<std::string> relevantTaxonIDs_indirect;
 
 	std::map<std::string, std::vector<std::string>> indirectUpwardNodes;
+	std::map<std::string, int> indirectUpwardNodes_nSourceGenomes;
 	for(auto tI : taxonIDsInMappings)
 	{
 		std::vector<std::string> upwardTaxonIDs = T.getUpwardNodes(tI);
@@ -615,7 +617,11 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 			{
 				relevantTaxonIDs_indirect.insert(uTI);
 				indirectUpwardNodes[tI].push_back(uTI);
-				
+				if(indirectUpwardNodes_nSourceGenomes.count(uTI) == 0)
+				{
+					indirectUpwardNodes_nSourceGenomes[uTI] = tAI.indirectAttachmentNode_sources(uTI);
+				}
+
 				/*
 				if((uTI == "67753") || (uTI == "1914297"))
 				{
@@ -763,7 +769,7 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 			// std::cout << "\r EM round " << EMiteration << ", mapped read << " << processedRead << " / " << mappingStats.at("ReadsMapped") << "   " << std::flush;
 					
 			assert(readLines.size() > 0);
-			std::vector<oneMappingLocation_U> mappingLocations = getMappingLocations_U(iM, indirectUpwardNodes, f, readLines);
+			std::vector<oneMappingLocation_U> mappingLocations = getMappingLocations_U(iM, indirectUpwardNodes, indirectUpwardNodes_nSourceGenomes, f, readLines);
 
 			oneMappingLocation_U bestMapping = getBestMapping_U(mappingLocations);
 			if(bestMappings_perTaxonID.count(bestMapping.taxonID) == 0)
@@ -1097,7 +1103,7 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 	std::function<void(const std::vector<std::string>&)> processOneRead_final = [&](const std::vector<std::string>& readLines) -> void
 	{
 		assert(readLines.size() > 0);
-		std::vector<oneMappingLocation_U> mappingLocations = getMappingLocations_U(iM, indirectUpwardNodes, f, readLines);
+		std::vector<oneMappingLocation_U> mappingLocations = getMappingLocations_U(iM, indirectUpwardNodes, indirectUpwardNodes_nSourceGenomes, f, readLines);
 
 		std::string readID = getReadIDFromReadLines(readLines);
 		
@@ -1122,6 +1128,13 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 	};
 
 	callBackForAllReads(mappedFile, processOneRead_final);
+
+	// long-enough-but-unmapped reads are set to unassigned
+	std::vector<std::string> readIDs_notMapped_despiteLongEnough = getUnmappedReadsIDs(mappedFile);
+	for(auto readID : readIDs_notMapped_despiteLongEnough)
+	{
+		strout_reads_taxonIDs << readID << "\t" << 0 << "\n";
+	}
 
 	strout_reads_identities.close();
 	strout_reads_taxonIDs.close();

@@ -166,29 +166,42 @@ void producePotFile(std::string outputFN, const taxonomy& T, std::map<std::strin
 			f_per_level.at(levelName).at(taxonID) *= propMapped;
 		}
 		
+		double EMfreq_unmapped = 0;
 		double l_freq_EM = 0;
 		double l_freq_pot = 0;
+
+		size_t nUnmapped_and_undefined = nUnmapped;
 		for(auto taxonID : l.second)
 		{
-			std::string taxonIDName = (taxonID != "Undefined") ? T.getNode(taxonID).name.scientific_name : "Unclassified";
+			if(taxonID != "Undefined")
+			{
+				std::string taxonIDName = T.getNode(taxonID).name.scientific_name;
 
-			strout_frequencies <<
-				levelName << "\t" <<
-				((taxonID != "Undefined") ? taxonID : "0") << "\t" <<
-				taxonIDName << "\t" <<
-				rC_per_level.at(levelName).at(taxonID) << "\t" <<
-				f_originalEM_thisLevel.at(taxonID) << "\t" <<
-				f_per_level.at(levelName).at(taxonID) << "\n";
-				
-			l_freq_EM += f_originalEM_thisLevel.at(taxonID) ;
-			l_freq_pot += f_per_level.at(levelName).at(taxonID);
+				strout_frequencies <<
+					levelName << "\t" <<
+					taxonID << "\t" <<
+					taxonIDName << "\t" <<
+					rC_per_level.at(levelName).at(taxonID) << "\t" <<
+					f_originalEM_thisLevel.at(taxonID) << "\t" <<
+					f_per_level.at(levelName).at(taxonID) << "\n";
+
+				l_freq_EM += f_originalEM_thisLevel.at(taxonID) ;
+				l_freq_pot += f_per_level.at(levelName).at(taxonID);
+			}
+			else
+			{
+				nUnmapped_and_undefined += rC_per_level.at(levelName).at(taxonID);
+				EMfreq_unmapped += f_originalEM_thisLevel.at(taxonID);
+				propNotMapped += f_per_level.at(levelName).at(taxonID);
+			}
 		}
 		
-		strout_frequencies << levelName << "\t" << 	0 << "\t" <<  "Unclassified" << "\t" << nUnmapped << "\t" << 0 << "\t" << propNotMapped << "\n";
+		strout_frequencies << levelName << "\t" << 	0 << "\t" <<  "Unclassified" << "\t" << nUnmapped_and_undefined << "\t" << EMfreq_unmapped << "\t" << propNotMapped << "\n";
 		strout_frequencies << levelName << "\t" << -3 << "\t" <<  "totalReads" << "\t" << nTotalReads << "\t" << 0 << "\t" << 0 << "\n";
 		strout_frequencies << levelName << "\t" << -3 << "\t" <<  "readsLongEnough" << "\t" << nMappable << "\t" << 0 << "\t" << 0 << "\n";
 		strout_frequencies << levelName << "\t" << -3 << "\t" <<  "readsLongEnough_unmapped" << "\t" << nUnmapped << "\t" << 0 << "\t" << 0 << "\n";
 		
+		l_freq_EM += EMfreq_unmapped;
 		l_freq_pot += propNotMapped;
 		
 		assert(abs(1 - l_freq_EM) <= 1e-3);
@@ -360,12 +373,36 @@ std::vector<size_t> getUnmappedReadsStats(std::string mappedFile)
 		eraseNL(line);
 		if(line.length() != 0)
 		{
-			size_t l = std::stoull(line);
+			std::vector<std::string> line_fields = split(line, "\t");
+			assert(line_fields.size() == 2);
+			size_t l = std::stoull(line_fields.at(0));
 			forReturn.push_back(l);
 		}
 	}
 	return forReturn;
 }
+
+
+std::vector<std::string> getUnmappedReadsIDs(std::string mappedFile)
+{
+	std::vector<std::string> forReturn;
+	std::ifstream statsStream (mappedFile + ".meta.unmappedReadsLengths");
+	assert(statsStream.is_open());
+	std::string line;
+	while(statsStream.good())
+	{
+		std::getline(statsStream, line);
+		eraseNL(line);
+		if(line.length() != 0)
+		{
+			std::vector<std::string> line_fields = split(line, "\t");
+			assert(line_fields.size() == 2);
+			forReturn.push_back(line_fields.at(1));
+		}
+	}
+	return forReturn;
+}
+
 
 void doEM(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestContig)
 {
@@ -611,6 +648,14 @@ void doEM(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestC
 	
 	std::cout << "Outputting mappings with adjusted alignment qualities." << std::endl;
 	callBackForAllReads(mappedFile, processOneRead_final);
+
+	// long-enough-but-unmapped reads are set to unassigned
+	std::vector<std::string> readIDs_notMapped_despiteLongEnough = getUnmappedReadsIDs(mappedFile);
+	for(auto readID : readIDs_notMapped_despiteLongEnough)
+	{
+		strout_reads_taxonIDs << readID << "\t" << 0 << "\n";
+	}
+
 	strout_reads_identities.close();
 	strout_reads_taxonIDs.close();
 	if(maximumReadLength <= 0)

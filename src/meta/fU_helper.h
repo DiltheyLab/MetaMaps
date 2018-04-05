@@ -361,6 +361,7 @@ class treeAdjustedIdentities
 {
 public:
 	std::map<std::string, std::map<size_t, std::map<int, double>>> D;
+	std::map<std::string, int> D_sourceGenomes;
 
 	std::vector<size_t> getTwoClosestReadLenghts(std::string taxonID, size_t targetReadLength)
 	{
@@ -402,6 +403,13 @@ public:
 	bool nodeForIndirectAttachment(std::string taxonID)
 	{
 		return (D.count(taxonID) > 0);
+	}
+
+	int indirectAttachmentNode_sources(std::string taxonID)
+	{
+		assert(nodeForIndirectAttachment(taxonID));
+		assert(D_sourceGenomes.count(taxonID));
+		return D_sourceGenomes.at(taxonID);
 	}
 
 	void readFromFile(std::string fn, const std::set<std::string>& mappings_taxonIDs, const taxonomy& T)
@@ -448,6 +456,20 @@ public:
 			if(relevantTaxonIDs.count(nodeID))
 			{
 				D[nodeID][readLength][identityI] = p;
+
+				if(line_fields.at(4).length())
+				{
+					std::vector<std::string> source_taxonIDs = split(line_fields.at(4), ";");
+					assert(source_taxonIDs.size() >= 2);
+					if(D_sourceGenomes.count(nodeID) == 0)
+					{
+						D_sourceGenomes[nodeID] = source_taxonIDs.size();
+					}
+					else
+					{
+						assert(D_sourceGenomes.at(nodeID) == source_taxonIDs.size());
+					}
+				}
 			}
 		}
 	}
