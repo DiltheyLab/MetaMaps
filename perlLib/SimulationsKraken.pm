@@ -105,15 +105,15 @@ sub doKrakenOnExistingDB
 	chdir($kraken_dir) or die;  
 	
 	my $cmd_classify = qq(/usr/bin/time -v ${kraken_binPrefix} --preload --db DB $simulatedReads 1> reads_classified 2> kraken_resources);
-	system($cmd_classify) and die "Could not execute command: $cmd_classify";
+	# system($cmd_classify) and die "Could not execute command: $cmd_classify"; # todo
 	
 	my $cmd_report = qq(/usr/bin/time -v ${kraken_binPrefix}-report --db DB reads_classified > reads_classified_report);
-	system($cmd_report) and die "Could not execute command: $cmd_report";
+	# system($cmd_report) and die "Could not execute command: $cmd_report"; # todo 
 	
 	foreach my $L (qw/S G F/)
 	{
 		my $cmd_Bracken_estAbundance = qq(/usr/bin/time -v python ${Bracken_dir}/est_abundance.py -i reads_classified_report -k database75mers.kraken_cnts.bracken -l $L -o reads_classified_report_bracken_${L});
-		system($cmd_Bracken_estAbundance) and die "Could not execute command: $cmd_Bracken_estAbundance";
+		# system($cmd_Bracken_estAbundance) and die "Could not execute command: $cmd_Bracken_estAbundance"; # todo
 	}
 	
 	create_compatible_file_from_kraken(
@@ -161,7 +161,7 @@ sub doKraken
 	my $kraken_dir = $jobDir . '/kraken/';
 	my $jobDir_abs = abs_path($jobDir);
 	
-	translateMetaMapToKraken($kraken_dir, $dbDir, $krakenDBTemplate, $kraken_binPrefix, $Bracken_dir);
+	# translateMetaMapToKraken($kraken_dir, $dbDir, $krakenDBTemplate, $kraken_binPrefix, $Bracken_dir); # todo
 	
 	my $simulatedReads = abs_path($reads_fastq);
 	die unless(-e $simulatedReads);
@@ -342,6 +342,7 @@ sub create_compatible_reads_file_from_kraken
 		}
 		else
 		{
+			print OUTPUT $readID, "\t", 0, "\n";		 
 			print OUTPUT_UNCL $readID, "\t", 'Unclassified', "\n";		
 		}
 	}

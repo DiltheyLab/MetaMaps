@@ -2,7 +2,8 @@ use strict;
 use Storable qw/dclone store retrieve/;
 use Data::Dumper;
 
-my $simulationStore_dir = 'databases/miniSeq+H/simulations_i100_specifiedFrequencies_limitedMemory/0';
+# my $simulationStore_dir = 'databases/miniSeq+H/simulations_i100_specifiedFrequencies_limitedMemory/0';
+# my $simulationStore_dir = 'databases/miniSeq_100/simulations_logNormal/0';
 
 my $simulation_href = retrieve $simulationStore_dir . '/simulationStore';
 $simulation_href->{dbDirs_metamap} = [$simulationStore_dir . '/DB_fullDB'];

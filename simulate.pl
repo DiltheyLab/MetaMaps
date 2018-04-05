@@ -225,6 +225,7 @@ if($action eq 'testTaxonomy')
 }
 elsif($action eq 'prepare')
 {
+	die "Not in use at the moment";
 	my $DB_fa = $DB . '/DB.fa';
 	my $existingSelfSimilarities = $DB . '/selfSimilarities.txt';
 	
@@ -515,13 +516,13 @@ elsif($action eq 'inferenceJobI')
 	my $simulation_href = retrieve $simulation_href_fn;
 	unless($simulation_href->{outputDirectory} eq $globalOutputDir . '/' . $jobI)
 	{
-		die Dumper("I think you were too smart", $simulation_href->{outputDirectory}, $globalOutputDir . '/' . $jobI);
+		die Dumper("I think you were too smart I", $simulation_href->{outputDirectory}, $globalOutputDir . '/' . $jobI);
 	}
-	foreach my $dir (@{$simulation_href->{dbDirs_metamap}})
+	foreach my $dir (@{$simulation_href->{dbDirs_metamap}}[0])
 	{
 		unless($dir eq $globalOutputDir . '/' . $jobI  . '/DB_fullDB')
 		{
-			die Dumper("I think you were too smart", $simulation_href->{dbDirs_metamap}, $globalOutputDir . '/' . $jobI  . '/DB_fullDB');
+			die Dumper("I think you were too smart II", $simulation_href->{dbDirs_metamap}, $globalOutputDir . '/' . $jobI  . '/DB_fullDB');
 		}	
 	}
 					
@@ -1412,7 +1413,7 @@ sub doMetaMap
 		$minReads = 1; 
 	}	
 	my $cmd_classify = qq(/usr/bin/time -v $metamap_bin classify --DB $DB --mappings $file_mappings --minreads $minReads &> $file_res_classification);
-	$cmd_classify = qq(/usr/bin/time -v $metamap_bin classify --DB $DB --mappings $file_mappings --minreads $minReads &> $file_res_classification); 
+	$cmd_classify =    qq(/usr/bin/time -v $metamap_bin classify --DB $DB --mappings $file_mappings --minreads $minReads &> $file_res_classification); 
 	system($cmd_classify) and die "Cannot execute $cmd_classify";
 	
 

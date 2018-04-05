@@ -1529,7 +1529,7 @@ sub readInferredFileReads
 			$taxonID_master = 1;
 		}
 		
-		die "Undefined taxon ID $taxonID_master in file $file $." unless(exists $masterTaxonomy->{$taxonID_master});
+		die "Undefined taxon ID $taxonID_master in file $file $." unless(($taxonID_master eq '0') or (exists $masterTaxonomy->{$taxonID_master}));
 		die if(defined $inferred_raw_reads{$readID});
 		
 		$inferred_raw_reads{$readID} = $taxonID_master;
