@@ -293,7 +293,7 @@ sub getAllRanksForTaxon_withUnclassified
 	my %forReturn = map {$_ => 'Unclassified'} @evaluateAccuracyAtLevels;
 	if(defined $mappableTaxonIDs_href->{$taxonID})
 	{
-		$forReturn{definedGenomes} = $taxonID;
+		$forReturn{definedGenomes} = $taxonID; 
 	}
 	else
 	{
@@ -441,7 +441,7 @@ sub readLevelComparison
 	#}
 	
 	die unless(all {($_ eq '0') or (exists $masterTaxonomy->{$_})} values %$reads_truth_absolute);
-	die unless(all {exists $masterTaxonomy->{$_}} values %$reads_inferred);
+	die unless(all {($_ eq '0') or (exists $masterTaxonomy->{$_})} values %$reads_inferred);
 
 	# a 'lightning' is the way from a taxon ID to the top of the tree, and back
 	# ... setting levels below the ID to 'unclassified'
@@ -671,14 +671,14 @@ sub readLevelComparison
 					}
 					elsif((not $mappable_absolute_truth) and (not $mappable_inferred))
 					{
-						$unclassified_key = 'N_unclassified_should1_is1';
-					}
+						$unclassified_key = 'N_unclassified_should1_is1'; 
+					} 
 										
 					if($_read_categories{'truthLeafInDB'})
 					{
-						open(MISSING, '>>missingTaxa') or die;
-						print MISSING $reads_truth_absolute->{$readID}, "\n";
-						close(MISSING);
+						# open(MISSING, '>>missingTaxa') or die;
+						# print MISSING $reads_truth_absolute->{$readID}, "\n";
+						# close(MISSING);
 						 
 						# die Dumper(
 							# "Weird - read $readID", "Not sure whether mappable or not?",

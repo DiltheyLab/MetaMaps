@@ -997,7 +997,8 @@ sub evaluateOneSimulation
 				}
 				
 				foreach my $varietyName_forStorage (@varietyNames_forStorage)
-				{				
+				{		
+					print "$methodName $varietyName_forStorage reads\n";
 					validation::readLevelComparison(
 						$extendedMaster,
 						$truth_raw_reads_href,
@@ -1011,6 +1012,7 @@ sub evaluateOneSimulation
 						$readLengths_href,
 						$n_reads_unknownStats_byLevel_href->{$varietyName_forStorage}
 					);
+					print "$methodName $varietyName_forStorage reads done\n";
 				}
 			}
 			else 
@@ -1020,7 +1022,9 @@ sub evaluateOneSimulation
 				print "Analyse $f\n";
 				foreach my $varietyName_forStorage (@varietyNames_forStorage)
 				{
+					print "$methodName $varietyName_forStorage freqs\n";
 					validation::distributionLevelComparison($extendedMaster, $truth_mappingDatabase_distribution, $inferred_distribution, $methodName, $freq_byVariety_byLevel->{$varietyName_forStorage}, $frequencyComparison_href->{$varietyName_forStorage});
+					print "$methodName $varietyName_forStorage freqs done\n";					
 				}
 				print "Done $f\n\n";
 			}

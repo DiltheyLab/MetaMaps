@@ -43,6 +43,12 @@ perl util/HMPplot.pl
 perl simulate.pl --DB databases/miniSeq+H --action inferenceJobI --jobI 0 --suffix i100_specifiedFrequencies_limitedMemory --maxMemory 20 --skipKraken 1
 perl simulate.pl --DB databases/miniSeq+H --action inferenceJobI --jobI 0 --suffix i100_specifiedFrequencies --skipKraken 1
 
+All combined:
+
+perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix i100_specifiedFrequencies&&\
+Rscript doPlots.R databases/miniSeq+H/simulations_i100_specifiedFrequencies;\
+perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix p25_logNormal &&\
+Rscript doPlots.R databases/miniSeq+H/simulations_p25_logNormal
 
 
 For testing:
@@ -55,3 +61,14 @@ perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix p25_logNo
 
 perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix i100_specifiedFrequencies && \
 perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix p25_logNormal 
+
+Inference jobs:
+
+qsub /data/projects/phillippy/projects/MetaMap/databases/miniSeq+H/simulations_p25_logNormal/inferenceJobs.asArray
+qsub /data/projects/phillippy/projects/MetaMap/databases/miniSeq+H/simulations_i100_specifiedFrequencies/inferenceJobs.asArray
+qsub /data/projects/phillippy/projects/MetaMap/databases/miniSeq+H/simulations_i100_specifiedFrequencies_limitedMemory/inferenceJobs.asArray
+
+Just i100:
+
+perl simulate.pl --action inferenceJobI --DB databases/miniSeq+H --jobI 0 --suffix simulations_i100_specifiedFrequencies_limitedMemory --varietyI 0 && perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix i100_specifiedFrequencies_limitedMemory
+ 

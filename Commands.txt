@@ -194,7 +194,8 @@ perl simulate.pl --DB databases/miniSeq_100 --action prepare --n_simulations 2 -
 // Test run on small dataset:
 
 ./metamap mapDirectly --all -r databases/miniSeq_100/DB.fa -q /data/projects/phillippy/projects/MetaMap/databases/miniSeq_100/simulations_logNormal/0/reads.fastq -o /data/projects/phillippy/projects/MetaMap/databases/miniSeq_100/simulations_logNormal/0/reads.fastq.mapped
-./metamap classify --mappings /data/projects/phillippy/projects/MetaMap/databases/miniSeq_100/simulations_logNormal/0/reads.fastq.mapped --DB databases/miniSeq_100
+./metamap classify --mappings /data/projects/phillippy/projects/MetaMap/databases/miniSeq_100/simulations_logNormal/0/reads.fastq.mapped --DB databases/miniSeq_100 --minreads 1
+Rscript plotIdentities_EM.R /data/projects/phillippy/projects/MetaMap/databases/miniSeq_100/simulations_logNormal/0/reads.fastq.mapped
 
 // Test on large dataset:
 
