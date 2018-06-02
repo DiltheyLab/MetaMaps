@@ -14,8 +14,13 @@ screen -r sim_random_uniform
 screen -r sim_random_logNormal
 screen -r sim_i100
 
-./metamap mapDirectly --all -r databases/miniSeq+H/DB.fa -q /scratch/tmp/hmp_set7_combined.fastq -o tmp/hmp7_2_miniSeq+H &> tests/resources/hmp7_2_miniSeq;\
-./metamap classify --mappings tmp/hmp7_2_miniSeq+H --DB databases/miniSeq+H
+/usr/bin/time -v ./metamap mapDirectly --all -r databases/miniSeq+H/DB.fa -q /scratch/tmp/hmp_set7_combined.fastq -o tmp/hmp7_2_miniSeq+H &> tests/resources/hmp7_2_miniSeq_mapping;\
+/usr/bin/time -v ./metamap classify --mappings tmp/hmp7_2_miniSeq+H --DB databases/miniSeq+H &> tests/resources/hmp7_2_miniSeq_classification
+Rscript plotMappingSummary.R tmp/hmp7_2_miniSeq+H
+
+perl util/HMPplot.pl
+Rscript util/HMPplot_R.R
+# Rscript util/HMPplot_R_actinomyces.R
 
 ./metamap mapDirectly --all -r databases/miniSeq+H/DB.fa -q /scratch/tmp/hmp-nanopore.fasta -o tmp/hmp-nanopore_miniSeq+H
 ./metamap classify --mappings tmp/hmp-nanopore_miniSeq+H --DB databases/miniSeq+H
@@ -42,7 +47,12 @@ perl util/HMPplot.pl
 
 perl simulate.pl --DB databases/miniSeq+H --action inferenceJobI --jobI 0 --suffix i100_specifiedFrequencies_limitedMemory --maxMemory 20 --skipKraken 1
 perl simulate.pl --DB databases/miniSeq+H --action inferenceJobI --jobI 0 --suffix i100_specifiedFrequencies --skipKraken 1
+perl simulate.pl --DB databases/miniSeq+H --action inferenceJobI --jobI 0 --suffix p25_logNormal --varietyI 0
+qsub /data/projects/phillippy/projects/MetaMap/databases/miniSeq+H/simulations_i100_specifiedFrequencies/inferenceJobs.asArray
+qsub /data/projects/phillippy/projects/MetaMap/databases/miniSeq+H/simulations_p25_logNormal/inferenceJobs.asArray.manual
+perl callKrakenOnConvertedDB.pl databases/miniSeq+H /scratch/tmp/hmp_set7_combined.fastq /scratch/tmp/hmp_set7_combined_kraken_results
 
+  
 All combined:
 
 perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix i100_specifiedFrequencies&&\
@@ -55,6 +65,7 @@ For testing:
 
 perl simulate.pl --action analyzeAll --suffix logNormal
 
+perl util/HMPplot.pl &&\
 perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix i100_specifiedFrequencies && \
 perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix i100_specifiedFrequencies_limitedMemory && \
 perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix p25_logNormal 

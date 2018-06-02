@@ -1,5 +1,6 @@
 pdf("HMPplot.pdf", width = 10, height = 5)
 sources_nonTruth_order <- c("Kraken", "Bracken", "MetaMap-EM", "MetaMap-U")
+sources_nonTruth_order <- c("Kraken", "Bracken", "MetaMap-EM")
 #for(v in c("PacBio", "Nanopore"))
 for(v in c("PacBio"))
 {
@@ -9,7 +10,7 @@ for(v in c("PacBio"))
 	stopifnot("truth" %in% sources)
 	sources_nonTruth <- sources[sources != "truth"]
 	stopifnot(all(sources_nonTruth_order %in% sources_nonTruth))
-	stopifnot(all(sources_nonTruth %in% sources_nonTruth_order))
+	# stopifnot(all(sources_nonTruth %in% sources_nonTruth_order))
 	sources_nonTruth <- sources_nonTruth_order
 	for(analysisLevel in c("species", "genus"))
 	{
@@ -42,7 +43,7 @@ for(v in c("PacBio"))
 		
 		
 		legend_for_plot <- c()
-		colors_for_legend <- c("blue", "lightblue", "cyan", "red", "pink")
+		colors_for_legend <- c("blue", "lightblue", "cyan", "red")
 		for(S in c("GoldStandard", sources_nonTruth))
 		{
 			legend_for_plot <- c(legend_for_plot, S)

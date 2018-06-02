@@ -466,5 +466,5 @@ twoReadPlots <- function(d1, t1, d2, t2)
 }
 
 unknownFrequencyPlots("../databases/miniSeq+H/simulations_p25_logNormal", "p25")
-# readLengthPlot("../databases/miniSeq+H/simulations_i100_specifiedFrequencies", "i100")
-# twoReadPlots("../databases/miniSeq+H/simulations_i100_specifiedFrequencies", "i100", "../databases/miniSeq+H/simulations_p25_logNormal", "p25")
+readLengthPlot("../databases/miniSeq+H/simulations_i100_specifiedFrequencies", "i100")
+twoReadPlots("../databases/miniSeq+H/simulations_i100_specifiedFrequencies", "i100", "../databases/miniSeq+H/simulations_p25_logNormal", "p25")
