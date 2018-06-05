@@ -14,7 +14,7 @@ screen -r sim_random_uniform
 screen -r sim_random_logNormal
 screen -r sim_i100
 
-/usr/bin/time -v ./metamap mapDirectly --all -r databases/miniSeq+H/DB.fa -q /scratch/tmp/hmp_set7_combined.fastq -o tmp/hmp7_2_miniSeq+H &> tests/resources/hmp7_2_miniSeq_mapping;\
+/usr/bin/time -v ./metamap mapDirectly --all -r databases/miniSeq+H/DB.fa -q /scratch/tmp/hmp_set7_combined.fastq.mappable -o tmp/hmp7_2_miniSeq+H &> tests/resources/hmp7_2_miniSeq_mapping;\
 /usr/bin/time -v ./metamap classify --mappings tmp/hmp7_2_miniSeq+H --DB databases/miniSeq+H &> tests/resources/hmp7_2_miniSeq_classification
 Rscript plotMappingSummary.R tmp/hmp7_2_miniSeq+H
 
@@ -50,7 +50,7 @@ perl simulate.pl --DB databases/miniSeq+H --action inferenceJobI --jobI 0 --suff
 perl simulate.pl --DB databases/miniSeq+H --action inferenceJobI --jobI 0 --suffix p25_logNormal --varietyI 0
 qsub /data/projects/phillippy/projects/MetaMap/databases/miniSeq+H/simulations_i100_specifiedFrequencies/inferenceJobs.asArray
 qsub /data/projects/phillippy/projects/MetaMap/databases/miniSeq+H/simulations_p25_logNormal/inferenceJobs.asArray.manual
-perl callKrakenOnConvertedDB.pl databases/miniSeq+H /scratch/tmp/hmp_set7_combined.fastq /scratch/tmp/hmp_set7_combined_kraken_results
+perl callKrakenOnConvertedDB.pl databases/miniSeq+H /scratch/tmp/hmp_set7_combined.fastq.mappable /scratch/tmp/hmp_set7_combined_kraken_results
 
   
 All combined:

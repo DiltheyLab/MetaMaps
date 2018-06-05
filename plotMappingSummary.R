@@ -21,7 +21,7 @@ countsPerUnit <- table(data_LandI[["ID"]])
 countsPerUnit <- sort(countsPerUnit, d = T)
 freqPerUnit <- countsPerUnit/sum(countsPerUnit)
 
-fn_output <- paste(prefix, '.identitiesAndCoverage_MetaMapComplete.pdf', sep = "")
+fn_output <- paste(prefix, '.identitiesAndCoverage.pdf', sep = "")
 fn_output_coveragePlots <- paste(prefix, '.coveragePerContig_MetaMapComplete.pdf', sep = "")
 
 plotLabels <- c()
@@ -67,7 +67,7 @@ for(i in 1:length(countsPerUnit))
 
 
 
-pdf(fn_output, width = 20, height = 10)
+pdf(fn_output, width = 12, height = 8)
 #par(mfrow=c(1,3),oma=c(0,0,2,0))
 par(mar = c(5, 3, 5, 3), oma = c(0,0,2,0))
 m <- rbind(c(1,2,3), c(4, 4, 4))
@@ -125,7 +125,7 @@ for(doWhat in c("limits", "plot"))
 			barplot(vector_identities[min(allIdentity_min_not0):length(vector_identities)], xlab = "Identity", ylab = "Density", main = paste("Read identities"), ylim = c(0, max(allIdentityDensities)))		
 			histogram_coverage <- hist(allWindows_coverages, plot = F)	
 			plot(histogram_coverage, main = "Genome window coverage histogram", xlab = "Coverage")
-			title(paste("MetaMap-Complete for ", taxonLabel, " (taxon ID ", taxonID, ") - ", reads_count, " mapped reads assigned", sep = ""), outer=TRUE, cex = 2)			
+			title(paste("MetaMap mapping summary for ", taxonLabel, " (taxon ID ", taxonID, ") - ", reads_count, " mapped reads assigned", sep = ""), outer=TRUE, cex.main = 1.5)			
 		}
 		else
 		{
@@ -140,7 +140,7 @@ for(doWhat in c("limits", "plot"))
 			
 			taxonLabel <- as.character(data_coverage[["equalCoverageUnitLabel"]][[indices_coverage_taxonID[[1]]]])
 			
-			reads_count <- 0	
+			reads_count <- 0	 
 			allWindows_coverages <- c()
 			allWindows_coverages_colors <- c()
 			mappingUnits <- names(taxonID_2_mappingUnits[[taxonID]])	
@@ -161,7 +161,7 @@ for(doWhat in c("limits", "plot"))
 				}
 				allWindows_coverages_colors <- c(allWindows_coverages_colors, rep(thisMappingUnit_color, length(coverages_thisMappingUnit)))
 			}
-			plot(1:length(allWindows_coverages), allWindows_coverages, col = allWindows_coverages_colors, main = paste("Genome-wide coverage over all contigs for ", taxonLabel, " (taxon ID ", taxonID, ") - ", reads_count, " mapped reads assigned",  sep = ""), xlab = "Coordinate concatenated genome (1000s)", ylab = "Coverage", pch = 20, cex.main = 1.5)		
+			plot(1:length(allWindows_coverages), allWindows_coverages, col = allWindows_coverages_colors, main = paste("Genome-wide coverage over all contigs for ", taxonLabel, " (taxon ID ", taxonID, ") - ", reads_count, " mapped reads assigned",  sep = ""), xlab = "Coordinate concatenated genome (1000s)", ylab = "Coverage", pch = 20, cex.main = 1)		
 		}
 	}
 }

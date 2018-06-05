@@ -1,43 +1,77 @@
-MashMap
+MetaMap
 ========================================================================
 
-MashMap is a fast and approximate long read (PacBio/ONT) mapper. It maps a read against a reference region if and only if its estimated alignment identity is above a specified threshold. It does not compute the alignments explicitly, but rather estimates a *k*-mer based [Jaccard similarity](https://en.wikipedia.org/wiki/Jaccard_index) using a combination of [Winnowing](http://www.cs.princeton.edu/courses/archive/spr05/cos598E/bib/p76-schleimer.pdf) and [MinHash](https://en.wikipedia.org/wiki/MinHash). This is then converted to an estimate of sequence identity using the [Mash](http://mash.readthedocs.org) distance. An appropriate *k*-mer sampling rate is automatically determined given minimum read length and identity thresholds. The efficiency of the algorithm improves as both of these thresholds are increased.
+MetaMap is tool specifically developed for the analysis of long-read (PacBio/ONT) metagenomic datasets.
 
-Unlike traditional read mappers, MashMap does not compute gapped pairwise alignments. Instead it approximates mapping positions and identities using only *k*-mers. As a result, MashMap is both extremely fast and memory efficient, enabling rapid long-read mapping to large reference databases like NCBI RefSeq. We describe the full algorithm and report on speed, scalability, and accuracy of the software here: ["A fast approximate algorithm for mapping long reads to large reference databases"](http://biorxiv.org/content/early/2017/01/27/103812).
+It simultaenously carries out read assignment and sample composition estimation.
 
-MashMap is in early development and currently reports only full-length mappings of reads to references. For split-read mapping, see Heng Li's [minimap](https://github.com/lh3/minimap), which is based on a similar idea, but does not provide identity estimates for the mapping targets it reports. We plan to add support for split-read mapping in future versions of MashMap.
+It is faster than classical exact alignment-based approaches, and its output is more information-rich than that of kmer-spectra-based methods. For example, each MetaMap alignment comes with approximate alignment locations, and estimated alignment identity and a mapping quality.
+
+The approximate mapping algorithm employed by MetaMap is identical to that of [https://github.com/marbl/MashMap](MashMap).
+
 
 ## Installation
-Follow [`INSTALL.txt`](INSTALL.txt) to compile and install MashMap.
+Follow [`INSTALL.txt`](INSTALL.txt) to compile and install MetaMap.
 
 ## Usage
 
-* Map set of long reads against a reference genome:
-  ```sh
-  mashmap -s reference.fna -q query.fa -o output.txt
-  ```
-  The output is space-delimited with each line consisting of query name, length,
-  0-based start, end, strand, target name, length, start, end, mapping nucleotide
-  identity, count of shared sketch elements and the sketch size.
+Analysis of a dataset with MetaMap consists of two steps: mapping and classification:
 
-* Map set of long reads against a list of reference genomes:
-  ```sh
-  mashmap --sl referenceList.txt -q query.fa -o output.txt
-  ```
-  File 'referenceList.txt' containing the list of reference genomes should contain path to the reference genomes, one per line.
+```
+./metamap mapDirectly --all -r databases/miniSeq+H/DB.fa -q input.fastq -o classification_results
+./metamap classify --mappings classification_results --DB databases/miniSeq+H
+```
 
-## Parameters
+### Memory-efficient mapping
 
-For most of the use cases, default values should be appropriate. However, different parameters and their purpose can be checked using the help page `mashmap -h`. Important ones are mentioned below:
+You can use the '--maxmemory' parameter to specify a target for maximum memory consumption (in gigabytes). Note that this feature is implemented heuristically; actual memory usage will fluctuate around and may exceed the target. It is recommended to use around 70% of the available memory as a target amount.
 
-* Identity threshold (--perc_identity, --pi) : By default, its set to 85, implying read mappings with 85% identity should be reported. It can be set to 80% to account for more noisy read datasets.
+Example:
 
-* Minimum read length (-m, --minReadLen) :  Default is 5,000 bp. This is set to 5K as the current average read lengths for both ONT and PacBio are >10K. Reads below this length are ignored.
+```
+./metamap mapDirectly --all -r databases/miniSeq+H/DB.fa -q input.fastq -o classification_results --maxmemory 20
+./metamap classify --mappings classification_results --DB databases/miniSeq+H
+```
 
-* Protein sequences (-a, --protein) : Use this parameter when mapping protein sequences. MashMap adjusts alphabet and k-mer size accordingly.
+## Databases
 
-* Report all mappings, not just the best ones (--all)
+The 'miniSeq+H' database is a good place to start. It contains >12000 microbial genomes and the human reference genome. We provide miniSeq+H as a download.
 
-## Release
+You can also download and construct your own reference databases. For example, this is how to construct the miniSeq+H database:
 
-Use the [latest release](https://github.com/marbl/MashMap/releases) for a stable version. In case your goal is to reproduce the results in the [Mashmap paper](http://biorxiv.org/content/early/2017/01/27/103812), you should use the very  [first version](https://github.com/marbl/MashMap/releases/tag/v1.0). 
+
+1. Download the genomes you want to include. The easiest way to do this is by copying the RefSeq/Genbank directory structure of the taxonomic branches you're interested in. This can be done with the `downloadRefSeq.pl` script, which is easily customizable (you can specify the taxonomic branches that you want to download by modifying the values in `@target_subdirs`). Example:
+
+```
+mkdir downloads
+perl downloadRefSeq.pl --seqencesOutDirectory downloads/refseq --taxonomyOutDirectory downloads/taxonomy
+```
+
+2. We need to make sure that each contig ID is annotated with a correct and unique taxon ID and we want the whole database as one file. `annotateRefSeqSequencesWithUniqueTaxonIDs.pl` can help:
+
+```
+perl annotateRefSeqSequencesWithUniqueTaxonIDs.pl --refSeqDirectory downloads/refseq --taxonomyInDirectory downloads/taxonomy --taxonomyOutDirectory downloads/taxonomy_uniqueIDs
+```
+
+3. We might also manually want to include additional genomes, for example the human reference genome. Obtain the genome in one file (e.g. `hg38.primary.fna`) and add taxon IDs:
+
+```
+perl util/addTaxonIDToFasta.pl --inputFA hg38.primary.fna --outputFA hg38.primary.fna.with9606 --taxonID 9606
+```
+
+4. Finally, construct the MetaMap database:
+
+```
+perl buildDB.pl --DB databases/myDB --FASTAs downloads/refseq/ref.fa,hg38.primary.fna.with9606 --taxonomy downloads/taxonomy_uniqueIDs
+```
+
+
+The NCBI taxonomy changes on a regular basis, and you might not want to repeat the complete database construction process every time that happens. You can update the utilized taxonomy as part of `buildDB.pl`, by specifying the "old" taxonomy (used for `addTaxonIDToFasta.pl`), `--updateTaxonomy 1`, and the path to a download of the new taxonomy (e.g. [ftp://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdump.tar.gz](ftp://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdump.tar.gz)). Example:
+
+```
+perl buildDB.pl --DB databases/myDB --FASTAs downloads/refseq/ref.fa,hg38.primary.fna.with9606 --taxonomy downloads/new_taxonomy --oldTaxonomy downloads/taxonomy_uniqueIDs --updateTaxonomy 1
+```
+
+
+
+

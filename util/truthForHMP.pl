@@ -71,10 +71,12 @@ close(GL);
 
 
 # foreach my $config (['bwa_nanopore', '/data/projects/phillippy/projects/mash_map/Jobs/blasr/hmp/targetAll/mock.all.genome.fa.nanopore.sorted.bam', '/scratch/tmp/hmp-nanopore.fasta'], ['blasr_pacbio', '/data/projects/phillippy/projects/mash_map/Jobs/blasr/hmp/target/all.m4', '/scratch/tmp/hmp_set7_combined.fastq'], ['bwa_pacbio', '/data/projects/phillippy/projects/mash_map/Jobs/blasr/hmp/targetAll/mock.all.genome.fa.pacbioReads.bam', '/scratch/tmp/hmp_set7_combined.fastq'])
-foreach my $config (['bwa_pacbio', '/data/projects/phillippy/projects/mash_map/Jobs/blasr/hmp/targetAll/mock.all.genome.fa.pacbioReads.bam', '/scratch/tmp/hmp_set7_combined.fastq'], ['bwa_nanopore', '/data/projects/phillippy/projects/mash_map/Jobs/blasr/hmp/targetAll/mock.all.genome.fa.nanopore.sorted.bam', '/scratch/tmp/hmp-nanopore.fasta'])
+# not working, filtering doesn't support FASTA
+#foreach my $config (['bwa_pacbio', '/data/projects/phillippy/projects/mash_map/Jobs/blasr/hmp/targetAll/mock.all.genome.fa.pacbioReads.bam', '/scratch/tmp/hmp_set7_combined.fastq'], ['bwa_nanopore', '/data/projects/phillippy/projects/mash_map/Jobs/blasr/hmp/targetAll/mock.all.genome.fa.nanopore.sorted.bam', '/scratch/tmp/hmp-nanopore.fasta'])
+foreach my $config (['bwa_pacbio', '/data/projects/phillippy/projects/mash_map/Jobs/blasr/hmp/targetAll/mock.all.genome.fa.pacbioReads.bam', '/scratch/tmp/hmp_set7_combined.fastq'])
 {
 	print $config->[0], "\n";
-	
+	 
 	my $HMP_fastQ = $config->[2];
 	my $HMP_readIDs_href = getReadIDs($HMP_fastQ);
 
@@ -426,7 +428,7 @@ foreach my $config (['bwa_pacbio', '/data/projects/phillippy/projects/mash_map/J
 	foreach my $readID (keys %$HMP_readIDs_href)
 	{
 		next if(defined $read_2_taxonID{$readID});
-		print OUT_PERREAD join("\t", $readID, 0), "\n";
+		# print OUT_PERREAD join("\t", $readID, 0), "\n";
 		$taxonID_read_counts{0}++;
 	}
 
@@ -443,10 +445,32 @@ foreach my $config (['bwa_pacbio', '/data/projects/phillippy/projects/mash_map/J
 	simulation::truthReadFrequenciesFromReadCounts($fn_out_distribution, \%taxonID_read_counts, $master_taxonomy);
 	simulation::truthGenomeFrequenciesFromReadCounts($fn_out_distribution_genomeFreqs, \%taxonID_2_bases, \%taxonID_read_counts, \%taxa_genome_lengths, $master_taxonomy);
 
+	my $fn_out_FASTQ = $HMP_fastQ . '.mappable';
+	open(FASTQ_OUT, '>', $fn_out_FASTQ) or die "Cannot open $fn_out_FASTQ";
+	open(FASTQ_IN, '<', $HMP_fastQ) or die "Cannot open $HMP_fastQ";
+	while(<FASTQ_IN>)
+	{
+		my $line = $_;
+		chomp($line);
+		next unless($line);
+		die Dumper("Weird line $line", $., $HMP_fastQ) unless(substr($line, 0, 1) eq '@');
+		my $readID = substr($line, 1);
+		my $seq = <FASTQ_IN>;
+		my $plus = <FASTQ_IN>;
+		my $qual = <FASTQ_IN>;
+		if(defined $read_2_taxonID{$readID})
+		{
+			die unless($read_2_taxonID{$readID});
+			print FASTQ_OUT $line, "\n", $seq, $plus, $qual;
+		}
+	}
+	close(FASTQ_IN);
+	close(FASTQ_OUT);
 	print "\n\nDone $config->[0] . Produced files:\n";
 	print "\t - $fn_out_reads \n";
 	print "\t - $fn_out_distribution \n";
 	print "\t - $fn_out_distribution_genomeFreqs \n";
+	print "\t - $fn_out_FASTQ \n"; 
 	print "\n";
 }
 

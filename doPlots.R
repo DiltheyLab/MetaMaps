@@ -35,11 +35,12 @@ freqFile <- paste(prefix, "frequencies_xy", sep = "")
 pBefore <- par(mfrow=c(4,4), oma=c(0,3,6,0), mar = c(2,2,2,1)) 
 freqD <- read.delim(freqFile, header = T, stringsAsFactors = F)
 freq_methods <- c("Kraken-Dist", "Bracken-Dist", "MetaMap-EM-Dist", "MetaMap-U-Dist")
+freq_methods <- c("Kraken-Dist", "Bracken-Dist", "MetaMap-EM-Dist")
 freq_levels <- c("definedGenomes", "species", "genus", "family")
 freqD[["freqTarget"]] <- as.numeric(freqD[["freqTarget"]])
 freqD[["freqIs"]] <- as.numeric(freqD[["freqIs"]])
 # idx_minmax <- which(freqD[["level"]] %in% freq_levels)
-pC <- list()
+pC <- list() 
 pC[["Unclassified"]] <- "#00FF00"
 # pC[["NotLabelledAtLevel"]] <- "#009900"
 # pC[["Mappable"]] <- barplotPal[[1]]
@@ -94,6 +95,7 @@ if(any(freqD[["variety"]] != "fullDB"))
 }
 varieties_nonFullDB <- sort(unique(freqD[["variety"]][freqD[["variety"]] != "fullDB"]))
 frequency_plotTypes <- c(frequency_plotTypes, varieties_nonFullDB)
+print(c(frequency_plotTypes, unique(freqD[["variety"]])))
 for(plotType in frequency_plotTypes)
 {
 	frequency_varities <- c("Summary")
@@ -204,8 +206,13 @@ for(plotType in frequency_plotTypes)
 						frTarget <- freqD[["freqTarget"]][indices]
 						frIs <- freqD[["freqIs"]][indices]
 						taxonIDs <- freqD[["taxonID"]][indices]
-						taxonLabels <- freqD[["taxonLabel"]][indices]		
-						stopifnot(length(indices) > 0)				
+						taxonLabels <- freqD[["taxonLabel"]][indices]	
+						if(length(indices) == 0)
+						{
+							cat("Major issues.\n")
+							cat(plotType, m, l, freqFile, "\n")
+						}
+						stopifnot((1 == 0) || (length(indices) > 0))				
 						points(frTarget, frIs,  pch = pointSymbols, cex = pointCexs, col = pointColours)
 						stopifnot(length(frTarget) == length(pointColours))
 						r <- cor(frTarget, frIs)
@@ -298,6 +305,11 @@ for(rL in unique(barplotD[["readLevel"]]))
 				for(l in c("absolute", "species", "genus", "family"))
 				{
 					indices <- which((barplotD[["readLevel"]] == rL) & (barplotD[["variety"]] == v) & (barplotD[["level"]] == l) & (barplotD[["method"]] == m))
+					if(length(indices) != 1)
+					{
+						cat("More major issues\n")
+						cat(rL, v, m, l, length(indices), "\n")
+					}
 					stopifnot(length(indices) == 1)
 
 					callRate <- barplotD[["callRate"]][indices[[1]]]
@@ -359,7 +371,7 @@ if(length(methodNames_reads) > 0)
 			l <- plotLevels[[lI]]
 			indices <- which((byReadLengthD[["method"]] == m) & (byReadLengthD[["readCategory"]] == "ALL") & (byReadLengthD[["evaluationLevel"]] == l))	
 			indices_validAccuracy <- which((byReadLengthD[["method"]] == m) & (byReadLengthD[["readCategory"]] == "ALL") & (byReadLengthD[["evaluationLevel"]] == l) & (byReadLengthD[["accuracyAvg"]] >= 0))	
-			stopifnot(length(indices) > 0)
+			stopifnot((1 == 2) || (length(indices) > 0))
 			stopifnot(length(indices_validAccuracy) > 0)
 			if(lI == 1)
 			{
@@ -494,6 +506,7 @@ for(rC in rCs)
 	par(mar = pMar)
 	
 	attachedToProportions_methods <- c("Metamap-U-Reads", "Metamap-EM-Reads", "Kraken-Reads")
+	attachedToProportions_methods <- c("Metamap-EM-Reads", "Kraken-Reads")
 
 	plotCircles_x_names <- c("Call rate", sapply(evaluationLevels_ordered, function(x){paste("Assn.: ", evaluationLevels_ordered_assignment_names[[x]])}, USE.NAMES = F) )
 	axis(3, at = colMeans(bpPos), tick = F, labels = plotCircles_x_names, cex.axis = 0.7, pos = 1.35)
