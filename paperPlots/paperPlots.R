@@ -6,7 +6,7 @@ capitalize <- function(x)
 {
 	if(nchar(x) > 0)
 	{
-		x2 <- x
+		x2 <- x 
 		substr(x2, 1, 1) <- toupper(substr(x2, 1, 1))
 		x2
 	}
@@ -22,6 +22,7 @@ captions <- list()
 captions[["Kraken-Reads"]] <- "Kraken"
 captions[["Metamap-EM-Reads"]] <- "MetaMap-Complete"
 captions[["Metamap-U-Reads"]] <- "MetaMap-Unknown"
+stopifnot(1 == 2)
 
 colourByMethod <- list()
 colourByMethod[["Kraken-Reads"]] <- "darkred"
@@ -99,6 +100,7 @@ unknownFrequencyPlots <- function(d1, t1)
 	frequencyFile <- paste(d1, "/_forPlot_frequencies_xy", sep = "")
 	freqD <- read.delim(frequencyFile, header = T, stringsAsFactors = F)
 	freq_methods <- c("Kraken-Dist", "Bracken-Dist", "MetaMap-EM-Dist", "MetaMap-U-Dist")
+	freq_methods <- c("Kraken-Dist", "Bracken-Dist", "MetaMap-EM-Dist")
 	freq_levels <- c("species", "genus", "family")
 	freqD[["freqTarget"]] <- as.numeric(freqD[["freqTarget"]])
 	freqD[["freqIs"]] <- as.numeric(freqD[["freqIs"]])
@@ -311,6 +313,7 @@ readLengthPlot <- function(d1, t1)
 	byReadLengthD <- read.delim(readLengthFile, header = T, stringsAsFactors = F)
 	stopifnot(all(byReadLengthD[["variety"]] == "fullDB"))
 	methodNames_reads <- c("Metamap-EM-Reads", "Metamap-U-Reads", "Kraken-Reads")
+	methodNames_reads <- c("Metamap-EM-Reads", "Kraken-Reads")
 
 	rL_l_min <- min(byReadLengthD[["readLength"]])
 	rL_l_max <- max(byReadLengthD[["readLength"]])
@@ -465,6 +468,7 @@ twoReadPlots <- function(d1, t1, d2, t2)
 	
 }
 
-unknownFrequencyPlots("../databases/miniSeq+H/simulations_p25_logNormal", "p25")
+
+# unknownFrequencyPlots("../databases/miniSeq+H/simulations_p25_logNormal", "p25")
 # readLengthPlot("../databases/miniSeq+H/simulations_i100_specifiedFrequencies", "i100")
 # twoReadPlots("../databases/miniSeq+H/simulations_i100_specifiedFrequencies", "i100", "../databases/miniSeq+H/simulations_p25_logNormal", "p25")

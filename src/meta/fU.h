@@ -283,7 +283,8 @@ class oneMappingLocation_U
 public:
 	std::string taxonID;
 	std::string contigID;
-	double identity;
+	double originalIdentity;
+	int identityInt;
 	size_t readLength;
 	size_t start;
 	size_t stop;
@@ -359,7 +360,7 @@ std::vector<oneMappingLocation_U> getMappingLocations_U(identityManager& iM, con
 			
 	std::map<std::string, oneMappingLocation_U> bestDirectMappings;
 	std::map<std::string, oneMappingLocation_U> bestInDirectMappings;
-	
+
 	for(auto line : readLines)
 	{
 		std::vector<std::string> line_fields = split(line, " ");
@@ -389,11 +390,13 @@ std::vector<oneMappingLocation_U> getMappingLocations_U(identityManager& iM, con
 		l.stop = contigID_stop;
 		l.p = 0;
 		l.readLength = readLength;
-		l.identity = identity;
+		l.originalIdentity = identity;
+		l.identityInt = identityInt;
 		l.direct = true;
-		l.l = f.first.at(contig_taxonID) * iM.getIdentityP(identityInt, contig_taxonID, readLength, true);
+		l.l = -1;
+		//l.l = f.first.at(contig_taxonID) * iM.getIdentityP(identityInt, contig_taxonID, readLength, true);
 
-		if((bestDirectMappings.count(contig_taxonID) == 0) || (bestDirectMappings.at(contig_taxonID).identity < l.identity))
+		if((bestDirectMappings.count(contig_taxonID) == 0) || (bestDirectMappings.at(contig_taxonID).originalIdentity < l.originalIdentity))
 		{
 			bestDirectMappings[contig_taxonID] = l;
 		}
@@ -406,6 +409,7 @@ std::vector<oneMappingLocation_U> getMappingLocations_U(identityManager& iM, con
 		for(auto indirectTaxon : indirectUpwardNodes.at(contig_taxonID))
 		{
 			double likelihood_adjustment_factor_sourceGenomes = (double)1.0/(double)indirectUpwardNodes_nSourceGenomes.at(indirectTaxon);
+			likelihood_adjustment_factor_sourceGenomes = 1;
 			oneMappingLocation_U lI;
 			lI.taxonID = indirectTaxon;
 			lI.contigID = "";
@@ -413,11 +417,13 @@ std::vector<oneMappingLocation_U> getMappingLocations_U(identityManager& iM, con
 			lI.stop = 0;
 			lI.p = 0;
 			lI.readLength = readLength;
-			lI.identity = identity;
+			l.originalIdentity = identity;
+			l.identityInt = identityInt;
 			lI.direct = false;
-			lI.l = f.second.at(indirectTaxon) * likelihood_adjustment_factor_sourceGenomes * iM.getIdentityP(identityInt, indirectTaxon, readLength, false);
+			//lI.l = f.second.at(indirectTaxon) * likelihood_adjustment_factor_sourceGenomes * iM.getIdentityP(identityInt, indirectTaxon, readLength, false);
+			lI.l = -1;
 			
-			if((bestInDirectMappings.count(indirectTaxon) == 0) || (bestInDirectMappings.at(indirectTaxon).identity < lI.identity))
+			if((bestInDirectMappings.count(indirectTaxon) == 0) || (bestInDirectMappings.at(indirectTaxon).originalIdentity < lI.originalIdentity))
 			{
 				bestInDirectMappings[indirectTaxon] = lI;
 			}
@@ -431,6 +437,15 @@ std::vector<oneMappingLocation_U> getMappingLocations_U(identityManager& iM, con
 		}
 	}
 	
+	for(int assumedIdentity = iM.getMinimumReadIdentity(); assumedIdentity <= iM.getMaximumReadIdentity(); assumedIdentity++)
+	{
+		double p_assumedIdentity = iM.getReadIdentityP(assumedIdentity);
+		for(auto l : bestDirectMappings)
+		{
+
+		}
+	}
+
 	std::vector<oneMappingLocation_U> mappingLocations;			
 	for(auto l : bestDirectMappings)
 	{

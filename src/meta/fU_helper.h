@@ -517,6 +517,21 @@ public:
 		granularReadIdentities = false;
 	}
 
+	int getMinimumReadIdentity()
+	{
+		return iH.getIdentityMinimum();
+	}
+
+	int getMaximumReadIdentity()
+	{
+		return iH.getIdentityMaximum();
+	}
+
+	double getReadIdentityP(int idty)
+	{
+		return iH.getIdentityP(idty);
+	}
+
 	double getIdentityP(int identity, std::string taxonID, size_t readLength, bool directlyAttached, bool forceIgnoreReadLength = false)
 	{
 		if(directlyAttached)
