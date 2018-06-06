@@ -35,7 +35,7 @@ my @resultsSets = (
 		'tmp/hmp7_2_miniSeq+H',
 		'/scratch/tmp/hmp_set7_combined_kraken_results',
 		'tmp/truthHMP7_bwa_pacbio',
-		'/scratch/tmp/hmp_set7_combined.fastq'
+		'/scratch/tmp/hmp_set7_combined.fastq.mappable'
 	],
 );
 
@@ -48,11 +48,11 @@ foreach my $resultsSet (@resultsSets)
 
 	my %resultsFiles = (
 		'MetaMap-EM' => [$MetaMap_results . '.EM.reads2Taxon',  $MetaMap_results . '.EM.WIMP'],
-		'MetaMap-U' => [$MetaMap_results . '.U.reads2Taxon', $MetaMap_results . '.U.WIMP'],
+		#'MetaMap-U' => [$MetaMap_results . '.U.reads2Taxon', $MetaMap_results . '.U.WIMP'],
 		#'Kraken' => [$kraken_results_dir . '/results_kraken.txt.reads2Taxon', $kraken_results_dir . '/results_kraken.txt.ignoreUnclassified'],
 		#'Bracken' => [undef, $kraken_results_dir . '/results_bracken.txt.ignoreUnclassified'],
 		'Kraken' => [$kraken_results_dir . '/results_kraken.txt.reads2Taxon', $kraken_results_dir . '/results_kraken.txt'],
-		'Bracken' => [undef, $kraken_results_dir . '/results_bracken.txt'],
+		'Bracken' => [undef, $kraken_results_dir . '/results_bracken.txt'], 
 	);
 
 	my $missingFiles = 0;
@@ -66,7 +66,7 @@ foreach my $resultsSet (@resultsSets)
 				warn "Missing file for $method: $file";
 				$missingFiles++;
 			}	
-		}
+		}  
 	}		
 	die if($missingFiles);
 		
@@ -77,6 +77,8 @@ foreach my $resultsSet (@resultsSets)
 
 	my $truth_reads_href = validation::readTruthFileReads($extendedMaster, $extendedMaster_merged, $truth . '.perRead');
 	my $truth_reads_href_noUnknown = { map {$_ => $truth_reads_href->{$_}} grep {$truth_reads_href->{$_}} keys %$truth_reads_href };
+	# todo later
+	die unless(scalar(keys %$truth_reads_href) == scalar(keys %$truth_reads_href_noUnknown));
 	
 	my $readLengths_href = Util::getReadLengths($fastq, 1);
 	

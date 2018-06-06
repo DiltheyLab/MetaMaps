@@ -510,7 +510,7 @@ void doEM(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestC
 		
 			double ll_relative_imp = 1 - ll_relative;
 			
-			if(ll_diff <= 1)
+			if((ll_diff <= 1) && (ll_relative_imp < 0.0001))
 			{ 
 				continueEM = false;
 			}
@@ -541,6 +541,7 @@ void doEM(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestC
 	std::string output_recalibrated_mappings = mappedFile + ".EM";
 	std::string output_assigned_reads_and_identities = mappedFile + ".EM.lengthAndIdentitiesPerMappingUnit";
 	std::string output_reads_taxonID = mappedFile + ".EM.reads2Taxon";
+	std::string output_reads_taxonID_krona = mappedFile + ".EM.reads2Taxon.krona";
 	std::string output_contig_coverage = mappedFile + ".EM.contigCoverage";
 	std::string output_evidence_unknownSpecies = mappedFile + ".EM.evidenceUnknownSpecies";
 
@@ -553,6 +554,9 @@ void doEM(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestC
 
 	std::ofstream strout_reads_taxonIDs(output_reads_taxonID);
 	assert(strout_reads_taxonIDs.is_open());
+
+	std::ofstream strout_reads_taxonIDs_krona(output_reads_taxonID_krona);
+	assert(strout_reads_taxonIDs_krona.is_open());
 	
 	size_t coverage_windowSize = 1000;
 	std::map<std::string, std::map<std::string, std::vector<size_t>>> coverage_per_contigID;
@@ -583,6 +587,11 @@ void doEM(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestC
 
 		strout_reads_identities << "EqualCoverageUnit" << "\t" << bestMapping.contigID << "\t" << runningReadI << "\t" << bestMapping.identity << "\t" << bestMapping.readLength << "\n";
 		strout_reads_taxonIDs << readID << "\t" << bestMapping.taxonID << "\n";
+		
+		std::string taxonID_for_krona = T.getFirstNonXNode(bestMapping.taxonID);
+		strout_reads_taxonIDs_krona << readID << "\t" << taxonID_for_krona << "\t" << bestMapping.p << "\n";
+
+				
 		identities_per_taxonID[bestMapping.taxonID].push_back(bestMapping.identity);
 		if((long long)bestMapping.readLength > maximumReadLength)
 		{
@@ -654,10 +663,13 @@ void doEM(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestC
 	for(auto readID : readIDs_notMapped_despiteLongEnough)
 	{
 		strout_reads_taxonIDs << readID << "\t" << 0 << "\n";
+		strout_reads_taxonIDs_krona << readID << "\t" << 0 << "\t" << 0 << "\n";
 	}
 
 	strout_reads_identities.close();
 	strout_reads_taxonIDs.close();
+	strout_reads_taxonIDs_krona.close();
+	
 	if(maximumReadLength <= 0)
 	{
 		std::cerr << "maximumReadLength: " << maximumReadLength << std::endl;

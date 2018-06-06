@@ -47,6 +47,25 @@ public:
 		return(T.count(nodeID) > 0);
 	}
 
+	
+	std::string getFirstNonXNode(std::string nodeID)
+	{
+		if(nodeID.find("x") == std::string::npos)
+		{
+				return nodeID;
+		}
+		else
+		{
+			std::string runningNodeID = nodeID;
+			while(runningNodeID.find("x") != std::string::npos)
+			{
+				runningNodeID = T.at(runningNodeID).parent_id;
+			}	
+			assert(nodeID.find("x") == std::string::npos);
+			return runningNodeID;
+		}
+	}
+	
 	std::map<std::string, std::string> getUpwardNodesByRanks(std::string nodeID, std::set<std::string> targetRanks = std::set<std::string>() ) const
 	{
 		std::map<std::string, std::string> forReturn;

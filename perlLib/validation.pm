@@ -293,7 +293,7 @@ sub getAllRanksForTaxon_withUnclassified
 	my %forReturn = map {$_ => 'Unclassified'} @evaluateAccuracyAtLevels;
 	if(defined $mappableTaxonIDs_href->{$taxonID})
 	{
-		$forReturn{definedGenomes} = $taxonID;
+		$forReturn{definedGenomes} = $taxonID; 
 	}
 	else
 	{
@@ -441,7 +441,7 @@ sub readLevelComparison
 	#}
 	
 	die unless(all {($_ eq '0') or (exists $masterTaxonomy->{$_})} values %$reads_truth_absolute);
-	die unless(all {exists $masterTaxonomy->{$_}} values %$reads_inferred);
+	die unless(all {($_ eq '0') or (exists $masterTaxonomy->{$_})} values %$reads_inferred);
 
 	# a 'lightning' is the way from a taxon ID to the top of the tree, and back
 	# ... setting levels below the ID to 'unclassified'
@@ -510,6 +510,10 @@ sub readLevelComparison
 		
 		my $lightning_inferred = $getLightning->($taxonID_inferred);
 		
+		if($taxonID_inferred eq '0')
+		{
+			return 'Unclassified';
+		}
 		my $assignedToRank;
 		RANK: foreach my $rank (@evaluateAccuracyAtLevels)
 		{
@@ -671,14 +675,14 @@ sub readLevelComparison
 					}
 					elsif((not $mappable_absolute_truth) and (not $mappable_inferred))
 					{
-						$unclassified_key = 'N_unclassified_should1_is1';
-					}
+						$unclassified_key = 'N_unclassified_should1_is1'; 
+					} 
 										
 					if($_read_categories{'truthLeafInDB'})
 					{
-						open(MISSING, '>>missingTaxa') or die;
-						print MISSING $reads_truth_absolute->{$readID}, "\n";
-						close(MISSING);
+						# open(MISSING, '>>missingTaxa') or die;
+						# print MISSING $reads_truth_absolute->{$readID}, "\n";
+						# close(MISSING);
 						 
 						# die Dumper(
 							# "Weird - read $readID", "Not sure whether mappable or not?",
@@ -1131,22 +1135,30 @@ sub addResultsToGlobalStore
 				
 				if(($variety !~ /allCombined/) and ($variety !~ /incompleteCombined/))
 				{
+					
 					push(@{$allSimulations_data_href->{callRate_and_accuracy_byReadCategory}->{$category}{$label}{absolute}}, [$CR, $accuracy, $accuracy]); # hopefully ok
 					
 					my @keys_attachedTo = grep {$_ =~ /^attachedTo/} keys %$d;
 					die unless(scalar(@keys_attachedTo));
 					
-					my %localAttachedHash;
+					my %localAttachedHash;  
 					foreach my $key (@keys_attachedTo)
 					{
 						$localAttachedHash{$key} = $d->{$key} / $d->{N}; # hopefully ok
 					}	
 
 					push(@{$allSimulations_data_href->{attachedTo_byReadCategory}->{$category}{$label}{absolute}}, \%localAttachedHash); # hopefully ok
+
+					# t odo
+					# warn Dumper("Add $variety to attachedTo $category $label $variety", $allSimulations_data_href->{attachedTo_byReadCategory}->{$category}{$label}{absolute});
+
 				}
 			}
 		}
 	}
+	
+	# die Dumper($allSimulations_data_href->{attachedTo_byReadCategory}
+	# exit;
 
 	foreach my $variety (keys %$n_reads_correct_byVariety_byLevel_local_href)
 	{		
@@ -1184,7 +1196,7 @@ sub addResultsToGlobalStore
 					push(@{$allSimulations_data_href->{highLevel_stats_keptSeparate_bySimulation}->[$jobI]{$variety_forStore}{$label}{$category}{$level}{Accuracy}}, $accuracy);  # hopefully ok
 					push(@{$allSimulations_data_href->{highLevel_stats_keptSeparate_bySimulation}->[$jobI]{$variety_forStore}{$label}{$category}{$level}{AccuracyExactlyAtLevel}}, $accuracy_exactlyAtLevel); # hopefully ok	
 					 
-					if(($variety !~ /allCombined/) and ($variety !~ /incompleteCombined/))
+					if(($variety !~ /allCombined/) and ($variety !~ /incompleteCombined/) and ($level ne 'absolute'))
 					{
 						push(@{$allSimulations_data_href->{callRate_and_accuracy_byReadCategory}->{$category}{$label}{$level}}, [$CR, $accuracy, $accuracy_exactlyAtLevel]);	 # hopefully ok			
 						
@@ -1196,8 +1208,10 @@ sub addResultsToGlobalStore
 						{
 							$localAttachedHash{$key} = $d->{$key} / $d->{N};
 						}	
-
+						#warn "Attach I $variety $variety_forStore $category $label $level";
+						#warn "\t", scalar(@{$allSimulations_data_href->{attachedTo_byReadCategory}->{$category}{$label}{$level}}), "\n";						
 						push(@{$allSimulations_data_href->{attachedTo_byReadCategory}->{$category}{$label}{$level}}, \%localAttachedHash); # hopefully ok
+						#warn "\t", scalar(@{$allSimulations_data_href->{attachedTo_byReadCategory}->{$category}{$label}{$level}}), "\n";
 					}
 				}
 				
@@ -1223,7 +1237,7 @@ sub addResultsToGlobalStore
 						my $accuracy = ($d->{N} > 0) ? ($d->{correct} / $d->{N}) : -1; die unless(($accuracy >= -1) and ($accuracy <= 1));
 
 						if(($variety !~ /allCombined/) and ($variety !~ /incompleteCombined/))
-						{							
+						{	
 							push(@{$allSimulations_data_href->{callRate_and_accuracy_byReadCategory_byLength}->{$category}{$label}{$level}{$rL}}, [$CR, $accuracy]); # seems OK						
 						}
 					}				
@@ -1231,7 +1245,6 @@ sub addResultsToGlobalStore
 			}
 		}
 	}
-	
 	
 	# the following is no x/y data, but summary stats of accuracy
 	foreach my $variety (keys %$freq_byVariety_byLevel_local_href)
@@ -1529,7 +1542,7 @@ sub readInferredFileReads
 			$taxonID_master = 1;
 		}
 		
-		die "Undefined taxon ID $taxonID_master in file $file $." unless(exists $masterTaxonomy->{$taxonID_master});
+		die "Undefined taxon ID $taxonID_master in file $file $." unless(($taxonID_master eq '0') or (exists $masterTaxonomy->{$taxonID_master}));
 		die if(defined $inferred_raw_reads{$readID});
 		
 		$inferred_raw_reads{$readID} = $taxonID_master;
@@ -1561,7 +1574,7 @@ sub produceValidationOutputFiles
 	@varieties = grep {exists $allSimulations_data_href->{n_reads_correct_byVariety}->{$_}} @varieties;
 	#die Dumper(\@varieties, \%n_reads_correct_byVariety) unless(scalar(@varieties) == scalar(keys %n_reads_correct_byVariety));
 	die Dumper(\@varieties, [keys %{$allSimulations_data_href->{n_reads_correct_byVariety}}], "Issue I") unless(all {exists $allSimulations_data_href->{n_reads_correct_byVariety}->{$_}} @varieties);
-	
+
 	my @levels_ordered = validation::getEvaluationLevels();
 	my %level_to_i;
 	for(my $levelI = 0; $levelI <= $#levels_ordered; $levelI++)
@@ -1729,7 +1742,7 @@ sub produceValidationOutputFiles
 		#open(BYREADLENGTH, '>', $prefix_for_outputFiles . '_forPlot_byReadLength') or die;
 		#print BYREADLENGTH join("\t", qw/readCategory evaluationLevel method readLength callRateAvg accuracyAvg accuracyAvgExactltAtLevel/), "\n";
 
-		my %categories_attachment_forPrint = map {'attachedTo_' . $_ => 1} qw/species genus family superfamily/;
+		my %categories_attachment_forPrint = map {'attachedTo_' . $_ => 1} qw/species genus family superfamily Unclassified/;
 		my %values_attachment_forPrint;
 		my %values_attachment_forPrint_N;
 		
@@ -1782,7 +1795,7 @@ sub produceValidationOutputFiles
 								$s_nonDirectlyAttached += $v;
 							}
 						}
-						die unless(abs(1 - $s_nonDirectlyAttached) <= 1e-3);
+						die unless(abs(1 - $s_nonDirectlyAttached) <= 1e-3); 
 					}
 					
 					foreach my $k (keys %valuesInHashes)

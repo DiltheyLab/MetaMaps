@@ -14,11 +14,13 @@ $| = 1;
 my $DB = 'refseq';
 my $seqencesOutDirectory = '';
 my $taxonomyOutDirectory;
+my $targetBranches;
 
 GetOptions (
 	'DB:s' => \$DB, 
 	'seqencesOutDirectory:s' => \$seqencesOutDirectory, 
 	'taxonomyOutDirectory:s' => \$taxonomyOutDirectory, 
+	'targetBranches:s' => \$targetBranches, 
 );
 
 # Get input arguments
@@ -78,7 +80,13 @@ print "\nTaxonomy downloaded and extracted into $taxonomyOutDirectory\n\n";
 
 chdir($cwd) or die "Cannot chdir into $cwd";
 
-my @target_subdirs = qw/archaea bacteria fungi protozoa viral invertebrate plant unknown vertebrate_other vertebrate_mammalian/;
+#my @target_subdirs = qw/archaea bacteria fungi protozoa viral invertebrate plant unknown vertebrate_other vertebrate_mammalian/;
+my @target_subdirs = qw/archaea bacteria fungi protozoa viral/;
+if($targetBranches)
+{
+	$targetBranches =~ s/\s//g;
+	@target_subdirs = split(/,/, $targetBranches);
+}
 #my @target_subdirs = qw/bacteria fungi protozoa viral invertebrate plant unknown vertebrate_other vertebrate_mammalian/;
 
 my $ftp_root_genomes = '/genomes'; die unless(substr($ftp_root_genomes, 0, 1) eq '/');
@@ -214,7 +222,10 @@ Parameters:
   taxonomyOutDirectory
       
 	  Output directory for taxonomy
-  
+	  
+  targetBranches  
+	  Specification of target branches (comma-separated), e.g. archaea,bacteria,fungi
+   
 );
 exit;
 }

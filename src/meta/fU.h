@@ -122,6 +122,92 @@ void printGenusLevelSummary(const taxonomy& T, std::pair<std::map<std::string, d
 	std::cout << "\n\n";
 }
 
+void produceEM2U(std::string mappedFile, const taxonomy& T)
+{
+	std::ifstream resultsPerRead_EM;
+	std::ifstream resultsPerRead_U;
+	resultsPerRead_EM.open(mappedFile + ".EM.reads2Taxon");
+	resultsPerRead_U.open(mappedFile + ".U.reads2Taxon");
+	assert(resultsPerRead_EM.is_open());
+	assert(resultsPerRead_U.is_open());
+	
+	std::map<std::string, std::map<std::string, size_t>> EM2U_details;
+	std::map<std::string, std::map<std::string, size_t>> EM2U_taxonLevel;
+	
+	std::string line_EM;
+	std::string line_U;
+	while(resultsPerRead_EM.good())
+	{
+		assert(resultsPerRead_U.good());
+		
+		std::getline(resultsPerRead_EM, line_EM);
+		std::getline(resultsPerRead_U, line_U);
+		
+		eraseNL(line_EM);
+		eraseNL(line_U);
+		
+		if(line_EM.length() == 0)
+		{
+			assert(line_U.length() == 0);
+			continue;
+		}	
+		
+		std::vector<std::string> fields_EM = split(line_EM, "\t");
+		std::vector<std::string> fields_U = split(line_U, "\t");
+		
+		assert(fields_EM.size() == 2);
+		assert(fields_U.size() == 2);
+
+		assert(fields_EM.at(0) == fields_U.at(0));
+		
+		if(fields_EM.at(1) == "0")
+		{
+			continue;
+		}
+		
+		if((EM2U_details.count(fields_EM.at(1)) == 0) || (EM2U_details.at(fields_EM.at(1)).count(fields_U.at(1)) == 0))
+		{
+			EM2U_details[fields_EM.at(1)][fields_U.at(1)] = 0;
+		}
+		EM2U_details.at(fields_EM.at(1)).at(fields_U.at(1))++;
+		
+		std::string U_level = T.getNode(fields_U.at(1)).rank;
+		if(fields_EM.at(1) == fields_U.at(1))
+		{
+			U_level = "identical";
+		}
+		if((EM2U_taxonLevel.count(fields_EM.at(1)) == 0) || (EM2U_taxonLevel.at(fields_EM.at(1)).count(U_level) == 0))
+		{
+			EM2U_taxonLevel[fields_EM.at(1)][U_level] = 0;
+		}
+		EM2U_taxonLevel.at(fields_EM.at(1)).at(U_level)++;		
+	}
+	assert(!resultsPerRead_U.good());
+	
+	std::string fn_EM2U_details = mappedFile + ".EM2U.details";
+	std::string fn_EM2U_summary = mappedFile + ".EM2U.summary";
+	std::ofstream stream_EM2U_details;
+	std::ofstream stream_EM2U_summary;
+	stream_EM2U_details.open(fn_EM2U_details);
+	stream_EM2U_summary.open(fn_EM2U_summary);
+	
+	for(auto outerKey : EM2U_details)
+	{
+		for(auto innerKey : outerKey.second)
+		{
+			stream_EM2U_details << outerKey.first << "\t" << innerKey.first << "\t" << innerKey.second << "\n";
+		}
+	}	
+	
+	for(auto outerKey : EM2U_taxonLevel)
+	{
+		for(auto innerKey : outerKey.second)
+		{
+			stream_EM2U_summary << outerKey.first << "\t" << innerKey.first << "\t" << innerKey.second << "\n";
+		}
+	}		
+}
+
 void producePotFile_U(std::string outputFN, const taxonomy& T, std::tuple<std::map<std::string, double>, std::map<std::string, double>, std::map<std::string, double>> frequencies, std::tuple<std::map<std::string, size_t>, std::map<std::string, size_t>> readCount, size_t mappableReads, const std::set<std::string>& relevantTaxonIDs_mappable)
 {
 	//double initial_f_sum = 0;
@@ -159,6 +245,8 @@ void producePotFile_U(std::string outputFN, const taxonomy& T, std::tuple<std::m
 	std::map<std::string, std::set<std::string>> combinedKeys_perLevel;
 
 	std::set<std::string> targetLevels = getRelevantLevelNames();
+	std::map<std::string, double> classifiedAt_freq_absolute;
+	std::map<std::string, size_t> classifiedAt_reads_absolute;
 	
 	for(auto taxonID : combinedKeys)
 	{
@@ -166,6 +254,44 @@ void producePotFile_U(std::string outputFN, const taxonomy& T, std::tuple<std::m
 		upwardByLevel["definedAndHypotheticalGenomes"] = taxonID;
 		upwardByLevel["definedGenomes"] = taxonID;
 
+		{
+			std::string taxonID_level;
+
+			if(relevantTaxonIDs_mappable.count(taxonID))
+			{
+				taxonID_level = "definedGenomes";
+			}		
+			else
+			{
+				taxonID_level = T.getNode(taxonID).rank;
+			}
+			
+			double combinedF = 0;
+			if(std::get<0>(frequencies).count(taxonID))
+				combinedF += std::get<0>(frequencies).at(taxonID);
+
+			if(std::get<1>(frequencies).count(taxonID))
+				combinedF += std::get<1>(frequencies).at(taxonID);
+			
+			if(std::get<2>(frequencies).count(taxonID))
+				combinedF += std::get<2>(frequencies).at(taxonID);
+			
+			size_t combinedReads = 0;
+			if(std::get<0>(readCount).count(taxonID))
+				combinedReads += std::get<0>(readCount).at(taxonID);
+			
+			if(std::get<1>(readCount).count(taxonID))
+				combinedReads += std::get<1>(readCount).at(taxonID);
+			
+			if(classifiedAt_freq_absolute.count(taxonID_level) == 0)
+			{
+				classifiedAt_freq_absolute[taxonID_level] = 0;
+				classifiedAt_reads_absolute[taxonID_level] = 0;
+			}
+			classifiedAt_freq_absolute.at(taxonID_level) += combinedF;
+			classifiedAt_reads_absolute.at(taxonID_level) += combinedReads;
+				
+		}
 		for(auto uN : upwardByLevel)
 		{
 			std::string level = uN.first;
@@ -186,34 +312,51 @@ void producePotFile_U(std::string outputFN, const taxonomy& T, std::tuple<std::m
 				readCount_perLevel[level].second[levelValue] = 0;
 			}
 
+			double combinedF = 0;
 			if(std::get<0>(frequencies).count(taxonID))
 			{
 				std::get<0>(frequencies_perLevel.at(level)).at(levelValue) += std::get<0>(frequencies).at(taxonID);
+				combinedF += std::get<0>(frequencies).at(taxonID);
 			}
 
 			if(std::get<1>(frequencies).count(taxonID))
 			{
 				std::get<1>(frequencies_perLevel.at(level)).at(levelValue) += std::get<1>(frequencies).at(taxonID);
+				combinedF += std::get<1>(frequencies).at(taxonID);
 			}
 
 			if(std::get<2>(frequencies).count(taxonID))
 			{
 				std::get<2>(frequencies_perLevel.at(level)).at(levelValue) += std::get<2>(frequencies).at(taxonID);
+				combinedF += std::get<2>(frequencies).at(taxonID);
 			}
 
 
+			size_t combinedReads = 0;
 			if(std::get<0>(readCount).count(taxonID))
 			{
 				readCount_perLevel.at(level).first.at(levelValue) += std::get<0>(readCount).at(taxonID);
+				combinedReads += std::get<0>(readCount).at(taxonID);
 			}
 
 			if(std::get<1>(readCount).count(taxonID))
 			{
 				readCount_perLevel.at(level).second.at(levelValue) += std::get<1>(readCount).at(taxonID);
+				combinedReads += std::get<1>(readCount).at(taxonID);
 			}
+			
 		}
 	}
-
+	
+	std::string classifiedAt = outputFN + ".absoluteClassifiedAt";
+	std::ofstream strout_absolute(classifiedAt);
+	strout_absolute << "Level" << "\t" << "f" << "\t" << "nReads" << "\n";
+	for(auto lV : classifiedAt_freq_absolute)
+	{
+		strout_absolute << lV.first << "\t" << lV.second << "\t" << classifiedAt_reads_absolute.at(lV.first) << "\n";
+	}
+	
+	strout_absolute.close();
 
 	std::ofstream strout_frequencies(outputFN);
 	assert(strout_frequencies.is_open());
@@ -353,6 +496,8 @@ std::vector<oneMappingLocation_U> getMappingLocations_U(identityManager& iM, con
 			readLength = std::stoi(line_fields.at(1));
 	}
 	
+	// verbose = (readID == "1S1_22");
+	
 	if(verbose)
 	{
 		std::cout << "\ngetMappingLocations_U(..): Analyze read " << readID << ", length " << readLength << "\n";
@@ -412,7 +557,7 @@ std::vector<oneMappingLocation_U> getMappingLocations_U(identityManager& iM, con
 			likelihood_adjustment_factor_sourceGenomes = 1;
 			oneMappingLocation_U lI;
 			lI.taxonID = indirectTaxon;
-			lI.contigID = "";
+			lI.contigID = ""; 
 			lI.start = 0;
 			lI.stop = 0;
 			lI.p = 0;
@@ -1361,11 +1506,11 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 	}
 	*/
 
-
-
 	producePotFile_U(output_pot_frequencies, T, frequencies_triplet, assignedReads, nReadsMappable, mappableTaxonIDs);
 	
 	produceShiftedHistograms(output_shifted_frequencies_file, iM, f);
+	
+	produceEM2U(mappedFile, T);
 }
 
 void cleanF_U(std::pair<std::map<std::string, double>, std::map<std::string, double>>& f, const std::pair<std::map<std::string, size_t>, std::map<std::string, size_t>>& assignedReads, size_t distributedReads)

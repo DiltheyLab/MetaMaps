@@ -127,8 +127,9 @@ system("export PATH=/data/projects/phillippy/software/jellyfish-1.1.11/bin:\$PAT
 
 #system(". /etc/profile.d/modules.sh") and die;
 #system('MODULEPATH=$MODULEPATH:/data/projects/phillippy/software/modules/') and die;
-system("eval 'module load libs/hdf5/1.8.12'") and die "Could load hdf5";
-system("eval 'module load libs/scipy/0.18.1'") and die "Could load scipy";
+# this stuff is necessary for MetaPalette
+#system("eval 'module load libs/hdf5/1.8.12'") and die "Could load hdf5";
+#system("eval 'module load libs/scipy/0.18.1'") and die "Could load scipy";
 	
 my $action;
 my $DB = 'databases/miniSeq_100';
@@ -225,6 +226,7 @@ if($action eq 'testTaxonomy')
 }
 elsif($action eq 'prepare')
 {
+	die "Not in use at the moment";
 	my $DB_fa = $DB . '/DB.fa';
 	my $existingSelfSimilarities = $DB . '/selfSimilarities.txt';
 	
@@ -515,13 +517,13 @@ elsif($action eq 'inferenceJobI')
 	my $simulation_href = retrieve $simulation_href_fn;
 	unless($simulation_href->{outputDirectory} eq $globalOutputDir . '/' . $jobI)
 	{
-		die Dumper("I think you were too smart", $simulation_href->{outputDirectory}, $globalOutputDir . '/' . $jobI);
+		die Dumper("I think you were too smart I", $simulation_href->{outputDirectory}, $globalOutputDir . '/' . $jobI);
 	}
-	foreach my $dir (@{$simulation_href->{dbDirs_metamap}})
+	foreach my $dir (@{$simulation_href->{dbDirs_metamap}}[0])
 	{
 		unless($dir eq $globalOutputDir . '/' . $jobI  . '/DB_fullDB')
 		{
-			die Dumper("I think you were too smart", $simulation_href->{dbDirs_metamap}, $globalOutputDir . '/' . $jobI  . '/DB_fullDB');
+			die Dumper("I think you were too smart II", $simulation_href->{dbDirs_metamap}, $globalOutputDir . '/' . $jobI  . '/DB_fullDB');
 		}	
 	}
 					
@@ -582,7 +584,8 @@ elsif($action eq 'analyzeAll')
 		my $simulation_href_fn = $globalOutputDir . '/' . $jobI . '/simulationStore';
 		my $simulation_href = retrieve $simulation_href_fn;
 		
-		for(my $varietyI = 0; $varietyI <= $#{$simulation_href->{dbDirs_metamap}}; $varietyI++)
+		#for(my $varietyI = 0; $varietyI <= $#{$simulation_href->{dbDirs_metamap}}; $varietyI++) # todo!!!
+		for(my $varietyI = 0; $varietyI <= 0; $varietyI++)
 		{
 			my $varietyName = $simulation_href->{inferenceDBs}[$varietyI][2];
 			
@@ -820,9 +823,9 @@ sub get_files_for_evaluation
 		'Bracken-Dist' => ['distribution', 'results_bracken.txt'],
 		'Kraken-Dist' => ['distribution', 'results_kraken.txt'],		
 		'MetaMap-EM-Dist' => ['distribution', 'metamap.EM.WIMP'],
-		'MetaMap-U-Dist' => ['distribution', 'metamap.U.WIMP'],
+		# 'MetaMap-U-Dist' => ['distribution', 'metamap.U.WIMP'],
 		'Kraken-Reads' => ['reads', 'results_kraken.txt.reads2Taxon'],
-		'Metamap-U-Reads' => ['reads', 'metamap.U.reads2Taxon'],
+		# 'Metamap-U-Reads' => ['reads', 'metamap.U.reads2Taxon'],
 		'Metamap-EM-Reads' => ['reads', 'metamap.EM.reads2Taxon'],
 		# 'MetaPalette' => ['distribution', 'results_metapalette.txt', 1]
 	);
@@ -867,14 +870,15 @@ sub evaluateOneSimulation
 	# $truth_raw_taxonIDs{$taxonID_master}++;
 	
 	my %expected_results_files = get_files_for_evaluation(); 
-	for(my $varietyI = 0; $varietyI <= $#{$simulation_href->{dbDirs_metamap}}; $varietyI++)
+	# for(my $varietyI = 0; $varietyI <= $#{$simulation_href->{dbDirs_metamap}}; $varietyI++) # todo!!!!
+	for(my $varietyI = 0; $varietyI <= 0; $varietyI++)
 	{
 		# last if($varietyI > 2);
 		
 		my $varietyName = $simulation_href->{inferenceDBs}[$varietyI][2];
 		
 		my @varietyNames_forStorage = ($varietyName);
-		push(@varietyNames_forStorage, 'allCombined_' . $varietyI);
+		push(@varietyNames_forStorage, 'allCombined_' . $varietyI); 
 		if($varietyName =~ /remove/)
 		{
 			push(@varietyNames_forStorage, 'incompleteCombined_' . $varietyI);
@@ -996,7 +1000,8 @@ sub evaluateOneSimulation
 				}
 				
 				foreach my $varietyName_forStorage (@varietyNames_forStorage)
-				{				
+				{		
+					print "$methodName $varietyName_forStorage reads\n";
 					validation::readLevelComparison(
 						$extendedMaster,
 						$truth_raw_reads_href,
@@ -1010,6 +1015,7 @@ sub evaluateOneSimulation
 						$readLengths_href,
 						$n_reads_unknownStats_byLevel_href->{$varietyName_forStorage}
 					);
+					print "$methodName $varietyName_forStorage reads done\n";
 				}
 			}
 			else 
@@ -1019,7 +1025,9 @@ sub evaluateOneSimulation
 				print "Analyse $f\n";
 				foreach my $varietyName_forStorage (@varietyNames_forStorage)
 				{
+					print "$methodName $varietyName_forStorage freqs\n";
 					validation::distributionLevelComparison($extendedMaster, $truth_mappingDatabase_distribution, $inferred_distribution, $methodName, $freq_byVariety_byLevel->{$varietyName_forStorage}, $frequencyComparison_href->{$varietyName_forStorage});
+					print "$methodName $varietyName_forStorage freqs done\n";					
 				}
 				print "Done $f\n\n";
 			}
@@ -1412,7 +1420,7 @@ sub doMetaMap
 		$minReads = 1; 
 	}	
 	my $cmd_classify = qq(/usr/bin/time -v $metamap_bin classify --DB $DB --mappings $file_mappings --minreads $minReads &> $file_res_classification);
-	$cmd_classify = qq(/usr/bin/time -v $metamap_bin classify --DB $DB --mappings $file_mappings --minreads $minReads &> $file_res_classification); 
+	$cmd_classify =    qq(/usr/bin/time -v $metamap_bin classify --DB $DB --mappings $file_mappings --minreads $minReads &> $file_res_classification); 
 	system($cmd_classify) and die "Cannot execute $cmd_classify";
 	
 
@@ -1423,13 +1431,13 @@ sub doMetaMap
 	
 	die "No MetaMap EM classification -- $resultsFile_EM" unless(-e $resultsFile_EM);
 	die "No MetaMap EM-reads classification -- $resultsFile_U" unless(-e $resultsFile_EM_reads);	
-	die "No MetaMap EM-U classification -- $resultsFile_U" unless(-e $resultsFile_U);
-	die "No MetaMap EM-U-reads classification -- $resultsFile_U" unless(-e $resultsFile_U_reads);
+	#die "No MetaMap EM-U classification -- $resultsFile_U" unless(-e $resultsFile_U);
+	#die "No MetaMap EM-U-reads classification -- $resultsFile_U" unless(-e $resultsFile_U_reads);
 	
 	copy($resultsFile_EM, $dir);
 	copy($resultsFile_EM_reads, $dir);	
-	copy($resultsFile_U, $dir);
-	copy($resultsFile_U_reads, $dir);
+	#copy($resultsFile_U, $dir);
+	#copy($resultsFile_U_reads, $dir);
 }
 
 sub prepareDBs

@@ -1,5 +1,6 @@
 pdf("HMPplot.pdf", width = 10, height = 5)
 sources_nonTruth_order <- c("Kraken", "Bracken", "MetaMap-EM", "MetaMap-U")
+sources_nonTruth_order <- c("Kraken", "Bracken", "MetaMap-EM")
 #for(v in c("PacBio", "Nanopore"))
 for(v in c("PacBio"))
 {
@@ -9,9 +10,10 @@ for(v in c("PacBio"))
 	stopifnot("truth" %in% sources)
 	sources_nonTruth <- sources[sources != "truth"]
 	stopifnot(all(sources_nonTruth_order %in% sources_nonTruth))
-	stopifnot(all(sources_nonTruth %in% sources_nonTruth_order))
+	# stopifnot(all(sources_nonTruth %in% sources_nonTruth_order))
 	sources_nonTruth <- sources_nonTruth_order
-	for(analysisLevel in c("species", "genus"))
+	#for(analysisLevel in c("species", "genus"))
+	for(analysisLevel in c("genus"))
 	{
 		D_level <- D[D[["Level"]] == analysisLevel,]
 		taxonIDs <- unique(D_level[["taxonID"]])
@@ -42,9 +44,13 @@ for(v in c("PacBio"))
 		
 		
 		legend_for_plot <- c()
-		colors_for_legend <- c("blue", "lightblue", "cyan", "red", "pink")
-		for(S in c("GoldStandard", sources_nonTruth))
+		colors_for_legend <- c("blue", "lightblue", "cyan", "red")
+		for(S in c("Truth", sources_nonTruth))
 		{
+			if(S == "MetaMap-EM")
+			{
+				S <- "MetaMap"
+			}	
 			legend_for_plot <- c(legend_for_plot, S)
 		}
 		stopifnot(length(legend_for_plot) == length(colors_for_legend))
@@ -86,9 +92,11 @@ for(v in c("PacBio"))
 		matrix_for_barplot <- matrix(vector_for_plot, nrow = 1 + length(sources_nonTruth))
 		colnames(matrix_for_barplot) <- 1:(length(taxonIDs_true)+1)
 
-		barplot(matrix_for_barplot, beside = T, col = colors_for_legend, las=2, main = paste(v, ": Abundance estimates [", analysisLevel, "]", sep = ""), cex.axis = 1.4, cex.names = 1.7) 
+		mainT <- paste(v, ": Abundance estimates [", analysisLevel, "]", sep = "")
+		mainT <- "HMP7 composition"
+		barplot(matrix_for_barplot, beside = T, col = colors_for_legend, las=2, main = mainT, cex.axis = 1.4, cex.names = 1.7, cex.main = 2)
 		
-		legend("topright", legend = legend_for_plot, fill = colors_for_legend, cex = 1.0)	
+		legend("topleft", legend = legend_for_plot, fill = colors_for_legend, cex = 1.0)	
 		
 		cat(paste("Labels ", v, " @ ", analysisLevel, "\n", sep = ""))
 		for(lI in 1:length(taxonID_true_labels))
@@ -99,35 +107,38 @@ for(v in c("PacBio"))
 		
 		xyPlot_max <- max(D_level[["F"]])
 		
-		
-		plot(0, 0, xlim = c(0, xyPlot_max), ylim = c(0, xyPlot_max), main = paste(v, ": Abundance estimates [", analysisLevel, "]", sep = ""), col = "white", xlab = "Truth", ylab = "Estimation")
-
-		labels_for_xyLegend <- c()
-		for(Si in 1:length(sources_nonTruth))
+		if(1 == 0)
 		{
-			S <- sources_nonTruth[[Si]]
-			x_values <- c()
-			y_values <- c()
-			for(taxonID in taxonIDs)
+			
+			plot(0, 0, xlim = c(0, xyPlot_max), ylim = c(0, xyPlot_max), main = paste(v, ": Abundance estimates [", analysisLevel, "]", sep = ""), col = "white", xlab = "Truth", ylab = "Estimation")
+
+			labels_for_xyLegend <- c()
+			for(Si in 1:length(sources_nonTruth))
 			{
-				x_value_i <- which((D_level[["Source"]] == "truth") & (D_level[["taxonID"]] == taxonID))
-				y_value_i <- which((D_level[["Source"]] == S)  & (D_level[["taxonID"]] == taxonID))
-				stopifnot(length(x_value_i) == 1)
-				stopifnot(length(y_value_i) == 1)
-				x_values <- c(x_values, D_level[["F"]][[x_value_i]])
-				y_values <- c(y_values, D_level[["F"]][[y_value_i]])
+				S <- sources_nonTruth[[Si]]
+				x_values <- c()
+				y_values <- c()
+				for(taxonID in taxonIDs)
+				{
+					x_value_i <- which((D_level[["Source"]] == "truth") & (D_level[["taxonID"]] == taxonID))
+					y_value_i <- which((D_level[["Source"]] == S)  & (D_level[["taxonID"]] == taxonID))
+					stopifnot(length(x_value_i) == 1)
+					stopifnot(length(y_value_i) == 1)
+					x_values <- c(x_values, D_level[["F"]][[x_value_i]])
+					y_values <- c(y_values, D_level[["F"]][[y_value_i]])
+				
+				}					
+				points(x_values, y_values, col = colors_for_legend[[Si+1]])
+				
+				r <- sprintf("%.3f", cor(x_values, y_values))
+				# labels_for_xyLegend <- c(labels_for_xyLegend, paste(sources_nonTruth[[Si]], " - r = ", r, sep = ""))
+				labels_for_xyLegend <- c(labels_for_xyLegend, paste(sources_nonTruth[[Si]], sep = ""))
+			}
+			lines(c(0, xyPlot_max), c(0, xyPlot_max), col = "gray")
 			
-			}					
-			points(x_values, y_values, col = colors_for_legend[[Si+1]])
-			
-			r <- sprintf("%.3f", cor(x_values, y_values))
-			# labels_for_xyLegend <- c(labels_for_xyLegend, paste(sources_nonTruth[[Si]], " - r = ", r, sep = ""))
-			labels_for_xyLegend <- c(labels_for_xyLegend, paste(sources_nonTruth[[Si]], sep = ""))
+			legend("topright", legend = labels_for_xyLegend, fill = colors_for_legend[2:length(colors_for_legend)], cex = 1.5)
+			# cat(paste(c(paste("\n", v, " labels: ", analysisLevel, sep = ""), taxonID_true_labels, "", recursive = T), collapse = "\n"))
 		}
-		lines(c(0, xyPlot_max), c(0, xyPlot_max), col = "gray")
-		
-		legend("topright", legend = labels_for_xyLegend, fill = colors_for_legend[2:length(colors_for_legend)])
-		# cat(paste(c(paste("\n", v, " labels: ", analysisLevel, sep = ""), taxonID_true_labels, "", recursive = T), collapse = "\n"))
 	}
 
 }
