@@ -467,7 +467,7 @@ public:
 					}
 					else
 					{
-						assert(D_sourceGenomes.at(nodeID) == source_taxonIDs.size());
+						assert(D_sourceGenomes.at(nodeID) == (long long)source_taxonIDs.size());
 					}
 				}
 			}
@@ -503,8 +503,6 @@ std::map<size_t, double> readReadLengthHistogram(std::string fn)
 class identityManager
 {
 protected:
-	identityAndReadLengthHistogram& iH;
-	treeAdjustedIdentities& tAI;
 
 	std::map<std::string, std::map<int, double>> indirectMapping_cache;
 	std::map<std::string, std::map<size_t, std::map<int, double>>> indirectMapping_cache_granularReads;
@@ -512,22 +510,25 @@ protected:
 	bool granularReadIdentities;
 
 public:
+	identityAndReadLengthHistogram& iH;
+	treeAdjustedIdentities& tAI;
+
 	identityManager(identityAndReadLengthHistogram& iH, treeAdjustedIdentities& tAI) : iH(iH), tAI(tAI)
 	{		
 		granularReadIdentities = false;
 	}
 
-	int getMinimumReadIdentity()
+	int getMinimumReadIdentity() const
 	{
 		return iH.getIdentityMinimum();
 	}
 
-	int getMaximumReadIdentity()
+	int getMaximumReadIdentity() const
 	{
 		return iH.getIdentityMaximum();
 	}
 
-	double getReadIdentityP(int idty)
+	double getReadIdentityP(int idty) const
 	{
 		return iH.getIdentityP(idty);
 	}
@@ -598,6 +599,61 @@ public:
 		else
 		{
 			return getShiftedIdentityHistogramForNode(taxonID);
+		}
+	}
+
+	std::map<int, double> getOriginalUHistogramForNode_oneReadLength(std::string taxonID, size_t readLength) const
+	{
+		assert(tAI.D.count(taxonID));
+
+		std::vector<size_t> closestReadLengths = tAI.getTwoClosestReadLenghts(taxonID, readLength);
+		assert((closestReadLengths.size() == 1) || (closestReadLengths.size() == 2));
+		if(closestReadLengths.size() == 1)
+		{
+			return tAI.D.at(taxonID).at(closestReadLengths.at(0));
+		}
+		else
+		{
+			size_t existing_rL1 = closestReadLengths.at(0);
+			size_t existing_rL2  = closestReadLengths.at(1);
+			assert(existing_rL1 < existing_rL2);
+
+			long long readLength_diff = existing_rL2 - existing_rL1;
+			assert(readLength_diff > 0);
+			double weight_right = (readLength - existing_rL1)/(double)readLength_diff;
+			assert((weight_right >= 0) && (weight_right <= 1));
+			double weight_left = 1 - weight_right;
+
+			std::map<int, double> h1 = tAI.D.at(taxonID).at(existing_rL1);
+			std::map<int, double> h2 = tAI.D.at(taxonID).at(existing_rL2);
+
+			std::set<int> combinedIdentities;
+			for(auto i : h1)
+			{
+				combinedIdentities.insert(i.first);
+			}
+			for(auto i : h2)
+			{
+				combinedIdentities.insert(i.first);
+			}
+			std::map<int, double> forReturn;
+
+			for(auto iV : combinedIdentities)
+			{
+				double v1 = (h1.count(iV)) ? h1.at(iV) : 0;
+				double v2 = (h2.count(iV)) ? h2.at(iV) : 0;
+				double vAvg = weight_left * v1 + weight_right * v2;
+				forReturn[iV] = vAvg;
+			}
+
+			double fR_sum = 0;
+			for(auto fR : forReturn)
+			{
+				fR_sum += fR.second;
+			}
+			assert(abs(1 - fR_sum) <= 1e-3);
+
+			return forReturn;
 		}
 	}
 

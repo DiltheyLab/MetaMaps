@@ -320,7 +320,14 @@ protected:
 		}
 	}
 
-	double likelihood_observed_set_sizes(int k, int n_kmers, double identity, int sketch_size, int intersection_size, bool verbose = false)
+
+public:
+	mapWrap()
+	{
+
+	}
+
+	static double likelihood_observed_set_sizes(int k, int n_kmers, double identity, int sketch_size, int intersection_size, bool verbose = false)
 	{
 		assert(intersection_size <= sketch_size);
 		double p_kMer_survival = std::pow(identity, k);
@@ -329,7 +336,7 @@ protected:
 		double E_union_size = n_kmers + (n_kmers - E_surviving_kMers_int);
 		double E_intersection_size = E_surviving_kMers_int;
 		double likelihood = boost::math::pdf(boost::math::binomial_distribution<>(sketch_size, E_intersection_size/E_union_size), intersection_size);
-		
+
 		if(verbose)
 		{
 			std::cerr << "OUTPUT: likelihood = " << likelihood << "\n";
@@ -339,17 +346,11 @@ protected:
 			std::cerr << "sketch_size" << ": " << sketch_size << std::endl;
 			std::cerr << "intersection_size" << ": " << intersection_size << std::endl;
 			std::cerr << "E_intersection_size" << ": " << E_intersection_size << std::endl;
-			std::cerr << "E_union_size" << ": " << E_union_size << std::endl;			
+			std::cerr << "E_union_size" << ": " << E_union_size << std::endl;
 			std::cerr << std::endl;
 		}
-		
+
 		return likelihood;
-	}
-
-public:
-	mapWrap()
-	{
-
 	}
 
 	void createIndex(skch::Parameters param, std::string prefix, size_t maximumMemory)

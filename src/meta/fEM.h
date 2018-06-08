@@ -341,6 +341,29 @@ std::vector<oneMappingLocation> getMappingLocations(const std::map<std::string, 
 	return mappingLocations;
 }
 
+
+
+
+std::map<std::string, std::string> getMappingParameters(std::string mappedFile)
+{
+	std::map<std::string, std::string> forReturn;
+	std::ifstream paramsStream (mappedFile + ".parameters");
+	assert(paramsStream.is_open());
+	std::string line;
+	while(paramsStream.good())
+	{
+		std::getline(paramsStream, line);
+		eraseNL(line);
+		if(line.length() != 0)
+		{
+			std::vector<std::string> line_fields = split(line, " ");
+			assert(line_fields.size() == 2);
+			forReturn[line_fields.at(0)] = line_fields.at(1);
+		}
+	}
+	return forReturn;
+}
+
 std::map<std::string, size_t> getMappingStats(std::string mappedFile)
 {
 	std::map<std::string, size_t> forReturn;
@@ -958,7 +981,7 @@ void doEM(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestC
 				if(usableWindows_averageCoverage == 0)
 				{
 					assert(genomeWindows_usable_coverageZero.at(taxonID) == genomeWindows_usable.at(taxonID));
-					double windows_0_probability = 1;					
+					// double windows_0_probability = 1;
 					usableWindows_coverageZero_expected_str = std::to_string(genomeWindows_usable.at(taxonID));
 					usableWindows_coverageZero_p_str = std::to_string(1);					
 				}
