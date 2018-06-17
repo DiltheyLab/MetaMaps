@@ -42,6 +42,7 @@ The 'miniSeq+H' database is a good place to start. It contains >12000 microbial 
 You can also download and construct your own reference databases. For example, this is how to construct the miniSeq+H database:
 
 1. Download the genomes you want to include. The easiest way to do this is by copying the RefSeq/Genbank directory structure of the taxonomic branches you're interested in. This can be done with the `downloadRefSeq.pl` script, which is easily customizable (e.g., `--targetBranches archaea,bacteria,fungi` to download these three branches). Example:
+
     ```
     mkdir testDownload
     perl downloadRefSeq.pl --seqencesOutDirectory testDownload/refseq --taxonomyOutDirectory testDownload/taxonomy
