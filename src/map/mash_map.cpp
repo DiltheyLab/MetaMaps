@@ -294,7 +294,7 @@ int main(int argc, char** argv)
 		assert(parameters.mappingsForClassification.length());
 
 		meta::doEM(parameters.DB, parameters.mappingsForClassification, parameters.minimumReadsForU);
-		// meta::doU(parameters.DB, parameters.mappingsForClassification, parameters.minimumReadsForU);
+		meta::doU(parameters.DB, parameters.mappingsForClassification, parameters.minimumReadsForU);
 	}
 
 	return 0;
@@ -303,15 +303,15 @@ int main(int argc, char** argv)
 void highLevelUsage()
 {
 	std::cout << "\n\
-MetaMap v 0.1 \n\
+MetaMaps v 0.1 \n\
 \n\
-  Simulataenous metagenomic classification and mapping.\n\
+  Metagenomic classification and mapping.\n\
 \n\
 Usage:\n\
 \n\
-  ./metamap mapDirectly|classify|mapAgainstIndex|index\n\
+  ./metamaps mapDirectly|classify|mapAgainstIndex|index\n\
 \n\
 Parameters:\n\
 \n\
-   ./metamap COMMAND -h for help\n\n";
+   ./metamaps COMMAND -h for help\n\n";
 }

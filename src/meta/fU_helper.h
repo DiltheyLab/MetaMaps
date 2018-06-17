@@ -54,7 +54,7 @@ public:
 
 	int getIdentityMaximum() const
 	{
-		return minimumIdentity;
+		return maximumIdentity;
 	}
 	
 	double getIdentityP(int idty) const
@@ -97,7 +97,9 @@ public:
 		
 		int allMappings_minimum_identity = idty_minmax.first;
 		int allMappings_maximum_identity = idty_minmax.second;
-		
+		if(allMappings_maximum_identity < 100)
+			allMappings_maximum_identity++;
+
 		while(f.good())
 		{
 			std::getline(f, line);

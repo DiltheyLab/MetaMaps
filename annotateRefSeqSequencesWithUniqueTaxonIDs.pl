@@ -67,9 +67,9 @@ sub wanted {
 		$file = $File::Find::name; 
 	}
 	
-	die Dumper("Expected file nt existing", $file) unless(-e $file);
+	# warn Dumper("Expected file nt existing", $file) unless(-e $file);
 	
-	if((not -d $file) and ($file =~ /_assembly_report\.txt$/))
+	if((-e $file) and (not -d $file) and ($file =~ /_assembly_report\.txt$/))
 	{	
 		my $gzFile = get_gz_for_assemblyReport($file);
 		if(-e $gzFile)
@@ -121,6 +121,8 @@ sub wanted {
 				# warn "No RefSeq category info in $file";
 			}
 			$category_level_combined{join('_', $refSeq_category, $assembly_level)}++;
+
+			next unless($assembly_level eq 'Complete Genome');
 
 			$included_genome++;
 			

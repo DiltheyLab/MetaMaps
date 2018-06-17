@@ -56,7 +56,7 @@ my $masterTaxonomy_merged;
 
 my $PBsim_cmd = qq(/data/projects/phillippy/projects/mashsim/PBSIM-PacBio-Simulator/src/pbsim --model_qc /data/projects/phillippy/projects/mashsim/PBSIM-PacBio-Simulator/data/model_qc_clr --data-type CLR --depth DEPTH --prefix --length-mean $simulation_read_length --accuracy-mean 0.88 REF);
 
-my $metamap_bin = './metamap';
+my $metamap_bin = './metamaps';
 my $metaPalette_installation_dir = qq(/data/projects/phillippy/software/MetaPalette/);
 my $jellyfish_2_bin = qq(/data/projects/phillippy/software/jellyfish-2.2.6/bin/jellyfish);
 
@@ -146,6 +146,8 @@ my $desiredTaxa;
 my $coverageTargetsAreOrganismAbundances = 0;
 my $ignoreFullDB;
 my $skipKraken;
+my $FASTA;
+my $FASTA_taxon_id;
 my $maxMemory;
 GetOptions (
 	'DB:s' => \$DB,
@@ -163,6 +165,8 @@ GetOptions (
 	'targetTotalSimulationInGigabytes:s' => \$targetTotalSimulationInGigabytes,
 	'ignoreFullDB:s' => \$ignoreFullDB,
 	'skipKraken:s' => \$skipKraken,
+	'FASTA:s' => \$FASTA,
+	'FASTA_taxon_id:s' => \$FASTA_taxon_id,
 	'maxMemory:s' => \$maxMemory,
 );
 
@@ -348,6 +352,106 @@ elsif($action eq 'repeatReadSimulations')
 	}
 	
 	close($fh_log);
+}
+elsif($action eq 'prepareFromNonDB')
+{
+	my $DB_fa = $DB . '/DB.fa';
+	my $existingSelfSimilarities = $DB . '/selfSimilarities.txt';
+	
+	die "Simulations in directory $globalOutputDir already prepared" if getFlag($globalOutputDir, 'simulated');
+	unless($FASTA and (-e $FASTA))
+	{
+		die "Please provide valid --FASTA";
+	}
+	unless($FASTA_taxon_id)
+	{
+		die "Please provide valid --FASTA_taxon_id";
+	}
+	
+	die unless(-e $DB_fa);
+	die unless(-e $existingSelfSimilarities);
+	$n_simulations = 1;
+	
+	my $MetaMap_taxonomy = {};
+	my %contigID_2_taxonID;
+	my %taxonID_2_contigIDs;	
+	my %contig_2_length;
+	fill_contigID_taxonID($DB, $MetaMap_taxonomy, \%contigID_2_taxonID, \%taxonID_2_contigIDs, \%contig_2_length);
+	my %taxon_2_genomeLength = map {$_ => getGenomeLength($_, \%taxonID_2_contigIDs, \%contig_2_length)} keys %taxonID_2_contigIDs;
+
+	my $fn_log = $globalOutputDir. '/log.txt';	
+	my $fn_selfSimilarities = $globalOutputDir. '/selfSimilarities.txt';	
+	my $fn_selfSimilarities_collect = $globalOutputDir. '/selfSimilarities_collect.txt';	
+	my $fn_selfSimilarities_fromTemplate = $globalOutputDir. '/selfSimilarities_fromTemplate.txt';	
+	my $fn_selfSimilarities_fromTemplate_asArray = $globalOutputDir. '/selfSimilarities_fromTemplate.txt.asArray';	
+
+	my $fh_log;
+	open($fh_log, '>', $fn_log) or die "Cannot open $fn_log";
+
+	my $fh_selfSimilarities;
+	open($fh_selfSimilarities, '>', $fn_selfSimilarities) or die "Cannot open $fn_selfSimilarities";
+
+	my $fh_selfSimilarities_collect;
+	open($fh_selfSimilarities_collect, '>', $fn_selfSimilarities_collect) or die "Cannot open $fn_selfSimilarities_collect";
+		
+	my $fh_selfSimilarities_prepareFromOthers;
+	open($fh_selfSimilarities_prepareFromOthers, '>', $fn_selfSimilarities_fromTemplate) or die "Cannot open $fn_selfSimilarities_fromTemplate";
+
+	my @simulations_to_execute;
+	{
+		print {$fh_log} "File-based simulation from file $FASTA\n";
+		
+		my $thisSimulation_outputDirectory = $globalOutputDir . '/' . 0;
+		(mkdir($thisSimulation_outputDirectory) or die "Cannot mkdir $thisSimulation_outputDirectory") unless(-e $thisSimulation_outputDirectory);
+		
+			
+		my $oneSimulation_href = returnOneSimulation_fromFASTA($DB, \%taxonID_2_contigIDs, \%taxon_2_genomeLength, $thisSimulation_outputDirectory, $coverageMode, $MetaMap_taxonomy, $fh_log, $FASTA, $FASTA_taxon_id);
+		
+		push(@simulations_to_execute, $oneSimulation_href);
+	}
+
+	for(my $simulationI = 0; $simulationI <= $#simulations_to_execute; $simulationI++)
+	{
+		print {$fh_log} "Executing outer simulation $simulationI\n";
+		my $oneSimulation_href = $simulations_to_execute[$simulationI];
+		executeSimulation($oneSimulation_href, \%taxonID_2_contigIDs, \%contig_2_length, $MetaMap_taxonomy, $fh_log, $fh_selfSimilarities, $fh_selfSimilarities_collect, $fh_selfSimilarities_prepareFromOthers);
+	}
+	
+	# my $simulations_qsub_file = $globalOutputDir. '/qsub.txt';	 
+	# open(QSUB, '>', $simulations_qsub_file) or die "Cannot open $simulations_qsub_file";
+# print QSUB qq(#!/bin/bash
+# #\$ -t 1-${n_simulations}
+# #\$ -q public.q
+# #\$ -l mem_free=172G
+# jobID=\$(expr \$SGE_TASK_ID - 1)
+# cd $FindBin::Bin
+# perl simulate.pl --action inferenceJobI --DB $DB --jobI \$jobID
+# );	
+	# close(QSUB);
+	
+	close($fh_log);
+	close($fh_selfSimilarities);
+	close($fh_selfSimilarities_collect);
+	close($fh_selfSimilarities_prepareFromOthers);
+	
+	my $n_simulations_file = $globalOutputDir . '/n_simulations.txt';
+	open(N, '>', $n_simulations_file) or die "Cannot open $n_simulations_file";
+	print N $n_simulations, "\n";
+	close(N); 
+	
+	my $n_arrayJobs = createArrayJob($fn_selfSimilarities_fromTemplate, $fn_selfSimilarities_fromTemplate_asArray);
+	
+	# print "$n_simulations prepared on DB $DB -- if you're in an SGE environment, you can now\n\n\texecute the commands in $fn_selfSimilarities\n\tand later these in $fn_selfSimilarities_collect\n\n\tqsub $simulations_qsub_file\n\n";
+	if($n_arrayJobs)
+	{
+		print "$n_simulations prepared on DB $DB -- if you're in an SGE environment, you can now\n\n\tqsub $fn_selfSimilarities_fromTemplate_asArray\n\tand when all jobs are done call me with --mode prepareII\n\n";
+	}
+	else
+	{
+		print "$n_simulations prepared on DB $DB -- call me with --mode prepareII\n\n";
+	}
+	
+	setFlag($globalOutputDir, 'simulated', 1);
 }
 elsif($action eq 'prepareFromFile')
 {
@@ -1196,6 +1300,58 @@ sub returnOneSimulation_noUnknown
 	return $simulation_href;
 }
 
+sub returnOneSimulation_fromFASTA
+{
+	my $DB = shift;
+	my $taxon_2_contig_href = shift;
+	my $taxon_2_genomelength_href = shift;
+	my $outputDirectory = shift;
+	my $coverageMode = shift;
+	my $taxonomy_href = shift;
+	my $fh_log = shift;
+	my $FASTA = shift;
+	my $FASTA_taxon_id = shift;
+
+	die unless(defined $taxonomy_href);
+	
+	die unless(($coverageMode eq 'equal'));
+	die "Please provide FASTA argument" unless($FASTA and (-e $FASTA));
+	die "Please provide taxon ID for file $FASTA" unless($FASTA_taxon_id);
+	
+	my @selectedTaxa = ($FASTA_taxon_id);
+	my %selectedTaxa_frequencies = ($FASTA_taxon_id => 1);
+	
+	my %_selectedTaxa = map {$_ => 1} @selectedTaxa;
+	die "Duplicate selected taxa for simulation" unless(scalar(keys %_selectedTaxa) == scalar(@selectedTaxa));
+			
+	my %targetTaxonIDs;
+	if($coverageMode eq 'equal')
+	{
+		my $fr_taxon = 1/scalar(@selectedTaxa);
+		%targetTaxonIDs = map {$_ => $fr_taxon} @selectedTaxa;
+	} 
+	else
+	{
+		die;
+	}
+	
+	my $simulation_href = {
+		coverageFactor => 20,
+		outputDirectory => $outputDirectory,
+		DB_simulation => $DB,
+		targetTaxons => \%targetTaxonIDs,
+		inferenceDBs => [['$SAME', undef, 'fullDB']],
+		externalTaxonIDs => {
+			$FASTA_taxon_id => {
+				file => $FASTA
+			}
+		},
+	};
+	
+	return $simulation_href;
+}
+
+
 sub returnOneSimulation_fromFile
 {
 	my $DB = shift;
@@ -1512,9 +1668,21 @@ sub setup_directory_and_simulate_reads
 	
 	my %contigs_and_relative_coverage;
 	
+	my $external_taxonIDs_href = (exists $simulation_href->{externalTaxonIDs}) ? $simulation_href->{externalTaxonIDs} : {};
+	
 	my @targetTaxonIDs = sort keys %{$simulation_href->{targetTaxons}};
-	die unless(all {$taxonomy_simulation->{$_}} @targetTaxonIDs );
-	die unless(all {$taxonID_2_contigIDs_href->{$_}} @targetTaxonIDs );
+	die unless(all {$taxonomy_simulation->{$_} or $external_taxonIDs_href->{$_}} @targetTaxonIDs );
+	die unless(all {$taxonID_2_contigIDs_href->{$_} or $external_taxonIDs_href->{$_}} @targetTaxonIDs );
+	
+	my $haveExternalTaxonData = scalar(grep {$external_taxonIDs_href->{$_}} @targetTaxonIDs);
+	
+	my $fullMasterTaxonomy = $taxonomy_simulation;
+	if($haveExternalTaxonData)
+	{
+		(my $extendedMaster, my $extendedMaster_merged) = validation::prepare_masterTaxonomy_withX($masterTaxonomy_dir, $taxonomy_simulation);
+		$fullMasterTaxonomy = $extendedMaster;
+	}
+	die unless(all {$fullMasterTaxonomy->{$_}} @targetTaxonIDs );			
 	
 	# check that target coverages are normalized
 	{
@@ -1524,19 +1692,23 @@ sub setup_directory_and_simulate_reads
 		foreach my $taxonID (@targetTaxonIDs)
 		{
 			$_s_taxons += $simulation_href->{targetTaxons}{$taxonID};
-			print {$fh_log} "\t\t", $taxonID, ": ", $simulation_href->{targetTaxons}{$taxonID}, " (", taxTree::taxon_id_get_name($taxonID, $MetaMap_taxonomy), ")\n";
-			my $ancestors_href = taxTree::get_ancestors_with_specific_ranks($MetaMap_taxonomy, $taxonID, [taxTree::getRelevantRanks()]);
-			foreach my $rank (keys %$ancestors_href)
+			print {$fh_log} "\t\t", $taxonID, ": ", $simulation_href->{targetTaxons}{$taxonID}, " (", taxTree::taxon_id_get_name($taxonID, $fullMasterTaxonomy), ")\n";
 			{
-				$coverages_by_level{$rank}{$ancestors_href->{$rank}} += $simulation_href->{targetTaxons}{$taxonID};
+				my $ancestors_href = taxTree::get_ancestors_with_specific_ranks($fullMasterTaxonomy, $taxonID, [taxTree::getRelevantRanks()]);
+				foreach my $rank (keys %$ancestors_href)
+				{
+					$coverages_by_level{$rank}{$ancestors_href->{$rank}} += $simulation_href->{targetTaxons}{$taxonID};
+				}
 			}
 		}
 		
-		my $print_taxon_level = 'superkingdom';
-		print {$fh_log} "\n\t\tBy $print_taxon_level:\n";
-		foreach my $taxonID (sort keys %{$coverages_by_level{$print_taxon_level}})
-		{	
-			print {$fh_log}  "\t\t\t", $taxonID, " / ", taxTree::taxon_id_get_name($taxonID, $MetaMap_taxonomy), ": ", $coverages_by_level{$print_taxon_level}{$taxonID}, "\n";
+		{
+			my $print_taxon_level = 'superkingdom';
+			print {$fh_log} "\n\t\tBy $print_taxon_level:\n";
+			foreach my $taxonID (sort keys %{$coverages_by_level{$print_taxon_level}})
+			{	
+				print {$fh_log}  "\t\t\t", $taxonID, " / ", taxTree::taxon_id_get_name($taxonID, $fullMasterTaxonomy), ": ", $coverages_by_level{$print_taxon_level}{$taxonID}, "\n";
+			}
 		}
 		die unless(abs(1 - $_s_taxons) <= 1e-3);
 		print {$fh_log} "\n";
@@ -1548,7 +1720,7 @@ sub setup_directory_and_simulate_reads
 	my %taxa_genome_lengths;
 	foreach my $taxonID (@targetTaxonIDs)
 	{
-		my $thisTaxon_genomeLength = getGenomeLength($taxonID, $taxonID_2_contigIDs_href, $contig_2_length_href);	
+		my $thisTaxon_genomeLength = (exists $external_taxonIDs_href->{$taxonID}) ? getExternalGenomeLength($external_taxonIDs_href->{$taxonID}{file}) : getGenomeLength($taxonID, $taxonID_2_contigIDs_href, $contig_2_length_href);	
 		$taxa_genome_lengths{$taxonID} = $thisTaxon_genomeLength;
 	
 		if(not $coverageTargetsAreOrganismAbundances)
@@ -1589,7 +1761,7 @@ sub setup_directory_and_simulate_reads
 	for(my $taxonI = 0; $taxonI <= $#targetTaxonIDs; $taxonI++)
 	{
 		my $taxonID = $targetTaxonIDs[$taxonI];
-		my $thisTaxon_genomeLength = getGenomeLength($taxonID, $taxonID_2_contigIDs_href, $contig_2_length_href);
+		my $thisTaxon_genomeLength = (exists $external_taxonIDs_href->{$taxonID}) ? getExternalGenomeLength($external_taxonIDs_href->{$taxonID}{file}) : getGenomeLength($taxonID, $taxonID_2_contigIDs_href, $contig_2_length_href);	
 		my $relativeCoverage = $simulationRelativeCoverages{$taxonID};
 		die unless(defined $relativeCoverage);
 		$relativeCoverage *= $simulation_href->{coverageFactor};
@@ -1608,7 +1780,7 @@ sub setup_directory_and_simulate_reads
 		$local_coverageFactor = $new_local_coverageFactor;
 	}
 		
-	my $genome_files_href = extractTaxonIDsFromREF($simulation_FASTA, $simulation_href->{outputDirectory} . '/forSimulation', \%simulationRelativeCoverages, $taxonID_2_contigIDs_href);	
+	my $genome_files_href = extractTaxonIDsFromREF($simulation_FASTA, $simulation_href->{outputDirectory} . '/forSimulation', \%simulationRelativeCoverages, $taxonID_2_contigIDs_href, $external_taxonIDs_href);	
 
 	my $totalReads_allTaxa = 0;
 	my $totalBases_allTaxa = 0;
@@ -1707,12 +1879,23 @@ sub setup_directory_and_simulate_reads
 	}
 	close(READSTRUTH);
 	
-	simulation::truthReadFrequenciesFromReadCounts($outputFile_truth_readFrequencies_overCompleteTaxonomy, \%reads_taxon, $taxonomy_simulation);
-	simulation::truthGenomeFrequenciesFromReadCounts($outputFile_truth_genomeFrequencies, \%taxonID_2_bases, \%reads_taxon, \%taxa_genome_lengths, $taxonomy_simulation);
+	simulation::truthReadFrequenciesFromReadCounts($outputFile_truth_readFrequencies_overCompleteTaxonomy, \%reads_taxon, $fullMasterTaxonomy);
+	simulation::truthGenomeFrequenciesFromReadCounts($outputFile_truth_genomeFrequencies, \%taxonID_2_bases, \%reads_taxon, \%taxa_genome_lengths, $fullMasterTaxonomy);
 	
 	$simulation_href->{readsFastq} = $outputFile_combinedReads;
 }
 
+sub getExternalGenomeLength
+{
+	my $file = shift;
+	my $genome_href = Util::readFASTA($file);
+	my $L = 0;
+	foreach my $contig (values %$genome_href)
+	{
+		$L += length($contig);
+	}
+	return $L;
+}
 sub produceReducedDB
 {
 	my $baseDB = shift;
@@ -1889,16 +2072,19 @@ sub extractTaxonIDsFromREF
 	my $fn_out_prefix = shift;
 	my $extractTaxonIDs_href = shift;
 	my $taxon_2_contig_href = shift;
-
+	my $external_taxonIDs_href = shift;
+	
 	my %forReturn_files_by_taxonID;
 	my %fh_per_taxonID;
 	
 	my %target_contig_2_taxonID;
 	die unless(scalar(keys %$extractTaxonIDs_href));
 	my @taxonIDs = sort keys %$extractTaxonIDs_href;
+	my $externalGenome = 0;
 	for(my $i = 0; $i <= $#taxonIDs; $i++)
 	{
 		my $taxonID = $taxonIDs[$i];
+		die unless((exists $external_taxonIDs_href->{$taxonID}) xor (exists $taxon_2_contig_href->{$taxonID}));
 		
 		my $fnOut = $fn_out_prefix . '.' . $i;
 		my $fh;
@@ -1907,10 +2093,24 @@ sub extractTaxonIDsFromREF
 		$fh_per_taxonID{$taxonID} = $fh;
 		$forReturn_files_by_taxonID{$taxonID} = $fnOut;
 		
-		die unless(defined $taxon_2_contig_href->{$taxonID});
-		foreach my $contigID (@{$taxon_2_contig_href->{$taxonID}})
+		# die unless(defined $taxon_2_contig_href->{$taxonID});
+		if(exists $taxon_2_contig_href->{$taxonID})
 		{
-			$target_contig_2_taxonID{$contigID} = $taxonID;
+			foreach my $contigID (@{$taxon_2_contig_href->{$taxonID}})
+			{
+				$target_contig_2_taxonID{$contigID} = $taxonID;
+			}
+		}
+		else
+		{
+			$externalGenome++;
+			die unless($external_taxonIDs_href->{$taxonID}{file});
+			open(COMPLETEGENOME, '<', $external_taxonIDs_href->{$taxonID}{file}) or die "Cannot open $external_taxonIDs_href->{$taxonID}{file}";
+			while(<COMPLETEGENOME>)
+			{
+				print {$fh_per_taxonID{$taxonID}} $_;
+			}
+			close(COMPLETEGENOME);
 		}
 	}	
 	
@@ -1952,7 +2152,7 @@ sub extractTaxonIDsFromREF
 	close(OUT);
 	close(IN);
 	
-	print "Printed $printedContigs from $fn_in --> ${fn_out_prefix}.* \n";
+	print "Printed $printedContigs from $fn_in --> ${fn_out_prefix}.* (plus $externalGenome external genomes)\n";
 	
 	foreach my $contigID (keys %target_contig_2_taxonID)
 	{

@@ -156,6 +156,12 @@ void compute_U_mappingQualities(std::vector<oneMappingLocation_U>& mappingLocati
 {
 	bool verbose = true;
 	assert(mappingLocations.size());
+	
+	for(auto& mL : mappingLocations)
+	{
+		mL.p = 0;
+	}
+	
 	int max_int_identity = -1;
 	for(auto& mL : mappingLocations)
 	{
@@ -176,6 +182,12 @@ void compute_U_mappingQualities(std::vector<oneMappingLocation_U>& mappingLocati
 	}
 
 	int iM_maxReadIdentity = iM.getMaximumReadIdentity();
+	if(!(max_int_identity <= iM_maxReadIdentity))
+	{
+		std::cerr << "max_int_identity: " << max_int_identity << "\n";
+		std::cerr << "iM_maxReadIdentity: " << iM_maxReadIdentity << "\n";
+		std::cerr << std::flush;
+	}
 	assert(max_int_identity <= iM_maxReadIdentity);
 	for(int readIdentity = max_int_identity; readIdentity <= iM_maxReadIdentity; readIdentity++)
 	{
@@ -189,24 +201,72 @@ void compute_U_mappingQualities(std::vector<oneMappingLocation_U>& mappingLocati
 			double thisReadIdentity_thisML_l = 0;
 			if(mL.direct)
 			{
-				thisReadIdentity_thisML_l = mapWrap::likelihood_observed_set_sizes(kmerSize, n_kmers, readIdentity, mL.minimizerUnion, mL.minimizerIntersection);
+				std::cerr << "kmerSize" << ": " << kmerSize << "\n";
+				std::cerr << "n_kmers" << ": " << n_kmers << "\n";
+				std::cerr << "readIdentity" << ": " << readIdentity << "\n";
+				std::cerr << "mL.minimizerUnion" << ": " << mL.minimizerUnion << "\n";
+				std::cerr << "mL.minimizerIntersection" << ": " << mL.minimizerIntersection << "\n" << std::flush;
+
+				thisReadIdentity_thisML_l = mapWrap::likelihood_observed_set_sizes(kmerSize, n_kmers, readIdentity/100.0, mL.minimizerUnion, mL.minimizerIntersection);
 			}
 			else
 			{
 				std::map<int, double> node_shiftDistribution = iM.getOriginalUHistogramForNode_oneReadLength(mL.taxonID, mL.readLength);
-				for(auto shiftE : node_shiftDistribution)
+				for(auto shiftE : node_shiftDistribution) 
 				{
-					int thisShift_identity = readIdentity - shiftE.first;
+					if(shiftE.first == 0)
+					{
+						continue;
+					}
+					int thisShift_identityLoss = 100 - shiftE.first;
+					assert(thisShift_identityLoss >= 0);
+					
+					int thisShift_identity = readIdentity - thisShift_identityLoss;
+					if(!(thisShift_identity > 0))
+					{
+						std::cerr << "thisShift_identity" << ": " << thisShift_identity << "\n";
+						std::cerr << "readIdentity" << ": " << readIdentity << "\n";
+						std::cerr << "shiftE.first" << ": " << shiftE.first << "\n" << std::flush;		
+						for(auto sD : node_shiftDistribution)
+						{
+							std::cerr << "\t" << sD.first << " " << sD.second << "\n" << std::flush;
+						}
+					}
 					assert(thisShift_identity > 0);
 					if(thisShift_identity > iM.getMinimumReadIdentity())
 					{
-						thisReadIdentity_thisML_l += shiftE.second * mapWrap::likelihood_observed_set_sizes(kmerSize, n_kmers, thisShift_identity, mL.minimizerUnion, mL.minimizerIntersection);
+						std::cerr << "kmerSize" << ": " << kmerSize << "\n";
+						std::cerr << "n_kmers" << ": " << n_kmers << "\n";
+						std::cerr << "thisShift_identity" << ": " << thisShift_identity << "\n";
+						std::cerr << "mL.minimizerUnion" << ": " << mL.minimizerUnion << "\n";
+						std::cerr << "mL.minimizerIntersection" << ": " << mL.minimizerIntersection << "\n" << std::flush;
+
+						thisReadIdentity_thisML_l += shiftE.second * mapWrap::likelihood_observed_set_sizes(kmerSize, n_kmers, thisShift_identity/100.0, mL.minimizerUnion, mL.minimizerIntersection);
 					}
 				}
 			}
-			mL.p += thisReadIdentity_thisML_l;
+			// assert(thisReadIdentity_thisML_l > 0); // perhaps too strong
+			mL.p += thisReadIdentity_thisML_l; 
 		}
 	}
+	
+	double mL_p_sum = 0;
+	for(auto mL : mappingLocations)
+	{
+		mL_p_sum += mL.p;
+	}	
+	assert(mL_p_sum > 0);
+	
+	std::cerr << "newRead\n";
+	double mL_after = 0;
+	for(auto& mL : mappingLocations)
+	{
+		mL.p /= mL_p_sum;
+		mL_after += mL.p;
+		
+		std::cerr << mL.p << "\n" << std::flush;
+	}	
+	assert(abs(1 - mL_after) <= 1e-3);
 }
 
 void generateUnknownMapQFile(std::string DBdir, std::string mappedFile, const identityManager& iM, const taxonomy& T)
@@ -263,10 +323,14 @@ void generateUnknownMapQFile(std::string DBdir, std::string mappedFile, const id
 		std::vector<oneMappingLocation_U> mappingLocations = getMappingLocations_U(iM, indirectUpwardNodes, indirectUpwardNodes_nSourceGenomes, readLines);
 		compute_U_mappingQualities(mappingLocations, iM, kMerSize);
 
+		double sum_mapQ = 0;
 		for(auto location : mappingLocations)
 		{
 			outputStr_mappings_unknownMapQ << location.readID << " " << location.taxonID << " " << location.direct << " " << location.mapQ << " " << location.originalIdentity << "\n";
+			sum_mapQ += location.mapQ;
+			std::cerr << "mapQ: " << location.mapQ << std::endl;
 		}
+		assert(abs(1 - sum_mapQ) <= 1e-3);
 	};
 
 	callBackForAllReads(mappedFile, processOneRead);
@@ -1011,7 +1075,7 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 	}
 
 
-	auto get_mappings_with_P = [](const std::pair<std::map<std::string, double>, std::map<std::string, double>>& f, const std::vector<std::string>& readLines, std::vector<oneMappingLocation_U>& mappings_with_P_ret) -> double
+	auto get_mappings_with_P = [&](const std::pair<std::map<std::string, double>, std::map<std::string, double>>& f, const std::vector<std::string>& readLines, std::vector<oneMappingLocation_U>& mappings_with_P_ret) -> double
 	{
 		assert(readLines.size() > 0);
 		mappings_with_P_ret.clear();
@@ -1023,7 +1087,7 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 		for(auto rL : readLines)
 		{
 			std::vector<std::string> rL_fields = split(rL, " ");
-			assert(rL_fields.size() == 4);
+			assert(rL_fields.size() == 5);
 
 			oneMappingLocation_U thisMapping;
 			thisMapping.taxonID = rL_fields.at(1);
@@ -1048,6 +1112,16 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 			l_read += l;
 			thisMapping.p = l;
 			mappings_with_P_ret.push_back(thisMapping);
+		}
+		if(l_read <= 0)
+		{
+			std::cerr << "l_read: " << l_read << "\n";
+			for(auto rL : readLines)
+			{
+				std::cerr << "\t" << rL << "\n";
+			}
+			std::cerr << "Source file: " << mappedFile +".mapQ_U" << "\n";
+			std::cerr << std::flush;
 		}
 		assert(l_read > 0);
 

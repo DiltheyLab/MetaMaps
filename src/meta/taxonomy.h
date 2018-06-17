@@ -61,7 +61,7 @@ public:
 			{
 				runningNodeID = T.at(runningNodeID).parent_id;
 			}	
-			assert(nodeID.find("x") == std::string::npos);
+			assert(runningNodeID.find("x") == std::string::npos);
 			return runningNodeID;
 		}
 	}

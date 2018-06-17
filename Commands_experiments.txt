@@ -5,6 +5,13 @@ perl simulate.pl --DB databases/miniSeq+H --action repeatReadSimulations --suffi
 perl simulate.pl --DB databases/miniSeq+H --action prepareFromFile --desiredTaxa tmp/i100DesiredTaxonIDs --suffix i100_specifiedFrequencies --coverageMode file --n_simulations 1
 perl simulate.pl --DB databases/miniSeq+H --action repeatReadSimulations --suffix i100_specifiedFrequencies --targetTotalSimulationInGigabytes 1 --coverageTargetsAreOrganismAbundances 1
 
+perl simulate.pl --DB databases/miniSeq+H --action prepareFromNonDB --FASTA eukaryote_genomes/Aedes_aegypti.fa --FASTA_taxon_id 7159 --suffix mosquito;\
+perl simulate.pl --DB databases/miniSeq+H --suffix mosquito --action prepareII
+perl simulate.pl --DB databases/miniSeq+H --action prepareFromNonDB --FASTA eukaryote_genomes/Toxoplasma_Gondii_ME49_TGA4.fa --FASTA_taxon_id 508771 --suffix toxo
+perl simulate.pl --DB databases/miniSeq+H --suffix toxo --action prepareII
+
+
+
 perl simulate.pl --DB databases/miniSeq+H --action prepare --suffix random_uniform
 perl simulate.pl --DB databases/miniSeq+H --action prepare --suffix random_logNormal --coverageMode logNormal
 
