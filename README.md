@@ -44,8 +44,7 @@ You can also download and construct your own reference databases. For example, t
 1. Download the genomes you want to include. The easiest way to do this is by copying the RefSeq/Genbank directory structure of the taxonomic branches you're interested in. This can be done with the `downloadRefSeq.pl` script, which is easily customizable (e.g., `--targetBranches archaea,bacteria,fungi` to download these three branches). Example:
 
     ```
-    mkdir testDownload
-    
+    mkdir testDownload   
     perl downloadRefSeq.pl --seqencesOutDirectory testDownload/refseq --taxonomyOutDirectory testDownload/taxonomy
     ```
 
