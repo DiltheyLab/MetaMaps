@@ -156,10 +156,10 @@ void compute_U_mappingQualities(std::vector<oneMappingLocation_U>& mappingLocati
 {
 	bool verbose = true;
 	assert(mappingLocations.size());
-	
+
 	for(auto& mL : mappingLocations)
 	{
-		mL.p = 0;
+		mL.mapQ = 0;
 	}
 	
 	int max_int_identity = -1;
@@ -234,39 +234,48 @@ void compute_U_mappingQualities(std::vector<oneMappingLocation_U>& mappingLocati
 					}
 					assert(thisShift_identity > 0);
 					if(thisShift_identity > iM.getMinimumReadIdentity())
-					{
+					{	
+						/*
 						std::cerr << "kmerSize" << ": " << kmerSize << "\n";
 						std::cerr << "n_kmers" << ": " << n_kmers << "\n";
 						std::cerr << "thisShift_identity" << ": " << thisShift_identity << "\n";
 						std::cerr << "mL.minimizerUnion" << ": " << mL.minimizerUnion << "\n";
 						std::cerr << "mL.minimizerIntersection" << ": " << mL.minimizerIntersection << "\n" << std::flush;
-
+						*/
+						
 						thisReadIdentity_thisML_l += shiftE.second * mapWrap::likelihood_observed_set_sizes(kmerSize, n_kmers, thisShift_identity/100.0, mL.minimizerUnion, mL.minimizerIntersection);
 					}
 				}
 			}
 			// assert(thisReadIdentity_thisML_l > 0); // perhaps too strong
-			mL.p += thisReadIdentity_thisML_l; 
+			mL.mapQ += thisReadIdentity_thisML_l; 
 		}
 	}
 	
 	double mL_p_sum = 0;
 	for(auto mL : mappingLocations)
 	{
-		mL_p_sum += mL.p;
+		mL_p_sum += mL.mapQ;
 	}	
 	assert(mL_p_sum > 0);
 	
-	std::cerr << "newRead\n";
 	double mL_after = 0;
 	for(auto& mL : mappingLocations)
 	{
-		mL.p /= mL_p_sum;
-		mL_after += mL.p;
-		
-		std::cerr << mL.p << "\n" << std::flush;
+		mL.mapQ /= mL_p_sum;
+		mL_after += mL.mapQ;
 	}	
+	
 	assert(abs(1 - mL_after) <= 1e-3);
+	
+	/*
+	std::cerr << "newRead II\n";
+	for(auto& mL : mappingLocations)
+	{
+		std::cerr << mL.p << "\n" << std::flush;
+	}
+	*/	
+	
 }
 
 void generateUnknownMapQFile(std::string DBdir, std::string mappedFile, const identityManager& iM, const taxonomy& T)
@@ -321,14 +330,14 @@ void generateUnknownMapQFile(std::string DBdir, std::string mappedFile, const id
 		}
 
 		std::vector<oneMappingLocation_U> mappingLocations = getMappingLocations_U(iM, indirectUpwardNodes, indirectUpwardNodes_nSourceGenomes, readLines);
+		
 		compute_U_mappingQualities(mappingLocations, iM, kMerSize);
-
+		
 		double sum_mapQ = 0;
 		for(auto location : mappingLocations)
 		{
 			outputStr_mappings_unknownMapQ << location.readID << " " << location.taxonID << " " << location.direct << " " << location.mapQ << " " << location.originalIdentity << "\n";
 			sum_mapQ += location.mapQ;
-			std::cerr << "mapQ: " << location.mapQ << std::endl;
 		}
 		assert(abs(1 - sum_mapQ) <= 1e-3);
 	};
@@ -1086,7 +1095,12 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 		double l_read = 0;
 		for(auto rL : readLines)
 		{
+			assert(rL.length());
 			std::vector<std::string> rL_fields = split(rL, " ");
+			if(!(rL_fields.size() == 5))
+			{
+				std::cerr << "Weird line for parsing:\n\t'" << rL << "'\n" << std::flush;
+			}
 			assert(rL_fields.size() == 5);
 
 			oneMappingLocation_U thisMapping;
@@ -1347,7 +1361,7 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 		strout_reads_taxonIDs << readID << "\t" << bestMapping.taxonID << "\n";
 	};
 
-	callBackForAllReads(mappedFile, processOneRead_final);
+	callBackForAllReads(mappedFile+".mapQ_U", processOneRead_final);
 
 	// long-enough-but-unmapped reads are set to unassigned
 	std::vector<std::string> readIDs_notMapped_despiteLongEnough = getUnmappedReadsIDs(mappedFile);
@@ -1571,6 +1585,8 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 	produceShiftedHistograms(output_shifted_frequencies_file, iM, f);
 
 	produceEM2U(mappedFile, T);
+	
+	std::cout << "\n\n.Done. Frequencies output in " << "\n\t" << output_pot_frequencies << "\n" << std::flush;
 
 }
 
