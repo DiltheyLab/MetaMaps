@@ -45,6 +45,7 @@ You can also download and construct your own reference databases. For example, t
 
     ```
     mkdir testDownload
+    
     perl downloadRefSeq.pl --seqencesOutDirectory testDownload/refseq --taxonomyOutDirectory testDownload/taxonomy
     ```
 
