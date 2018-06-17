@@ -49,14 +49,19 @@ You can also download and construct your own reference databases. For example, t
     ```
 
 2. We need to make sure that each contig ID is annotated with a correct and unique taxon ID and we want the whole database as one file. `annotateRefSeqSequencesWithUniqueTaxonIDs.pl` can help:
+
     ```
     perl annotateRefSeqSequencesWithUniqueTaxonIDs.pl --refSeqDirectory downloads/refseq --taxonomyInDirectory downloads/taxonomy --taxonomyOutDirectory downloads/taxonomy_uniqueIDs
     ```
+    
 3. We might also manually want to include additional genomes, for example the human reference genome. Obtain the genome in one file (e.g. `hg38.primary.fna`) and add taxon IDs:
+
     ```
     perl util/addTaxonIDToFasta.pl --inputFA hg38.primary.fna --outputFA hg38.primary.fna.with9606 --taxonID 9606
     ```
+    
 4. Finally, construct the MetaMap database:
+
     ```
     perl buildDB.pl --DB databases/myDB --FASTAs downloads/refseq,hg38.primary.fna.with9606 --taxonomy downloads/taxonomy_uniqueIDs
     ```
