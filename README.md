@@ -44,8 +44,7 @@ You can also download and construct your own reference databases. For example, t
 1. Download the genomes you want to include. The easiest way to do this is by copying the RefSeq/Genbank directory structure of the taxonomic branches you're interested in. This can be done with the `downloadRefSeq.pl` script, which is easily customizable (e.g., `--targetBranches archaea,bacteria,fungi` to download these three branches). Example:
 
     ```
-    mkdir testDownload   
-    perl downloadRefSeq.pl --seqencesOutDirectory testDownload/refseq --taxonomyOutDirectory testDownload/taxonomy
+    mkdir testDownload; perl downloadRefSeq.pl --seqencesOutDirectory testDownload/refseq --taxonomyOutDirectory testDownload/taxonomy
     ```
 
 2. We need to make sure that each contig ID is annotated with a correct and unique taxon ID and we want the whole database as one file. `annotateRefSeqSequencesWithUniqueTaxonIDs.pl` can help:
@@ -53,6 +52,8 @@ You can also download and construct your own reference databases. For example, t
     ```
     perl annotateRefSeqSequencesWithUniqueTaxonIDs.pl --refSeqDirectory downloads/refseq --taxonomyInDirectory downloads/taxonomy --taxonomyOutDirectory downloads/taxonomy_uniqueIDs
     ```
+    
+    By default this script will only process complete (finished) assemblies - if you want to modify this behaviour, uncomment the line `next unless($assembly_level eq 'Complete Genome');`.
     
 3. We might also manually want to include additional genomes, for example the human reference genome. Obtain the genome in one file (e.g. `hg38.primary.fna`) and add taxon IDs:
 
