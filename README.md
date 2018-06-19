@@ -17,7 +17,7 @@ Then download a database, e.g. miniSeq+H (microbial genomes and the human refere
 
 ## Usage
 
-Analysis of a dataset with MetaMap consists of two steps: mapping and classification:
+Analysis of a dataset with MetaMaps consists of two steps: mapping and classification:
 
 ```
 ./metamaps mapDirectly --all -r databases/miniSeq+H/DB.fa -q input.fastq -o classification_results
@@ -44,7 +44,8 @@ You can also download and construct your own reference databases. For example, t
 1. Download the genomes you want to include. The easiest way to do this is by copying the RefSeq/Genbank directory structure of the taxonomic branches you're interested in. This can be done with the `downloadRefSeq.pl` script, which is easily customizable (e.g., `--targetBranches archaea,bacteria,fungi` to download these three branches). Example:
 
     ```
-    mkdir testDownload; perl downloadRefSeq.pl --seqencesOutDirectory testDownload/refseq --taxonomyOutDirectory testDownload/taxonomy
+    mkdir testDownload
+	perl downloadRefSeq.pl --seqencesOutDirectory testDownload/refseq --taxonomyOutDirectory testDownload/taxonomy
     ```
 
 2. We need to make sure that each contig ID is annotated with a correct and unique taxon ID and we want the whole database as one file. `annotateRefSeqSequencesWithUniqueTaxonIDs.pl` can help:
@@ -61,7 +62,7 @@ You can also download and construct your own reference databases. For example, t
     perl util/addTaxonIDToFasta.pl --inputFA hg38.primary.fna --outputFA hg38.primary.fna.with9606 --taxonID 9606
     ```
     
-4. Finally, construct the MetaMap database:
+4. Finally, construct the MetaMaps database:
 
     ```
     perl buildDB.pl --DB databases/myDB --FASTAs downloads/refseq,hg38.primary.fna.with9606 --taxonomy downloads/taxonomy_uniqueIDs
@@ -72,7 +73,6 @@ You can also download and construct your own reference databases. For example, t
     ```
     perl buildDB.pl --DB databases/myDB --FASTAs downloads/refseq/ref.fa,hg38.primary.fna.with9606 --taxonomy downloads/new_taxonomy --oldTaxonomy downloads/taxonomy_uniqueIDs --updateTaxonomy 1
     ```
-
 
 
 
