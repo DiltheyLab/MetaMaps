@@ -1586,7 +1586,7 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 
 	produceEM2U(mappedFile, T);
 	
-	std::cout << "\n\n.Done. Frequencies output in " << "\n\t" << output_pot_frequencies << "\n" << std::flush;
+	std::cout << "\n\nDone. Frequencies output in " << "\n\t" << output_pot_frequencies << "\n" << std::flush;
 
 }
 

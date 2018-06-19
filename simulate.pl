@@ -893,7 +893,7 @@ sub inferenceOneSimulation
 		
 		print "Doing inference in $DB_target_dir\n";
 		 
-		doMetaMap($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $maxMemory);
+		# doMetaMap($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $maxMemory);
 		unless($skipKraken)
 		{
 			SimulationsKraken::doKraken($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $krakenDBTemplate, $kraken_binPrefix, $Bracken_dir);

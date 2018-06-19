@@ -102,7 +102,7 @@ sub doKrakenOnExistingDB
 	die unless(defined $taxonID_original_2_contigs_href);
 	my $pre_chdir_cwd = getcwd();
 	 
-	chdir($kraken_dir) or die;  
+	chdir($kraken_dir) or die "Cannot chdir into $kraken_dir";  
 	
 	my $cmd_classify = qq(/usr/bin/time -v ${kraken_binPrefix} --preload --db DB $simulatedReads 1> $outputDir/reads_classified 2> $outputDir/kraken_resources);
 	system($cmd_classify) and die "Could not execute command: $cmd_classify"; # todo
@@ -161,6 +161,10 @@ sub doKraken
 	my $kraken_dir = $jobDir . '/kraken/';
 	my $jobDir_abs = abs_path($jobDir);
 	
+	#unless(-e $kraken_dir)
+	#{
+	#	mkdir($kraken_dir) or "Cannot mkdir $kraken_dir";
+	#}
 	# translateMetaMapToKraken($kraken_dir, $dbDir, $krakenDBTemplate, $kraken_binPrefix, $Bracken_dir); # todo
 	
 	my $simulatedReads = abs_path($reads_fastq);

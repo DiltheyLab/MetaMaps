@@ -294,7 +294,7 @@ int main(int argc, char** argv)
 		assert(parameters.mappingsForClassification.length());
 
 		meta::doEM(parameters.DB, parameters.mappingsForClassification, parameters.minimumReadsForU);
-		meta::doU(parameters.DB, parameters.mappingsForClassification, parameters.minimumReadsForU);
+		//meta::doU(parameters.DB, parameters.mappingsForClassification, parameters.minimumReadsForU);
 	}
 
 	return 0;
