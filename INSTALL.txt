@@ -1,4 +1,4 @@
-MetaMap requires c++11 to build, which is available in GCC >= 4.8 and 
+MetaMaps requires c++11 to build, which is available in GCC >= 4.8 and 
 OSX >= 10.7.
 
 Dependencies:
@@ -12,12 +12,12 @@ Steps:
 ------
    ./bootstrap.sh
    ./configure [--prefix=...] [--with-boost=...]
-   make metamap
+   make metamaps
 
 
 Products:
 ---------
-   - command line tool ( <prefix>/metamap)
+   - command line tool ( <prefix>/metamaps)
 
 Configure options:
 ------------------
