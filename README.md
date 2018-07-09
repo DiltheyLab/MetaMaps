@@ -7,12 +7,12 @@ It simultaenously carries out read assignment and sample composition estimation.
 
 It is faster than classical exact alignment-based approaches, and its output is more information-rich than that of kmer-spectra-based methods. For example, each MetaMaps alignment comes with an approximate alignment location, an estimated alignment identity and a mapping quality.
 
-The approximate mapping algorithm employed by MetaMaps is based on MashMap [https://github.com/marbl/MashMap](MashMap). MetaMaps adds a mapping quality model and EM-based estimation of sample composition.
+The approximate mapping algorithm employed by MetaMaps is based on [MashMap](https://github.com/marbl/MashMap). MetaMaps adds a mapping quality model and EM-based estimation of sample composition.
 
 ## Installation
 Follow [`INSTALL.txt`](INSTALL.txt) to compile and install MetaMaps.
 
-Then download a database, e.g. [https://www.dropbox.com/s/g2jzj8sklnlp3j2/miniSeq%2BH.tar.gz?dl=0](miniSeq+H) (~8G compressed, microbial genomes and the human reference genome). Extract the downloaded database into the `databases/` directory.
+Then download a database, e.g. [miniSeq+H](https://www.dropbox.com/s/g2jzj8sklnlp3j2/miniSeq%2BH.tar.gz?dl=0) (~8G compressed, microbial genomes and the human reference genome). Extract the downloaded database into the `databases/` directory.
 
 ## Usage
 
