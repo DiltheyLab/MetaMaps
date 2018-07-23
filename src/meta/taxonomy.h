@@ -61,6 +61,13 @@ public:
 			{
 				runningNodeID = T.at(runningNodeID).parent_id;
 			}	
+			if(!(runningNodeID.find("x") == std::string::npos))
+			{
+				std::cerr << "Assertion error: (runningNodeID.find(x) == std::string::npos) \n";
+				std::cerr << "runningNodeID: '" << runningNodeID << "'" << "\n";
+				std::cerr << "nodeID: '" << nodeID << "'" << "\n";
+				std::cerr << std::flush;
+			}			
 			assert(nodeID.find("x") == std::string::npos);
 			return runningNodeID;
 		}
