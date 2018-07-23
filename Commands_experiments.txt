@@ -5,10 +5,12 @@ perl simulate.pl --DB databases/miniSeq+H --action repeatReadSimulations --suffi
 perl simulate.pl --DB databases/miniSeq+H --action prepareFromFile --desiredTaxa tmp/i100DesiredTaxonIDs --suffix i100_specifiedFrequencies --coverageMode file --n_simulations 1
 perl simulate.pl --DB databases/miniSeq+H --action repeatReadSimulations --suffix i100_specifiedFrequencies --targetTotalSimulationInGigabytes 1 --coverageTargetsAreOrganismAbundances 1
 
-perl simulate.pl --DB databases/miniSeq+H --action prepareFromNonDB --FASTA eukaryote_genomes/Aedes_aegypti.fa --FASTA_taxon_id 7159 --suffix mosquito;\
-perl simulate.pl --DB databases/miniSeq+H --suffix mosquito --action prepareII
-perl simulate.pl --DB databases/miniSeq+H --action prepareFromNonDB --FASTA eukaryote_genomes/Toxoplasma_Gondii_ME49_TGA4.fa --FASTA_taxon_id 508771 --suffix toxo
+perl simulate.pl --DB databases/miniSeq+H --action prepareFromNonDB --FASTA eukaryote_genomes/Aedes_aegypti.fa --FASTA_taxon_id 7159 --suffix mosquito --targetTotalSimulationInGigabytes 1.05 --simulationMinReadLength 2100;\
+perl simulate.pl --DB databases/miniSeq+H --suffix mosquito --action prepareII;\
+cp -r databases/miniSeq+H/kraken databases/miniSeq+H/simulations_mosquito/0/inference_fullDB/
+perl simulate.pl --DB databases/miniSeq+H --action prepareFromNonDB --FASTA eukaryote_genomes/Toxoplasma_Gondii_ME49_TGA4.fa --FASTA_taxon_id 508771 --suffix toxo --targetTotalSimulationInGigabytes 1.1 --simulationMinReadLength 2100;\
 perl simulate.pl --DB databases/miniSeq+H --suffix toxo --action prepareII
+cp -r databases/miniSeq+H/kraken databases/miniSeq+H/simulations_toxo/0/inference_fullDB/
 
 
 
@@ -73,10 +75,12 @@ For testing:
 
 perl simulate.pl --action analyzeAll --suffix logNormal
 
-perl util/HMPplot.pl &&\
 perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix i100_specifiedFrequencies && \
 perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix i100_specifiedFrequencies_limitedMemory && \
-perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix p25_logNormal 
+perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix p25_logNormal && \
+perl util/HMPplot.pl
+
+perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix mosquito
 
 perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix i100_specifiedFrequencies && \
 perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix p25_logNormal 

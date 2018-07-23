@@ -149,6 +149,7 @@ my $skipKraken;
 my $FASTA;
 my $FASTA_taxon_id;
 my $maxMemory;
+my $simulationMinReadLength;
 GetOptions (
 	'DB:s' => \$DB,
 	'action:s' => \$action,
@@ -168,6 +169,7 @@ GetOptions (
 	'FASTA:s' => \$FASTA,
 	'FASTA_taxon_id:s' => \$FASTA_taxon_id,
 	'maxMemory:s' => \$maxMemory,
+	'simulationMinReadLength:s' => \$simulationMinReadLength,
 );
 
 die unless(($coverageMode eq 'equal') or ($coverageMode eq 'logNormal') or ($coverageMode eq 'file'));
@@ -893,7 +895,7 @@ sub inferenceOneSimulation
 		
 		print "Doing inference in $DB_target_dir\n";
 		 
-		# doMetaMap($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $maxMemory);
+		doMetaMap($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $maxMemory);
 		unless($skipKraken)
 		{
 			SimulationsKraken::doKraken($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $krakenDBTemplate, $kraken_binPrefix, $Bracken_dir);
@@ -904,7 +906,7 @@ sub inferenceOneSimulation
 		}
 	} 
 	
-	# foreach my $oneDBdir (@{$simulation_href->{dbDirs_metamap}})
+	# foreach my $oneDBdir (@{$simulation_href->{dbDirs_metamap}}) 
 	# {
 	
 	# foreach my $inference_variety (@{$simulation_href->{inferenceDBs}})
@@ -1807,6 +1809,12 @@ sub setup_directory_and_simulate_reads
 		mkdir($outputDir_reads) or die "Cannot mkdir $outputDir_reads";
 		
 		my $PBsim_thisSimulation = $PBsim_cmd;
+		if($simulationMinReadLength)
+		{
+			die unless($PBsim_thisSimulation =~ /--data-type CLR/);
+			$PBsim_thisSimulation =~ s/--data-type CLR/--data-type CLR --length-min $simulationMinReadLength /;
+		}
+		
 		$PBsim_thisSimulation =~ s/REF/$fn_genome/;
 		$PBsim_thisSimulation =~ s/DEPTH/$relativeCoverage/;
 		$PBsim_thisSimulation =~ s/--prefix/--prefix $outputDir_reads\/ /;
@@ -1820,7 +1828,7 @@ sub setup_directory_and_simulate_reads
 		my $doAppend = ($taxonI > 0);
 		my $readIDs_aref = [];
 		my $combinedReadLength = 0;
-		my $reads_taxon = combineFASTQ(\@files_reads, $outputFile_combinedReads, $taxonI, $doAppend, $readIDs_aref, \$combinedReadLength);
+		my $reads_taxon = combineFASTQ(\@files_reads, $outputFile_combinedReads, $taxonI, $doAppend, $readIDs_aref, \$combinedReadLength, $simulationMinReadLength);
 		$reads_taxon{$taxonID} = $reads_taxon;
 		$totalReads_allTaxa += $reads_taxon;
 		foreach my $readID (@$readIDs_aref)
@@ -2013,6 +2021,7 @@ sub combineFASTQ
 	my $append = shift;
 	my $readIDs_aref = shift;
 	my $totalBases_sref = shift;
+	my $simulationMinReadLength = shift;
 	
 	my $totalReads = 0;
 	if(defined $totalBases_sref)
@@ -2046,7 +2055,10 @@ sub combineFASTQ
 			
 			substr($line, 0, 1) = ('@' . $readID_prefix);
 			
-			print OUT $line, "\n", $line_seq, "\n", $line_plus, $line_qual;
+			if((not $simulationMinReadLength) or (length($line_seq) >= $simulationMinReadLength))
+			{
+				print OUT $line, "\n", $line_seq, "\n", $line_plus, $line_qual;
+			}
 			
 			if(defined($readIDs_aref))
 			{
@@ -2065,7 +2077,7 @@ sub combineFASTQ
 	
 	return $totalReads;
 }
-
+ 
 sub extractTaxonIDsFromREF
 {
 	my $fn_in = shift;

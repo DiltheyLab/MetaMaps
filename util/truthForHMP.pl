@@ -50,6 +50,9 @@ foreach my $taxonID (keys %taxonID_2_contigs)
 	}
 }
 
+die $NC_noPoint_2_taxon{'NC_009085'};
+
+
 my $masterTaxonomy_dir = '/data/projects/phillippy/projects/MetaMap/downloads/taxonomy';
 (my $master_taxonomy, my $master_taxonomy_merged) = validation::prepare_masterTaxonomy_withX($masterTaxonomy_dir, $MetaMap_taxonomy);
 

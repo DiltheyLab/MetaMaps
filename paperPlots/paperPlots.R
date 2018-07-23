@@ -20,15 +20,20 @@ barplotPal <- brewer.pal(n = 5, name = "PuBu")
 
 captions <- list()
 captions[["Kraken-Reads"]] <- "Kraken"
-captions[["Metamap-EM-Reads"]] <- "MetaMap"
-captions[["Metamap-U-Reads"]] <- "MetaMap-Unknown"
-stopifnot(1 == 2)
+captions[["Metamap-EM-Reads"]] <- "MetaMaps"
+captions[["Metamap-U-Reads"]] <- "MetaMaps-Unknown"
+captions[["MetaMap-EM-Dist"]] <- "MetaMaps"
+captions[["Bracken-Dist"]] <- "Bracken"
+
+# c("gray", "blue", "firebrick2")
 
 colourByMethod <- list()
-colourByMethod[["Kraken-Reads"]] <- "darkred"
-colourByMethod[["Metamap-EM-Reads"]] <- "darkblue"
-colourByMethod[["Metamap-U-Reads"]] <- "lightblue"
-
+colourByMethod[["Kraken-Reads"]] <- "firebrick2"
+colourByMethod[["Bracken-Dist"]] <- colourByMethod[["Kraken-Reads"]]
+colourByMethod[["Metamap-EM-Reads"]] <- "blue"
+colourByMethod[["MetaMap-EM-Dist"]] <- colourByMethod[["Metamap-EM-Reads"]]
+colourByMethod[["Metamap-U-Reads"]] <- "yellow"
+print(colourByMethod)
 
 lineStyleByLevel <- list()
 lineStyleByLevel[["species"]] <- "solid"
@@ -320,7 +325,7 @@ readLengthPlot <- function(d1, t1)
 	rL_accuracy_min <- min(byReadLengthD[["accuracyAvg"]])
 	rL_accuracy_max <- max(byReadLengthD[["accuracyAvg"]])
 		
-	plot(0, 0, col = "white", main = paste("Read assignment accuracy in ", t1), cex.main = 1.5, xlab = "Read length bin", ylab = "Proportion reads correctly assigned", xlim = c(rL_l_min, rL_l_max), ylim = c(0, 1), cex.axis = 1.3, cex.lab = 1.3)
+	plot(0, 0, col = "white", main = paste("Read assignment accuracy in ", t1), cex.main = 1.5, xlab = "Read length bin", ylab = "PPV", xlim = c(rL_l_min, rL_l_max), ylim = c(0, 1), cex.axis = 1.3, cex.lab = 1.3)
 	
 	legend_titles <- c()
 	legend_colours <- c()
@@ -375,7 +380,7 @@ readLengthPlot <- function(d1, t1)
 				l_for_legend <- l
 				if(l_for_legend == "absolute")
 				{
-					l_for_legend <- "genome"
+					l_for_legend <- "strain"
 				}
 				
 				legend_titles <- c(legend_titles, paste(translateCaptions(m), " ", l_for_legend, sep = ""))
@@ -438,7 +443,8 @@ twoReadPlots <- function(f1, t1, f2, t2)
 							barPlotVector_thisMethod <- c(barPlotVector_thisMethod, accuracy)
 							if(l == "absolute")
 							{
-								callRatesVector <- c(callRatesVector, callRate)
+								#callRatesVector <- c(callRatesVector, callRate)
+								callRatesVector <- c(callRatesVector, 0)
 							}						
 						}
 						
@@ -485,16 +491,16 @@ twoReadPlots <- function(f1, t1, f2, t2)
 	
 }
 
-HMPreadPlot <- function()
+
+HMP_like_reads_plot <- function(prefix, plotTitle)
 {
+	pdf(paste("readsPlot_", plotTitle, ".pdf", sep = ""), useDingbats = F, height = 6, width = 8)
 
-	pdf(paste("HMPReads.pdf", sep = ""), useDingbats = F, height = 5, width = 7)
-
-	barPlotFile_byLevel <- "/data/projects/phillippy/projects/MetaMap/HMPresults/PacBio_forPlot_barplots_readCategory"
+	barPlotFile_byLevel <- paste(prefix, "_forPlot_barplots_readCategory", sep = "")
 	barplotD_byLevel <- read.delim(barPlotFile_byLevel, header = T, stringsAsFactors = F)
 	# pdf(paste(prefix, "plots.pdf", sep = ""))
 
-	attachedToFile_byLevel <- "/data/projects/phillippy/projects/MetaMap/HMPresults/PacBio_forPlot_barplots_attachedTo"
+	attachedToFile_byLevel <- paste(prefix, "_forPlot_barplots_attachedTo", sep = "")
 	attachedToD <- read.delim(attachedToFile_byLevel, header = T, stringsAsFactors = F)
 
 	rCs <- c("truthLeafInDB", "novel_to_species", "novel_to_genus", "novel_to_superkingdom")
@@ -517,7 +523,7 @@ HMPreadPlot <- function()
 	evaluationLevels <- unique(barplotD_byLevel[["evaluationLevel"]])
 	evaluationLevels_ordered <- c("species", "genus", "family", "superkingdom")
 	evaluationLevels_ordered_assignment_names <- list()
-	evaluationLevels_ordered_assignment_names[["species"]] <- "Species/Strain"
+	evaluationLevels_ordered_assignment_names[["species"]] <- "Strain/Species"
 	evaluationLevels_ordered_assignment_names[["genus"]] <- "Genus"
 	evaluationLevels_ordered_assignment_names[["family"]] <- "Family"
 	evaluationLevels_ordered_assignment_names[["superkingdom"]] <- "Superkingdom"
@@ -535,7 +541,9 @@ HMPreadPlot <- function()
 		
 		iMs <- sort(unique(barplotD_byLevel[["method"]][which(barplotD_byLevel[["readCategory"]] == rC)]))
 		iMs_labels <- iMs
-		iMs_labels[iMs_labels == "MetaMap-EM"] <- "MetaMap"
+		iMs_labels[iMs_labels == "Metamap-EM-Reads"] <- "MetaMaps"
+		iMs_labels[iMs_labels == "Kraken-Reads"] <- "Kraken"
+		print(iMs_labels)
 		
 		callRates_by_Method <- c()
 		callRates_by_Method_list <- list()
@@ -613,25 +621,25 @@ HMPreadPlot <- function()
 		}
 		
 		pMar <- par()$mar
-		par(mar = pMar + c(0,0,0,0)) 
+		par(mar = pMar + c(1.2,0,0,0)) 
 		# bpPos <- barplot(matrix_for_barplot, beside = T, main = paste("Reads - all experiments (compl./incompl.): ", rCs_labels[[rC]]), col = colorVector, ylim = c(0, 1.45), axes = F)
-		bpPos <- barplot(matrix_for_barplot, beside = T, main = "HMP7 read assignment accuracy", col = colorVector, ylim = c(0, 1.8), axes = F, cex.main = 2)
+		bpPos <- barplot(matrix_for_barplot, beside = T, main = paste(plotTitle, " read assignment accuracy", sep = ""), col = colorVector, ylim = c(0, 1.75), axes = F, cex.main = 2)
 
-		axis(1, at = colMeans(bpPos), tick = F, labels = c("Genome", sapply(evaluationLevels_ordered, function(x){capitalize(x)}, USE.NAMES = F)), pos = 0.05)
-		axis(1, at = bpPos, tick = F, labels = rep(iMs_labels, 1 + length(evaluationLevels_ordered)), las = 2, pos = -0.10, cex.axis = 0.9)
+		axis(1, at = colMeans(bpPos), tick = F, labels = c("Strain", sapply(evaluationLevels_ordered, function(x){capitalize(x)}, USE.NAMES = F)), pos = 0.05, cex.axis = 1.3)
+		axis(1, at = bpPos, tick = F, labels = rep(iMs_labels, 1 + length(evaluationLevels_ordered)), las = 2, pos = -0.05, cex.axis = 1.2)
 		axis(2, at = c(0, 0.5, 1), tick = T)
 		
 		par(mar = pMar)
 		
-		attachedToProportions_methods <- c("Metamap-U-Reads", "Metamap-EM-Reads", "Kraken-Reads")
+		attachedToProportions_methods <- c("Metamap-U-Reads", "Metamap-EM-Reads", "Kraken-Reads") 
 		attachedToProportions_methods <- c("Metamap-EM-Reads", "Kraken-Reads")
-		attachedToProportions_methods_labels <- c("Kraken", "Metamap")
+		attachedToProportions_methods_labels <- c("Kraken", "MetaMaps")  
 		attachedToProportions_methods <- unique(attachedToD[["method"]])
 
 		stopifnot(length(attachedToProportions_methods) == length(attachedToProportions_methods_labels))
 		plotCircles_x_names <- c("Call rate", sapply(evaluationLevels_ordered, function(x){paste("", evaluationLevels_ordered_assignment_names[[x]])}, USE.NAMES = F) )
-		plotCircles_x_names[length(plotCircles_x_names)] <- "Other/Undefined"
-		axis(3, at = colMeans(bpPos), tick = F, labels = plotCircles_x_names, cex.axis = 0.8, pos = 1.5)
+		plotCircles_x_names[length(plotCircles_x_names)] <- "Other/Undef."
+		axis(3, at = colMeans(bpPos), tick = F, labels = plotCircles_x_names, cex.axis = 1.29, pos = 1.55)
 		
 		
 		plotCircles_realized_y_values <- c()
@@ -669,17 +677,17 @@ HMPreadPlot <- function()
 			stopifnot(length(plotCircles_x_names) == length(plotCircles_x_values))
 			
 			points_x <- colMeans(bpPos)
-			yPos <- 1.63 - (2.2*iMi - 1) * 0.1
+			yPos <- 1.66 - (2.2*iMi - 1) * 0.1
 			plotCircles_realized_y_values <- c(plotCircles_realized_y_values, yPos)
 			points_y <- rep(yPos, length(points_x))
 			
-			points(points_x, points_y, pch = 19, cex = plotCircles_x_values * 2.7, col = c("black", barplotPal_byLevel))		
+			points(points_x[2:length(points_x)], points_y[2:length(points_x)], pch = 19, cex = plotCircles_x_values[2:length(points_x)] * 2.7, col = c(barplotPal_byLevel))		
 			
-			text(points_x, points_y - 0.10, labels = paste(sprintf("%.f", 100*plotCircles_x_values), "%", sep = ""), adj = c(0.5, 0.5), cex = 0.65)
+			text(points_x, points_y - c(0, rep(0.10, length(points_y) -1 )), labels = paste(sprintf("%.f", 100*plotCircles_x_values), "%", sep = ""), adj = c(0.5, 0.5), cex = 1.2)
 		}
 		
-		axis(2, at = plotCircles_realized_y_values, tick = F, labels = attachedToProportions_methods_labels, las = 2, cex.axis = 0.8, line = -2.4)
-		axis(2, at = c(0.5), tick = F, labels = c("Accuracy called reads"), line = 2)
+		axis(2, at = plotCircles_realized_y_values, tick = F, labels = attachedToProportions_methods_labels, las = 2, cex.axis = 1.3, line = -2.4)
+		axis(2, at = c(0.5), tick = F, labels = c("Accuracy called reads"), line = 1.5, cex.axis = 1.4)
 
 	}
 
@@ -687,8 +695,598 @@ HMPreadPlot <- function()
 
 	dev.off()
 }
+
+HMP_like_reads_plot_2 <- function(prefix, plotTitle)
+{
+	pdf(paste("readsPlot_2_", plotTitle, ".pdf", sep = ""), useDingbats = F, height = 12, width = 7)
+	par(mfrow=c(3,1)) 
+
+	pMar <- par()$mar
+	par(mar = pMar + c(0,2,4.2,-2)) 	
+	
+	barPlotFile_byLevel <- paste(prefix, "_readCategory", sep = "")
+	barplotD_byLevel <- read.delim(barPlotFile_byLevel, header = T, stringsAsFactors = F)
+	# pdf(paste(prefix, "plots.pdf", sep = ""))
+
+	attachedToFile_byLevel <- paste(prefix, "_attachedTo", sep = "")
+	attachedToD <- read.delim(attachedToFile_byLevel, header = T, stringsAsFactors = F)
+
+	rCs <- c("truthLeafInDB", "novel_to_species", "novel_to_genus", "novel_to_superkingdom")
+	rCs <- rCs[rCs %in% barplotD_byLevel[["readCategory"]]]
+	rCs <- "ALL"
+	rCs_labels <- list()
+	rCs_labels[["truthLeafInDB"]] <- "Read source in DB"
+	rCs_labels[["novel_to_species"]] <- "Reads to novel species node"
+	rCs_labels[["novel_to_genus"]] <- "Reads to novel genus node"
+	rCs_labels[["novel_to_superkingdom"]] <- "Reads to novel superkingdom node"
+	rCs_labels[["ALL"]] <- "All reads"
+	rCs_labels[["p2000"]] <- "Reads >2000bp"
+
+	rCs_to_evaluationLevels <- list()
+	rCs_to_evaluationLevels[["truthLeafInDB"]] <- ""
+	rCs_to_evaluationLevels[["novel_to_species"]] <- "species"
+	rCs_to_evaluationLevels[["novel_to_genus"]] <- "genus"
+	rCs_to_evaluationLevels[["novel_to_superkingdom"]] <- "superkingdom"
+	rCs_to_evaluationLevels[["ALL"]] <- ""
+	rCs_to_evaluationLevels[["p2000"]] <- ""
+
+	evaluationLevels <- unique(barplotD_byLevel[["evaluationLevel"]])
+	evaluationLevels_ordered <- c("species", "genus", "family")
+	evaluationLevels_ordered_assignment_names <- list()
+	evaluationLevels_ordered_assignment_names[["species"]] <- "Strain/Species"
+	evaluationLevels_ordered_assignment_names[["genus"]] <- "Genus"
+	evaluationLevels_ordered_assignment_names[["family"]] <- "Family"
+	evaluationLevels_ordered_assignment_names[["superkingdom"]] <- "Superkingdom"
+	evaluationLevels_to_i <- list()
+	for(i in 1:length(evaluationLevels_ordered))
+	{
+		evaluationLevels_to_i[[evaluationLevels_ordered[[i]]]] <- i
+	}
+	barplotPal_byLevel <- barplotPal[2:5]
+
+	for(what in c("PPV", "Recall", "Recall-2000"))
+	{
+		#for(rC in rCs)
+		{
+
+			iMs <- sort(unique(barplotD_byLevel[["method"]][which(barplotD_byLevel[["readCategory"]] == "ALL")]))
+			iMs_labels <- iMs
+			iMs_labels[iMs_labels == "Metamap-EM-Reads"] <- "MetaMaps"
+			iMs_labels[iMs_labels == "MetaMap-EM"] <- "MetaMaps"
+			iMs_labels[iMs_labels == "Kraken-Reads"] <- "Kraken"
+			print(iMs_labels)
+			
+			accuracies_by_Method_byLevel <- list()
+			for(eL in evaluationLevels)
+			{
+				accuracies_by_Method_byLevel[[eL]] <- list()
+			}
+			
+			for(iM in iMs)
+			{
+				callRates_iM <- c()
+				for(eL in evaluationLevels)
+				{
+					rC <- "ALL"
+					if(what == "Recall-2000")
+					{
+						rC <- "p2000"
+					}
+					
+					stopifnot(rC %in% labels(rCs_labels))
+					stopifnot(rC %in% labels(rCs_to_evaluationLevels))
+										
+					relevantIndices <- which((barplotD_byLevel[["readCategory"]] == rC) & (barplotD_byLevel[["method"]] == iM) & (barplotD_byLevel[["evaluationLevel"]] == eL))
+					stopifnot(length(relevantIndices) == 1)
+					if(what == "PPV")
+					{
+						accuracies_by_Method_byLevel[[iM]][[eL]] <- barplotD_byLevel[["accuracyAvg"]][relevantIndices[[1]]]
+					}
+					else
+					{
+						accuracies_by_Method_byLevel[[iM]][[eL]] <- ( barplotD_byLevel[["accuracyAvg"]][relevantIndices[[1]]] * barplotD_byLevel[["callRateAvg"]][relevantIndices[[1]]] ) 
+					}
+				}
+			}
+			
+			vector_for_barplot <- c()
+			for(eL in c("absolute", evaluationLevels_ordered))
+			{
+				stopifnot(length(iMs) > 0)
+				for(iM in iMs)
+				{
+					stopifnot(eL %in% names(accuracies_by_Method_byLevel[[iM]]))
+					if((eL == "absolute") && (iM == "Kraken"))
+					{
+						vector_for_barplot <- c(vector_for_barplot, 0)				
+					}
+					else
+					{
+						vector_for_barplot <- c(vector_for_barplot, accuracies_by_Method_byLevel[[iM]][[eL]])
+					}
+					#cat(eL, " ", iM, " ", length(accuracies_by_Method_byLevel[[iM]][[eL]]), "\n")
+				}
+			}
+			
+			#print(vector_for_barplot)
+			stopifnot(length(vector_for_barplot) > 1)
+			matrix_for_barplot <- matrix(vector_for_barplot, ncol = 1 + length(evaluationLevels_ordered), nrow = length(iMs))
+			matrix_for_barplot[1] <- 0
+			# colnames(matrix_for_barplot) <- c("CR", evaluationLevels_ordered)
+			colorVector <- c(rep(barplotPal[[1]], length(iMs)))
+			for(i in 1:length(evaluationLevels_ordered))
+			{
+				thisEvaluationLevel <- evaluationLevels_ordered[[i]]
+				thisNovelLevel <- rCs_to_evaluationLevels[[rC]]
+				if(nchar(thisNovelLevel) > 0)
+				{
+					stopifnot(thisEvaluationLevel %in% names(evaluationLevels_to_i))
+					stopifnot(thisNovelLevel %in% names(evaluationLevels_to_i))
+					if(evaluationLevels_to_i[[thisEvaluationLevel]] < evaluationLevels_to_i[[thisNovelLevel]])
+					{
+						colorVector <- c(colorVector, rep("#EEEEEE", length(iMs)))
+					}
+					else
+					{
+						colorVector <- c(colorVector, rep(barplotPal_byLevel[[i]], length(iMs)))
+					}
+				}
+				else
+				{
+					colorVector <- c(colorVector, rep(barplotPal_byLevel[[i]], length(iMs)))
+				}
+			}
+			
+
+			# bpPos <- barplot(matrix_for_barplot, beside = T, main = paste("Reads - all experiments (compl./incompl.): ", rCs_labels[[rC]]), col = colorVector, ylim = c(0, 1.45), axes = F)
+			ylab_barplots <- what
+			if(ylab_barplots == "Recall")
+			{
+				ylab_barplots <- "Recall (all reads)"
+			}
+			if(ylab_barplots == "Recall-2000")
+			{
+				ylab_barplots <- "Recall (reads >2000bp)"
+			}			
+			bpPos <- barplot(matrix_for_barplot, beside = T, col = colorVector, ylim = c(0, 1), axes = F, cex.main = 2, cex.lab = 2.5, cex.axis = 2.5, ann = FALSE)
+			mtext(side = 2, text = ylab_barplots, line = 3.5, cex = 1.4)
+			axis(1, at = colMeans(bpPos), tick = F, labels = c("Strain", sapply(evaluationLevels_ordered, function(x){capitalize(x)}, USE.NAMES = F)), pos = -0.01, cex.axis = 2.5)
+			axis(1, at = bpPos, tick = F, labels = rep(iMs_labels, 1 + length(evaluationLevels_ordered)), las = 2, pos = -0.09, cex.axis = 2.5)
+			axis(2, at = c(0, 0.5, 1), tick = T, cex.axis = 2.5, cex.lab = 2)
+			
+			if(what == "PPV")
+			{ 
+				title(main = paste("Read assignment accuracy ", plotTitle), cex.main = 3, line = 3)		
+			}	
+			
+		}
+	}
+	par(mar = pMar)
+
+	par(mfrow=c(1,1)) 
+
+	dev.off()
+}
+
+xyPlots_i100_p25 <- function(f1, t1, f2, t2)
+{
+
+	pdf("xyPlots_i100_p25.pdf", useDingbats = F, height = 5, width = 10)
+	
+	plotLevels <- c("absolute", "species")
+	freq_methods <- c("Bracken-Dist", "MetaMap-EM-Dist")
+	freq_methods <- c("MetaMap-EM-Dist", "Bracken-Dist")
+
+	par(mfrow=c(1,2)) 
+	barplotFiles <- c(f1, f2)
+	titles <- c(t1, t2)
+	nGlobalPlot <- 0
+	for(dI in 1:length(barplotFiles)) # todo
+	{
+		frequencyFile <- paste(barplotFiles[[dI]], "/_forPlot_frequencies_xy", sep = "")
+		freqD <- read.delim(frequencyFile, header = T, stringsAsFactors = F)		
+		freqD[["freqTarget"]] <- as.numeric(freqD[["freqTarget"]])
+		freqD[["freqIs"]] <- as.numeric(freqD[["freqIs"]])	
+
+		legend_titles <- c()
+		legend_colours <- c()
+		legend_symbols <- c()
+		
+		xAxis_values <- c()
+		yAxis_values <- c()
+		for(iteration in c("defineAxes", "realDeal"))
+		{
+			nPlot <- 0
+
+			for(l in plotLevels)
+			{
+				for(m in freq_methods)
+				{	
+					if(!((m == "Bracken-Dist") && (l == "absolute")))
+					{
+						l_lookup <- l
+						if((l == "absolute"))
+						{
+							l_lookup <- "definedAndHypotheticalGenomes"
+						}
+
+						indices <- which((freqD[["method"]] == m) & (freqD[["level"]] == l_lookup) & (freqD[["variety"]] == "fullDB"))
+						print(c("lengthIndices", length(indices)))
+						stopifnot(length(indices) > 0)
+
+						if(iteration == "defineAxes")
+						{
+							xAxis_values <- c(xAxis_values, freqD[["freqTarget"]][indices])
+							yAxis_values <- c(yAxis_values, freqD[["freqIs"]][indices])
+							
+							legend_titles <- c(legend_titles, paste(captions[[m]], " ", l, sep = ""))
+							legend_colours <- c(legend_colours, colourByMethod[[m]])
+							legend_symbols <- c(legend_symbols, dotStyleByLevel[[l]])
+						}
+						else
+						{
+							stopifnot(length(xAxis_values) > 0)
+							stopifnot(length(yAxis_values) > 0)
+							xAxis_min <- min(c(xAxis_values, yAxis_values))
+							xAxis_max <- max(c(xAxis_values, yAxis_values))
+							xAxis_half <- mean(c(xAxis_min, xAxis_max))
+							xAxis_twoThirds <- xAxis_min + (2/5) * (xAxis_max - xAxis_min)
+
+							yAxis_min <- min(c(xAxis_values, yAxis_values))
+							yAxis_max <- max(c(xAxis_values, yAxis_values))
+							yAxis_half <- mean(c(yAxis_min, yAxis_max))
+							yAxis_twoThirds <- yAxis_min + (4/5) * (yAxis_max - yAxis_min)
+							yAxis_twoThirds_2 <- yAxis_min + (3/5) * (yAxis_max - yAxis_min)
+									
+							# cat(paste(m, "@", l, ", ", "fullDB", ", r = ", cor(frTarget, frIs), sep = ""), "\n")
+							
+							pointColours <- c()
+							pointCexs <- c()
+							pointSymbols <- c()
+							for(i in indices)
+							{
+								taxonID <- freqD[["taxonID"]][[i]]
+								pointLevel <- freqD[["taxonIDCategory"]][[i]]
+								mappable <- freqD[["isMappable"]][[i]]
+								proportionNovelTotal <- freqD[["proportionNovelTotal"]][[i]]
+								pointColour <- ""
+								pointCex <- 2
+								pointSymbol <- 0
+								
+								if(!(m %in% names(colourByMethod)))
+								{
+									cat("undefined color for ", m, "\n")
+									print(names(colourByMethod))
+								}
+								stopifnot(m %in% names(colourByMethod))
+								pointColour <- colourByMethod[[m]]
+								stopifnot(l %in% names(dotStyleByLevel))								
+								pointSymbol <- dotStyleByLevel[[l]]
+								
+								# if(taxonID %in% names(pC))
+								# {
+									# pointColour <- pC[[taxonID]]
+									# pointCex <- pCex[[taxonID]]
+									# pointSymbol <- pS[[taxonID]]
+								# }
+								# else if(mappable == 1)
+								# {
+									# pointColour <- pC[["Mappable"]]
+									# pointCex <- pCex[["Mappable"]]
+									# pointSymbol <- pS[["Mappable"]]
+								# }
+								# else if(pointLevel %in% names(pC))
+								# {
+									# pointColour <- pC[[pointLevel]]
+									# pointCex <- pCex[[pointLevel]]
+									# pointSymbol <- pS[[pointLevel]]
+								# }
+								# else
+								# {
+									# pointColour <- pC[["Other"]]
+									# pointCex <- pCex[["Other"]]
+									# pointSymbol <- pS[["Other"]]
+									# cat("Unknown point level: ", pointLevel, "\n")
+								# }
+								
+								# pointSymbol <- 3
+								
+								# if(proportionNovelTotal > 0)
+								# {
+									# pointColour <- pC[["novelAdmixture"]]				
+								# }				
+
+								pointColours <- c(pointColours, pointColour)
+								pointCexs <- c(pointCexs, pointCex)
+								pointSymbols <- c(pointSymbols, pointSymbol)
+							}
+							# print(pointSymbols)
+							#print(c(length(pointColours), length(pointCexs), length(indices)))
+							#print(pointColours)
+							
+							nPlot <- nPlot + 1
+							nGlobalPlot <- nGlobalPlot + 1
+							if(nPlot == 1)
+							{
+								plot(0, 0, col = "white", main = paste(titles[[dI]], " composition", sep = ""), cex.main = 2, cex.axis = 1.2, cex.lab = 1.2, xlab = "True frequency", axes = F, ylab = "Estimated frequency", xlim = c(xAxis_min, xAxis_max), ylim = c(yAxis_min, yAxis_max))	
+								lines(c(xAxis_min, xAxis_max), c(yAxis_min, yAxis_max), col = "gray")
+								axis(2, xaxs = "i", labels = T, cex.axis = 1.2)			
+								axis(1, xaxs = "i", labels = T, cex.axis = 1.2)
+							}
+							if(nGlobalPlot == 2)
+							{
+								legend("bottomright", legend = legend_titles, col = legend_colours, pch = legend_symbols, cex = 1.2, bty = "n")							
+							}
+							
+							frTarget <- freqD[["freqTarget"]][indices]
+							frIs <- freqD[["freqIs"]][indices]
+							taxonIDs <- freqD[["taxonID"]][indices]
+							taxonLabels <- freqD[["taxonLabel"]][indices]		
+							stopifnot(length(indices) > 0)				
+							points(frTarget, frIs,  pch = pointSymbols, cex = pointCexs, col = pointColours)
+							stopifnot(length(frTarget) > 0)
+							print(c(length(frTarget), length(pointColours)))
+							stopifnot(length(frTarget) == length(pointColours))
+							r <- cor(frTarget, frIs)
+							L1 <- sum(abs(frTarget - frIs))
+			
+					
+							#text(xAxis_twoThirds, yAxis_twoThirds, labels = paste("r**2 = ", sprintf("%.3f", r**2), sep = ""), cex = 1.5)
+							#text(xAxis_twoThirds, yAxis_twoThirds_2, labels = paste("L1 = ", sprintf("%.3f", L1), sep = ""), cex = 1.5)
+	
+							if(1 == 0)
+							{
+							if(m == freq_methods[[1]])
+							{
+								axis(2, xaxs = "i")		
+								axis(2, at = xAxis_half, tick = F, line = 1, labels = c("Inferred"), cex.axis = 1)				
+								axis(2, at = yAxis_half, tick = F, line = 2.5, labels = c(capitalize(l)), cex.axis = 1.8)	
+							}
+							else
+							{
+							}
+							
+							if(!((l == "definedGenomes") && ((m == "Kraken-Dist") || (m == "Bracken-Dist"))))
+							{
+								axis(1, xaxs = "i")			
+								axis(1, at = xAxis_half, tick = F, line = 1, labels = c("Truth"), cex.axis = 1)	
+							}
+							else
+							{
+							}
+							
+							if(l == freq_levels[[1]])
+							{
+								title(main = m, cex.main = 1.8, line = 1)		
+							}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	par(mfrow=c(1,1)) 
+
+	dev.off()  
+}
+
+
+HMPreadPlot <- function()
+{
+
+	pdf(paste("HMPReads.pdf", sep = ""), useDingbats = F, height = 6, width = 8)
+
+	barPlotFile_byLevel <- "/data/projects/phillippy/projects/MetaMap/HMPresults/PacBio_forPlot_barplots_readCategory"
+	barplotD_byLevel <- read.delim(barPlotFile_byLevel, header = T, stringsAsFactors = F)
+	# pdf(paste(prefix, "plots.pdf", sep = ""))
+
+	attachedToFile_byLevel <- "/data/projects/phillippy/projects/MetaMap/HMPresults/PacBio_forPlot_barplots_attachedTo"
+	attachedToD <- read.delim(attachedToFile_byLevel, header = T, stringsAsFactors = F)
+
+	rCs <- c("truthLeafInDB", "novel_to_species", "novel_to_genus", "novel_to_superkingdom")
+	rCs <- rCs[rCs %in% barplotD_byLevel[["readCategory"]]]
+	rCs <- "ALL"
+	rCs_labels <- list()
+	rCs_labels[["truthLeafInDB"]] <- "Read source in DB"
+	rCs_labels[["novel_to_species"]] <- "Reads to novel species node"
+	rCs_labels[["novel_to_genus"]] <- "Reads to novel genus node"
+	rCs_labels[["novel_to_superkingdom"]] <- "Reads to novel superkingdom node"
+	rCs_labels[["ALL"]] <- "All reads"
+
+	rCs_to_evaluationLevels <- list()
+	rCs_to_evaluationLevels[["truthLeafInDB"]] <- ""
+	rCs_to_evaluationLevels[["novel_to_species"]] <- "species"
+	rCs_to_evaluationLevels[["novel_to_genus"]] <- "genus"
+	rCs_to_evaluationLevels[["novel_to_superkingdom"]] <- "superkingdom"
+	rCs_to_evaluationLevels[["ALL"]] <- ""
+
+	evaluationLevels <- unique(barplotD_byLevel[["evaluationLevel"]])
+	evaluationLevels_ordered <- c("species", "genus", "family", "superkingdom")
+	evaluationLevels_ordered_assignment_names <- list()
+	evaluationLevels_ordered_assignment_names[["species"]] <- "Strain/Species"
+	evaluationLevels_ordered_assignment_names[["genus"]] <- "Genus"
+	evaluationLevels_ordered_assignment_names[["family"]] <- "Family"
+	evaluationLevels_ordered_assignment_names[["superkingdom"]] <- "Superkingdom"
+	evaluationLevels_to_i <- list()
+	for(i in 1:length(evaluationLevels_ordered))
+	{
+		evaluationLevels_to_i[[evaluationLevels_ordered[[i]]]] <- i
+	}
+	barplotPal_byLevel <- barplotPal[2:5]
+
+	for(rC in rCs)
+	{
+		stopifnot(rC %in% labels(rCs_labels))
+		stopifnot(rC %in% labels(rCs_to_evaluationLevels))
+		
+		iMs <- sort(unique(barplotD_byLevel[["method"]][which(barplotD_byLevel[["readCategory"]] == rC)]))
+		iMs_labels <- iMs
+		iMs_labels[iMs_labels == "MetaMap-EM"] <- "MetaMaps"
+		
+		callRates_by_Method <- c()
+		callRates_by_Method_list <- list()
+		accuracies_by_Method_byLevel <- list()
+		for(eL in evaluationLevels)
+		{
+			accuracies_by_Method_byLevel[[eL]] <- list()
+		}
+		for(iM in iMs)
+		{
+			callRates_iM <- c()
+			for(eL in evaluationLevels)
+			{
+				relevantIndices <- which((barplotD_byLevel[["readCategory"]] == rC) & (barplotD_byLevel[["method"]] == iM) & (barplotD_byLevel[["evaluationLevel"]] == eL))
+				stopifnot(length(relevantIndices) == 1)
+				callRates_iM <- c(callRates_iM, barplotD_byLevel[["callRateAvg"]][relevantIndices[[1]]])
+				accuracies_by_Method_byLevel[[iM]][[eL]] <- barplotD_byLevel[["accuracyAvg"]][relevantIndices[[1]]]
+			}
+			callRate <- callRates_iM[[1]]
+			if(!all(abs(callRates_iM - callRate) <= 1e-5))
+			{
+				print("Call rate mismatch")
+				print(callRate)
+				print(callRates_iM)
+			}
+			stopifnot(all(abs(callRates_iM - callRate) <= 1e-5))
+			callRates_by_Method <- c(callRates_by_Method, callRate)
+			callRates_by_Method_list[[iM]] <- callRate
+		}
+		
+		vector_for_barplot <- c()
+		for(eL in c("absolute", evaluationLevels_ordered))
+		{
+			stopifnot(length(iMs) > 0)
+			for(iM in iMs)
+			{
+				stopifnot(eL %in% names(accuracies_by_Method_byLevel[[iM]]))
+				if((eL == "absolute") && (iM == "Kraken"))
+				{
+					vector_for_barplot <- c(vector_for_barplot, 0)				
+				}
+				else
+				{
+					vector_for_barplot <- c(vector_for_barplot, accuracies_by_Method_byLevel[[iM]][[eL]])
+				}
+				#cat(eL, " ", iM, " ", length(accuracies_by_Method_byLevel[[iM]][[eL]]), "\n")
+			}
+		}
+		#print(vector_for_barplot)
+		stopifnot(length(vector_for_barplot) > 1)
+		matrix_for_barplot <- matrix(vector_for_barplot, ncol = 1 + length(evaluationLevels_ordered), nrow = length(iMs))
+		# colnames(matrix_for_barplot) <- c("CR", evaluationLevels_ordered)
+		colorVector <- c(rep(barplotPal[[1]], length(iMs)))
+		for(i in 1:length(evaluationLevels_ordered))
+		{
+			thisEvaluationLevel <- evaluationLevels_ordered[[i]]
+			thisNovelLevel <- rCs_to_evaluationLevels[[rC]]
+			if(nchar(thisNovelLevel) > 0)
+			{
+				stopifnot(thisEvaluationLevel %in% names(evaluationLevels_to_i))
+				stopifnot(thisNovelLevel %in% names(evaluationLevels_to_i))
+				if(evaluationLevels_to_i[[thisEvaluationLevel]] < evaluationLevels_to_i[[thisNovelLevel]])
+				{
+					colorVector <- c(colorVector, rep("#EEEEEE", length(iMs)))
+				}
+				else
+				{
+					colorVector <- c(colorVector, rep(barplotPal_byLevel[[i]], length(iMs)))
+				}
+			}
+			else
+			{
+				colorVector <- c(colorVector, rep(barplotPal_byLevel[[i]], length(iMs)))
+			}
+		}
+		
+		pMar <- par()$mar
+		par(mar = pMar + c(1.2,0,0,0)) 
+		# bpPos <- barplot(matrix_for_barplot, beside = T, main = paste("Reads - all experiments (compl./incompl.): ", rCs_labels[[rC]]), col = colorVector, ylim = c(0, 1.45), axes = F)
+		bpPos <- barplot(matrix_for_barplot, beside = T, main = "HMP7 read assignment accuracy", col = colorVector, ylim = c(0, 1.75), axes = F, cex.main = 2)
+
+		axis(1, at = colMeans(bpPos), tick = F, labels = c("Strain", sapply(evaluationLevels_ordered, function(x){capitalize(x)}, USE.NAMES = F)), pos = 0.05, cex.axis = 1.3)
+		axis(1, at = bpPos, tick = F, labels = rep(iMs_labels, 1 + length(evaluationLevels_ordered)), las = 2, pos = -0.05, cex.axis = 1.2)
+		axis(2, at = c(0, 0.5, 1), tick = T)
+		
+
+		par(mar = pMar)
+		
+		attachedToProportions_methods <- c("Metamap-U-Reads", "Metamap-EM-Reads", "Kraken-Reads")
+		attachedToProportions_methods <- c("Metamap-EM-Reads", "Kraken-Reads")
+		attachedToProportions_methods_labels <- c("Kraken", "MetaMaps")
+		attachedToProportions_methods <- unique(attachedToD[["method"]])
+
+		stopifnot(length(attachedToProportions_methods) == length(attachedToProportions_methods_labels))
+		plotCircles_x_names <- c("Call rate", sapply(evaluationLevels_ordered, function(x){paste("", evaluationLevels_ordered_assignment_names[[x]])}, USE.NAMES = F) )
+		plotCircles_x_names[length(plotCircles_x_names)] <- "Other/Undef."
+		axis(3, at = colMeans(bpPos), tick = F, labels = plotCircles_x_names, cex.axis = 1.29, pos = 1.55)
+		
+	
+		plotCircles_realized_y_values <- c()
+		for(iMi in 1:length(attachedToProportions_methods))
+		{
+			iM <- attachedToProportions_methods[[iMi]]
+			
+			plotCircles_x_values <- c(callRates_by_Method_list[[iM]])
+			for(eLi in 1:length(evaluationLevels_ordered))
+			{
+				thisEvaluationLevel <- evaluationLevels_ordered[[eLi]]
+				indices <- which((attachedToD[["method"]] == iM) & (attachedToD[["readCategory"]] == rC))
+				if(!(length(indices) == 1))
+				{
+					print(indices)					
+					cat("method = ", iM, ", readCategory = ", rC, "\n")
+				}
+				stopifnot(length(indices) == 1)
+				columnName_attachedTo <- paste("attachedTo_", thisEvaluationLevel, sep = "")
+				if(!(columnName_attachedTo %in% names(attachedToD)))
+				{
+					cat("Missing column: ", columnName_attachedTo, "\n")
+				}
+				stopifnot(columnName_attachedTo %in% names(attachedToD))
+				
+				if(eLi < length(evaluationLevels_ordered))
+				{
+					plotCircles_x_values <- c(plotCircles_x_values, attachedToD[[columnName_attachedTo]][[indices[[1]]]])
+				}
+				else
+				{
+					plotCircles_x_values <- c(plotCircles_x_values, 1 - sum(plotCircles_x_values[2:length(plotCircles_x_values)]))	
+				}
+			}
+			stopifnot(length(plotCircles_x_names) == length(plotCircles_x_values))
+			
+			points_x <- colMeans(bpPos)
+			yPos <- 1.66 - (2.2*iMi - 1) * 0.1
+			plotCircles_realized_y_values <- c(plotCircles_realized_y_values, yPos)
+			points_y <- rep(yPos, length(points_x))
+			
+			points(points_x[2:length(points_x)], points_y[2:length(points_x)], pch = 19, cex = plotCircles_x_values[2:length(points_x)] * 2.7, col = c(barplotPal_byLevel))		
+			
+			text(points_x, points_y - c(0, rep(0.10, length(points_y) -1 )), labels = paste(sprintf("%.f", 100*plotCircles_x_values), "%", sep = ""), adj = c(0.5, 0.5), cex = 1.2)
+		}
+		
+		axis(2, at = plotCircles_realized_y_values, tick = F, labels = attachedToProportions_methods_labels, las = 2, cex.axis = 1.3, line = -2.4)
+		axis(2, at = c(0.5), tick = F, labels = c("Accuracy called reads"), line = 1.5, cex.axis = 1.4)
+
+	}
+
+	par(mfrow=c(1,1)) 
+
+	dev.off()  
+}
+
+
+HMP_like_reads_plot_2("../databases/miniSeq+H/simulations_i100_specifiedFrequencies/_forPlot_barplots", "i100")
+HMP_like_reads_plot_2("../databases/miniSeq+H/simulations_p25_logNormal/_forPlot_barplots", "p25")
+HMP_like_reads_plot_2("/data/projects/phillippy/projects/MetaMap/HMPresults/PacBio_forPlot_barplots", "HMP7")
+
+#HMP_like_reads_plot("../databases/miniSeq+H/simulations_i100_specifiedFrequencies/", "i100")
+#HMP_like_reads_plot("../databases/miniSeq+H/simulations_p25_logNormal/", "p25")
+
 #unknownFrequencyPlots("../databases/miniSeq+H/simulations_p25_logNormal", "p25")
 readLengthPlot("../databases/miniSeq+H/simulations_i100_specifiedFrequencies", "i100")
-twoReadPlots("../databases/miniSeq+H/simulations_i100_specifiedFrequencies/_forPlot_barplots_fullDB", "i100", "../databases/miniSeq+H/simulations_p25_logNormal/_forPlot_barplots_fullDB", "p25")
-#HMPreadPlot()
-
+# twoReadPlots("../databases/miniSeq+H/simulations_i100_specifiedFrequencies/_forPlot_barplots_fullDB", "i100", "../databases/miniSeq+H/simulations_p25_logNormal/_forPlot_barplots_fullDB", "p25")
+# HMPreadPlot()
+xyPlots_i100_p25("../databases/miniSeq+H/simulations_i100_specifiedFrequencies/", "i100", "../databases/miniSeq+H/simulations_p25_logNormal/", "p25")

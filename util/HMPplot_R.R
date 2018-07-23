@@ -1,6 +1,7 @@
 pdf("HMPplot.pdf", width = 10, height = 5)
 sources_nonTruth_order <- c("Kraken", "Bracken", "MetaMap-EM", "MetaMap-U")
 sources_nonTruth_order <- c("Kraken", "Bracken", "MetaMap-EM")
+sources_nonTruth_order <- c( "MetaMap-EM", "Bracken")
 #for(v in c("PacBio", "Nanopore"))
 for(v in c("PacBio"))
 {
@@ -45,11 +46,13 @@ for(v in c("PacBio"))
 		
 		legend_for_plot <- c()
 		colors_for_legend <- c("blue", "lightblue", "cyan", "red")
+		colors_for_legend <- c("blue", "red", "lightblue")
+		colors_for_legend <- c("gray", "blue", "firebrick2")
 		for(S in c("Truth", sources_nonTruth))
 		{
 			if(S == "MetaMap-EM")
-			{
-				S <- "MetaMap"
+			{ 
+				S <- "MetaMaps"
 			}	
 			legend_for_plot <- c(legend_for_plot, S)
 		}
@@ -107,7 +110,7 @@ for(v in c("PacBio"))
 		
 		xyPlot_max <- max(D_level[["F"]])
 		
-		if(1 == 0)
+		if(1 == 1)
 		{
 			
 			plot(0, 0, xlim = c(0, xyPlot_max), ylim = c(0, xyPlot_max), main = paste(v, ": Abundance estimates [", analysisLevel, "]", sep = ""), col = "white", xlab = "Truth", ylab = "Estimation")

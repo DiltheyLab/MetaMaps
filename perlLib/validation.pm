@@ -434,6 +434,7 @@ sub readLevelComparison
 	
 	my @readIDs = keys %$reads_truth_absolute;
 	die "readLevelComparison(..): We don't have absolute truth for some reads" unless(all {exists $reads_truth_absolute->{$_}} keys %$reads_inferred);
+	@readIDs = grep {exists $readLengths_href->{$_}} @readIDs; # todo remove 
 	
 	#unless((scalar(@readIDs) == scalar(keys %$reads_inferred)) and (all {exists $reads_inferred->{$_}} @readIDs))
 	#{
@@ -500,6 +501,11 @@ sub readLevelComparison
 			# push(@categories, 'truthClassified');
 		}	
 		
+		die Dumper("Missing read length for read $readID", scalar(keys %$readLengths_href), ((keys %$readLengths_href)[ 0 .. 10 ])) unless(defined $readLengths_href->{$readID});
+		if($readLengths_href->{$readID} > 2000)
+		{
+			push(@categories, 'p2000');
+		}
 		return @categories;
 	};
 	
@@ -564,6 +570,8 @@ sub readLevelComparison
 				$n_reads_correct{$category}{missing} = 0;
 				$n_reads_correct{$category}{N} = 0;
 				$n_reads_correct{$category}{correct} = 0;
+				$n_reads_correct{$category}{N_n0} = 0;
+				$n_reads_correct{$category}{correct_n0} = 0;				
 			}	
 			
 			unless(defined $n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{N})
@@ -571,6 +579,8 @@ sub readLevelComparison
 				$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{missing} = 0;
 				$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{N} = 0;
 				$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{correct} = 0;			
+				$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{N_n0} = 0;
+				$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{correct_n0} = 0;							
 			}	
 			
 			unless(defined $n_reads_unknownStats_byLevel{$category}{'genome'}{N_unclassified_should0_is0})
@@ -591,6 +601,8 @@ sub readLevelComparison
 					$n_reads_correct_byLevel{$category}{$level}{correct} = 0;
 					$n_reads_correct_byLevel{$category}{$level}{correct_exactlyAtLevel} = 0;
 					$n_reads_correct_byLevel{$category}{$level}{correct_truthDefined} = 0;	
+					$n_reads_correct_byLevel{$category}{$level}{N_n0} = 0;
+					$n_reads_correct_byLevel{$category}{$level}{correct_n0} = 0;	
 					
 					$n_reads_unknownStats_byLevel{$category}{$level}{N_unclassified_should0_is0} = 0;
 					$n_reads_unknownStats_byLevel{$category}{$level}{N_unclassified_should0_is1} = 0;
@@ -603,6 +615,8 @@ sub readLevelComparison
 					$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{missing} = 0;
 					$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{N} = 0;
 					$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{correct} = 0;
+					$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{N_n0} = 0;
+					$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{correct_n0} = 0;
 				}
 			}
 		}
@@ -639,6 +653,18 @@ sub readLevelComparison
 					{
 						# print join("\t", $category, $readID, $inferredTaxonID, $trueTaxonID_inUsedDB, $reads_truth_absolute->{$readID}), "\n";
 					}
+				}
+				
+				if(($inferredTaxonID ne '0') and ($inferredTaxonID ne 'Unclassified'))
+				{
+					$n_reads_correct{$category}{N_n0}++; 
+					$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{N_n0}++;
+					if($inferredTaxonID eq $trueTaxonID_inUsedDB)
+					{
+						$n_reads_correct{$category}{correct_n0}++;
+						$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{correct_n0}++;
+					}					
+					
 				}
 			}
 			
@@ -739,7 +765,26 @@ sub readLevelComparison
 					die unless(defined $unclassified_key);
 
 					$n_reads_unknownStats_byLevel{$category}{$level}{$unclassified_key}++;
-					
+						
+		
+					if(($lightning_inferred->{$level} ne 'Unclassified') and ($lightning_inferred->{$level} ne '0'))
+					{
+						$n_reads_correct_byLevel{$category}{$level}{N_n0}++;
+						if($level ne 'absolute')
+						{
+							$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{N_n0}++;
+						}		
+				
+						if($lightning_truth->{$level} eq $lightning_inferred->{$level})
+						{
+							$n_reads_correct_byLevel{$category}{$level}{correct_n0}++;
+							if($level ne 'absolute')
+							{						
+								$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{correct_n0}++;						
+							}
+						}
+					}
+				
 					if($lightning_truth->{$level} eq $lightning_inferred->{$level})
 					{
 						# if(($level eq 'absolute') and ($category eq 'novel') and ($label =~ /Metamap-EM-Reads/))
@@ -1124,19 +1169,29 @@ sub addResultsToGlobalStore
 				die unless(exists $d->{missing});
 				die unless(exists $d->{correct});
 				my $N = $d->{N} + $d->{missing};
+				die unless(exists $d->{N_n0});				
+				die unless(exists $d->{correct_n0});				
 				die unless($N > 0);
 				die unless($d->{N} > 0);
-			
+				
+				
 				my $CR = $d->{N} / $N; die unless(($CR >= 0) and ($CR <= 1));
 				my $accuracy = $d->{correct} / $d->{N}; die unless(($accuracy >= 0) and ($accuracy <= 1));
 				
+				my $PPV_n0 = 0;				
+				if($d->{N_n0})
+				{
+					$PPV_n0 = $d->{correct_n0} / $d->{N_n0};
+				}
+				
 				push(@{$allSimulations_data_href->{highLevel_stats_keptSeparate_bySimulation}->[$jobI]{$variety_forStore}{$label}{$category}{absolute}{CR}}, $CR); # hopefully ok
 				push(@{$allSimulations_data_href->{highLevel_stats_keptSeparate_bySimulation}->[$jobI]{$variety_forStore}{$label}{$category}{absolute}{Accuracy}}, $accuracy); # hopefully ok
+				push(@{$allSimulations_data_href->{highLevel_stats_keptSeparate_bySimulation}->[$jobI]{$variety_forStore}{$label}{$category}{absolute}{PPV_n0}}, $PPV_n0); # hopefully ok
 				
 				if(($variety !~ /allCombined/) and ($variety !~ /incompleteCombined/))
 				{
 					
-					push(@{$allSimulations_data_href->{callRate_and_accuracy_byReadCategory}->{$category}{$label}{absolute}}, [$CR, $accuracy, $accuracy]); # hopefully ok
+					push(@{$allSimulations_data_href->{callRate_and_accuracy_byReadCategory}->{$category}{$label}{absolute}}, [$CR, $accuracy, $accuracy, $PPV_n0]); # hopefully ok
 					
 					my @keys_attachedTo = grep {$_ =~ /^attachedTo/} keys %$d;
 					die unless(scalar(@keys_attachedTo));
@@ -1185,20 +1240,28 @@ sub addResultsToGlobalStore
 					die unless(exists $d->{correct});
 					die unless(exists $d->{correct_exactlyAtLevel}); 
 					my $N = $d->{N} + $d->{missing};
+					die unless(exists $d->{N_n0});				
+					die unless(exists $d->{correct_n0});					
 					die unless($N > 0);
 					die unless($d->{N} > 0);
 					 
 					my $CR = $d->{N} / $N; die unless(($CR >= 0) and ($CR <= 1));
 					my $accuracy = $d->{correct} / $d->{N}; die unless(($accuracy >= 0) and ($accuracy <= 1));
 					my $accuracy_exactlyAtLevel = $d->{correct_exactlyAtLevel} / $d->{N}; die unless(($accuracy_exactlyAtLevel >= 0) and ($accuracy_exactlyAtLevel <= 1));
-					
+					my $PPV_n0 = 0;				
+					if($d->{N_n0})
+					{
+						$PPV_n0 = $d->{correct_n0} / $d->{N_n0};
+					}
+				
 					push(@{$allSimulations_data_href->{highLevel_stats_keptSeparate_bySimulation}->[$jobI]{$variety_forStore}{$label}{$category}{$level}{CR}}, $CR); # hopefully ok
 					push(@{$allSimulations_data_href->{highLevel_stats_keptSeparate_bySimulation}->[$jobI]{$variety_forStore}{$label}{$category}{$level}{Accuracy}}, $accuracy);  # hopefully ok
 					push(@{$allSimulations_data_href->{highLevel_stats_keptSeparate_bySimulation}->[$jobI]{$variety_forStore}{$label}{$category}{$level}{AccuracyExactlyAtLevel}}, $accuracy_exactlyAtLevel); # hopefully ok	
+					push(@{$allSimulations_data_href->{highLevel_stats_keptSeparate_bySimulation}->[$jobI]{$variety_forStore}{$label}{$category}{$level}{PPV_n0}}, $PPV_n0); # hopefully ok	
 					 
 					if(($variety !~ /allCombined/) and ($variety !~ /incompleteCombined/) and ($level ne 'absolute'))
 					{
-						push(@{$allSimulations_data_href->{callRate_and_accuracy_byReadCategory}->{$category}{$label}{$level}}, [$CR, $accuracy, $accuracy_exactlyAtLevel]);	 # hopefully ok			
+						push(@{$allSimulations_data_href->{callRate_and_accuracy_byReadCategory}->{$category}{$label}{$level}}, [$CR, $accuracy, $accuracy_exactlyAtLevel, $PPV_n0]);	 # hopefully ok			
 						
 						my @keys_attachedTo = grep {$_ =~ /^attachedTo/} keys %$d;
 						die unless(scalar(@keys_attachedTo));
@@ -1230,15 +1293,23 @@ sub addResultsToGlobalStore
 						my $d = $n_reads_correct_byVariety_byLevel_byLength_local_href->{$variety}{$label}{$category}{$level}{$rL};
 						die Dumper('N', $level, $rL, $d) unless(exists $d->{N});
 						die Dumper('missing', $level, $rL, $d) unless(exists $d->{missing});
+						die Dumper('N_n0', $level, $rL, $d) unless(exists $d->{N_n0});
+						die Dumper('correct_n0', $level, $rL, $d) unless(exists $d->{correct_n0});
 						die unless(exists $d->{correct});				
 						
 						my $N = $d->{N} + $d->{missing}; die unless($d > 0);
 						my $CR = $d->{N} / $N; die unless(($CR >= 0) and ($CR <= 1));
 						my $accuracy = ($d->{N} > 0) ? ($d->{correct} / $d->{N}) : -1; die unless(($accuracy >= -1) and ($accuracy <= 1));
 
+						my $PPV_n0 = 0;				
+						if($d->{N_n0})
+						{
+							$PPV_n0 = $d->{correct_n0} / $d->{N_n0};
+						}
+				
 						if(($variety !~ /allCombined/) and ($variety !~ /incompleteCombined/))
 						{	
-							push(@{$allSimulations_data_href->{callRate_and_accuracy_byReadCategory_byLength}->{$category}{$label}{$level}{$rL}}, [$CR, $accuracy]); # seems OK						
+							push(@{$allSimulations_data_href->{callRate_and_accuracy_byReadCategory_byLength}->{$category}{$label}{$level}{$rL}}, [$CR, $accuracy, $PPV_n0]); # seems OK						
 						}
 					}				
 				}
@@ -1568,7 +1639,6 @@ sub produceValidationOutputFiles
 	open(FREQEVALUATION_ALL, '>>', $outputDir_allSimulations . '/_all_frequenciesCorrectByLevel') or die;
 	open(UNCLASSIFIED_ALL, '>>', $outputDir_allSimulations . '/_all_unclassifiedSummary_reads') or die;
 	open(UNCLASSIFIED_FREQ_ALL, '>>', $outputDir_allSimulations . '/_all_unclassifiedSummary_frequencies') or die;
-	
 
 	my @varieties = qw/allCombined fullDB incompleteCombined removeOne_self removeOne_species removeOne_genus/;
 	@varieties = grep {exists $allSimulations_data_href->{n_reads_correct_byVariety}->{$_}} @varieties;
@@ -1737,7 +1807,7 @@ sub produceValidationOutputFiles
 	
 	{
 		open(BARPLOTSREADCAT, '>', $prefix_for_outputFiles . '_forPlot_barplots_readCategory') or die;
-		print BARPLOTSREADCAT join("\t", qw/readCategory evaluationLevel method N callRateAvg accuracyAvg accuracyAvgExactltAtLevel callRate_raw accuracy_raw accuracy_raw_exactltyAtLevel/), "\n";
+		print BARPLOTSREADCAT join("\t", qw/readCategory evaluationLevel method N callRateAvg accuracyAvg accuracyAvgExactltAtLevel PPV_n0 callRate_raw accuracy_raw accuracy_raw_exactltyAtLevel PPV_n0_raw/), "\n";
 		
 		#open(BYREADLENGTH, '>', $prefix_for_outputFiles . '_forPlot_byReadLength') or die;
 		#print BYREADLENGTH join("\t", qw/readCategory evaluationLevel method readLength callRateAvg accuracyAvg accuracyAvgExactltAtLevel/), "\n";
@@ -1756,21 +1826,25 @@ sub produceValidationOutputFiles
 					my @callRates;
 					my @accuracies;
 					my @accuracies_exactlyAtLevel;
+					my @PPV_n0;
 					foreach my $e (@$v)
 					{
 						push(@callRates, $e->[0]);
 						push(@accuracies, $e->[1]);
 						push(@accuracies_exactlyAtLevel, $e->[2]);
+						push(@PPV_n0, $e->[3]);
 					}	
 					die unless(scalar(@callRates));
 					die unless(scalar(@accuracies));
 					die unless(scalar(@accuracies_exactlyAtLevel));
 					die unless(scalar(@callRates) == scalar(@accuracies));
 					die unless(scalar(@callRates) == scalar(@accuracies_exactlyAtLevel));
+					die unless(scalar(@callRates) == scalar(@PPV_n0));
 					my $avg_callRate = Util::mean(@callRates);
 					my $avg_accuracy = Util::mean(@accuracies);
+					my $avg_PPV_n0 = Util::mean(@PPV_n0);
 					my $avg_accuracy_exactlyAtLevel = Util::mean(@accuracies_exactlyAtLevel);
-					print BARPLOTSREADCAT join("\t", $readCategory, $level, $label, scalar(@callRates), $avg_callRate, $avg_accuracy, $avg_accuracy_exactlyAtLevel, join(';', @callRates), join(';', @accuracies), join(';', @accuracies_exactlyAtLevel)), "\n";
+					print BARPLOTSREADCAT join("\t", $readCategory, $level, $label, scalar(@callRates), $avg_callRate, $avg_accuracy, $avg_accuracy_exactlyAtLevel, $avg_PPV_n0, join(';', @callRates), join(';', @accuracies), join(';', @accuracies_exactlyAtLevel), join(';', @PPV_n0)), "\n";
 					
 					my @attachmentHashes = @{$allSimulations_data_href->{attachedTo_byReadCategory}->{$readCategory}{$label}{$level}};				
 					foreach my $h (@attachmentHashes)
@@ -1915,7 +1989,7 @@ sub produceValidationOutputFiles
 		die Dumper("Missing evaluation levels I", \@evaluationLevels, \%_evaluationLevels, [\@varieties]) unless(all {exists $_evaluationLevels{$_}} @evaluationLevels);
 		
 		open(BARPLOTSFULLDB, '>', $prefix_for_outputFiles . '_forPlot_barplots_fullDB') or die;
-		print BARPLOTSFULLDB join("\t", qw/readLevel variety method level callRate accuracy averagedOver/), "\n";
+		print BARPLOTSFULLDB join("\t", qw/readLevel variety method level callRate accuracy PPV_n0 averagedOver/), "\n";
 			
 		{
 			open(READSABSOLUTELYCORRECT, '>', $prefix_for_outputFiles . '_readsAbsolutelyCorrect') or die;
@@ -1928,8 +2002,8 @@ sub produceValidationOutputFiles
 				my $hf2_before = $#header_fields_2_absolutelyCorrect;
 				foreach my $method (@methods)
 				{
-					push(@header_fields_2_absolutelyCorrect, $method, '', '', '', '', '');		
-					push(@header_fields_3_absolutelyCorrect, 'nExperiments', 'Ntotal_avg', 'OKtotal_avg', 'NmadeCall_avg', 'OKmadeCall_avg', 'noCall_avg');
+					push(@header_fields_2_absolutelyCorrect, $method, '', '', '', '', '', '', '');		
+					push(@header_fields_3_absolutelyCorrect, 'nExperiments', 'Ntotal_avg', 'OKtotal_avg', 'NmadeCall_avg', 'OKmadeCall_avg', 'noCall_avg', 'NmadeCall_n0_avg', 'PPV_n0');
 				}
 				my $hf2_after = $#header_fields_2_absolutelyCorrect;
 				my $requiredFields = $hf2_after - $hf2_before;
@@ -1961,22 +2035,30 @@ sub produceValidationOutputFiles
 						my @percOK_total;
 						my @perc_missing;
 						my @callRate;
+						my @N_n0;
+						my @PPV_n0;					
 						
 						if(exists $allSimulations_data_href->{n_reads_correct_byVariety}->{$variety}{$methodName}{$readLevel})
 						{
 							my @components_missing =  @{$allSimulations_data_href->{n_reads_correct_byVariety}->{$variety}{$methodName}{$readLevel}{missing}};
 							my @components_NmadeCall =  @{$allSimulations_data_href->{n_reads_correct_byVariety}->{$variety}{$methodName}{$readLevel}{N}};
 							my @components_correct =  @{$allSimulations_data_href->{n_reads_correct_byVariety}->{$variety}{$methodName}{$readLevel}{correct}};
+							my @components_N_n0 = @{$allSimulations_data_href->{n_reads_correct_byVariety}->{$variety}{$methodName}{$readLevel}{N_n0}};
+							my @components_correct_n0 = @{$allSimulations_data_href->{n_reads_correct_byVariety}->{$variety}{$methodName}{$readLevel}{correct_n0}};
 							
 							die unless(scalar(@components_missing) == scalar(@components_NmadeCall));
 							die unless(scalar(@components_NmadeCall) == scalar(@components_correct));
+							die unless(scalar(@components_N_n0) == scalar(@components_correct));
+							die unless(scalar(@components_correct_n0) == scalar(@components_correct));
 							
 							for(my $componentI = 0; $componentI <= $#components_missing; $componentI++)
 							{
 								my $i_missing = $components_missing[$componentI];
 								my $i_NmadeCall = $components_NmadeCall[$componentI];
 								my $i_correct = $components_correct[$componentI];
-								
+								my $i_N_n0 = $components_N_n0[$componentI];
+								my $i_correct_n0 = $components_correct_n0[$componentI];
+									
 								my $i_Ntotal =  $i_missing + $i_NmadeCall;
 					
 								my $i_percOK_madeCall = sprintf("%.2f", ($i_correct / $i_NmadeCall)) if($i_NmadeCall > 0);
@@ -1984,6 +2066,7 @@ sub produceValidationOutputFiles
 								my $i_percOK_total = sprintf("%.2f", ($i_correct / $i_Ntotal)) if($i_Ntotal > 0);
 								my $i_perc_missing = sprintf("%.2f", ($i_missing / ($i_Ntotal))) if($i_Ntotal > 0);						
 								my $i_callRate = $i_NmadeCall / $i_Ntotal if($i_Ntotal > 0);	
+								my $i_PPV_n0 = ($i_correct_n0 / $i_N_n0) if($i_N_n0 > 0);	
 
 								if($i_Ntotal > 0)
 								{
@@ -1994,6 +2077,8 @@ sub produceValidationOutputFiles
 									push(@perc_missing, $i_perc_missing);
 									push(@callRate, $i_callRate);
 									push(@percOK_madeCall_fullAccuracy, $i_percOK_madeCall_fullAccuracy);
+									push(@N_n0, $i_N_n0);
+									push(@PPV_n0, $i_PPV_n0);
 								}
 							}
 				
@@ -2007,6 +2092,8 @@ sub produceValidationOutputFiles
 							die unless(scalar(@perc_missing) == scalar(@Ntotal));
 							die unless(scalar(@callRate) == scalar(@Ntotal));
 							die unless(scalar(@percOK_madeCall_fullAccuracy) == scalar(@Ntotal));
+							die unless(scalar(@N_n0) == scalar(@Ntotal));
+							die unless(scalar(@PPV_n0) == scalar(@Ntotal));
 						}
 						
 						my $Ntotal = (scalar(@Ntotal)) ? sprintf("%.2f", Util::mean(@Ntotal)) : 'NA';
@@ -2016,10 +2103,13 @@ sub produceValidationOutputFiles
 						my $perc_missing = (scalar(@Ntotal)) ? sprintf("%.2f", Util::mean(@perc_missing)) : 'NA';
 						my $callRate = (scalar(@Ntotal)) ? sprintf("%.2f", Util::mean(@callRate)) : 'NA';
 						my $percOK_madeCall_fullAccuracy = (scalar(@Ntotal)) ? sprintf("%.2f", Util::mean(@percOK_madeCall_fullAccuracy)) : 'NA';
+						my $N_n0 = (scalar(@N_n0)) ? sprintf("%.2f", Util::mean(@N_n0)) : 'NA';
+						my $PPV_n0 = (scalar(@PPV_n0)) ? sprintf("%.2f", Util::mean(@PPV_n0)) : 'NA';
+							
+							
+						push(@output_fields_absolutelyCorrect, scalar(@Ntotal), $Ntotal, $percOK_total, $NmadeCall, $percOK_madeCall, $perc_missing, $N_n0, $PPV_n0);
 						
-						push(@output_fields_absolutelyCorrect, scalar(@Ntotal), $Ntotal, $percOK_total, $NmadeCall, $percOK_madeCall, $perc_missing);
-						
-						print BARPLOTSFULLDB join("\t", $readLevel, $variety, $methodName, 'absolute', $callRate, $percOK_madeCall_fullAccuracy, scalar(@Ntotal)), "\n";
+						print BARPLOTSFULLDB join("\t", $readLevel, $variety, $methodName, 'absolute', $callRate, $percOK_madeCall_fullAccuracy, $PPV_n0, scalar(@Ntotal)), "\n";
 
 						print "Generating ", $prefix_for_outputFiles . '_readsAbsolutelyCorrect', " $readLevel $variety $methodName: averaging over ", scalar(@Ntotal), " iterations.\n";
 					}
@@ -2042,8 +2132,8 @@ sub produceValidationOutputFiles
 				my $hf2_before = $#header_fields_2_byLevelCorrect;
 				foreach my $method (@methods)
 				{
-					push(@header_fields_2_byLevelCorrect, $method, '', '', '', '', '');							
-					push(@header_fields_3_byLevelCorrect, 'nExperiments', 'Ntotal_avg', 'OKtotal_avg', 'NmadeCall_avg', 'OKmadeCall_avg', 'noCall_avg');
+					push(@header_fields_2_byLevelCorrect, $method, '', '', '', '', '', '', '');							
+					push(@header_fields_3_byLevelCorrect, 'nExperiments', 'Ntotal_avg', 'OKtotal_avg', 'NmadeCall_avg', 'OKmadeCall_avg', 'noCall_avg', 'NmadeCall_n0_avg', 'PPV_n0');
 				}
 				my $hf2_after = $#header_fields_2_byLevelCorrect;
 				my $requiredFields = $hf2_after - $hf2_before;
@@ -2089,16 +2179,19 @@ sub produceValidationOutputFiles
 							my @percOK_madeCall;
 							my @percOK_madeCall_truthDefined;
 							my @percMissing;
+							my @N_n0;
+							my @PPV_n0;
 							
 							if(exists $allSimulations_data_href->{n_reads_correct_byVariety_byLevel}->{$variety}{$methodName}{$readLevel}{$evaluationLevel})
 							{
-																
 								my @components_N_madeCall = @{$allSimulations_data_href->{n_reads_correct_byVariety_byLevel}->{$variety}{$methodName}{$readLevel}{$evaluationLevel}{N}};
 								my @components_N_truthDefined = @{$allSimulations_data_href->{n_reads_correct_byVariety_byLevel}->{$variety}{$methodName}{$readLevel}{$evaluationLevel}{N_truthDefined}};
 								my @components_correct = @{$allSimulations_data_href->{n_reads_correct_byVariety_byLevel}->{$variety}{$methodName}{$readLevel}{$evaluationLevel}{correct}};
 								my @components_correct_truthDefined = @{$allSimulations_data_href->{n_reads_correct_byVariety_byLevel}->{$variety}{$methodName}{$readLevel}{$evaluationLevel}{correct_truthDefined}};
 								my @components_missing = @{$allSimulations_data_href->{n_reads_correct_byVariety_byLevel}->{$variety}{$methodName}{$readLevel}{$evaluationLevel}{missing}};
-								die unless(all{scalar(@$_) == scalar(@components_N_madeCall)} (\@components_N_madeCall, \@components_N_truthDefined, \@components_correct, \@components_N_truthDefined, \@components_missing));
+								my @components_N_n0 = @{$allSimulations_data_href->{n_reads_correct_byVariety_byLevel}->{$variety}{$methodName}{$readLevel}{$evaluationLevel}{N_n0}};
+								my @components_correct_n0 = @{$allSimulations_data_href->{n_reads_correct_byVariety_byLevel}->{$variety}{$methodName}{$readLevel}{$evaluationLevel}{correct_n0}};
+								die unless(all{scalar(@$_) == scalar(@components_N_madeCall)} (\@components_N_madeCall, \@components_N_truthDefined, \@components_correct, \@components_N_truthDefined, \@components_missing, \@components_N_n0, \@components_correct_n0));
 								
 								for(my $componentI = 0; $componentI <= $#components_missing; $componentI++)
 								{
@@ -2107,6 +2200,8 @@ sub produceValidationOutputFiles
 									my $i_correct = $components_correct[$componentI];
 									my $i_correct_truthDefined = $components_correct_truthDefined[$componentI];
 									my $i_missing = $components_missing[$componentI];
+									my $i_N_n0 = $components_N_n0[$componentI];
+									my $i_correct_n0 = $components_correct_n0[$componentI];
 									
 									my $i_Ntotal =  $i_missing + $i_N_madeCall;
 						
@@ -2114,6 +2209,7 @@ sub produceValidationOutputFiles
 									my $i_percOK_total = ($i_correct / $i_Ntotal) if($i_Ntotal > 0);
 									my $i_perc_missing = ($i_missing / $i_Ntotal) if($i_Ntotal > 0);						
 									
+									my $i_PPV_n0 = ($i_correct_n0 / $i_N_n0) if($i_N_n0 > 0);	
 									# die Dumper("Weird - N is $N, but missing is $missing?", [$readLevel, $evaluationLevel, $variety, $methodName]) unless($missing <= $N);
 																		
 									my $i_N_total_truthDefined = $i_N_madeCall_truthDefined + $i_missing;									
@@ -2139,6 +2235,9 @@ sub produceValidationOutputFiles
 									push(@percOK_madeCall, $i_percOK_madeCall);
 									push(@percMissing, $i_percMissing);
 									push(@percOK_madeCall_truthDefined, $i_percOK_madeCall_truthDefined);
+									
+									push(@N_n0, $i_N_n0);
+									push(@PPV_n0, $i_PPV_n0);
 								}
 							}		
 
@@ -2157,6 +2256,8 @@ sub produceValidationOutputFiles
 								die unless(scalar(@callRate) == scalar(@callRate));
 								die unless(scalar(@percOK_madeCall_truthDefined) == scalar(@callRate));
 								die unless(scalar(@percMissing) == scalar(@callRate));
+								die unless(scalar(@N_n0) == scalar(@callRate));
+								die unless(scalar(@PPV_n0) == scalar(@callRate));
 							}
 						 
 							my $callRate = (scalar(@callRate)) ? Util::mean(@callRate) : 'NA';
@@ -2174,20 +2275,25 @@ sub produceValidationOutputFiles
 							my $percOK_madeCall_truthDefined = (scalar(@callRate)) ? Util::mean(@percOK_madeCall_truthDefined) : 'NA';
 							my $percMissing = (scalar(@callRate)) ? Util::mean(@percMissing) : 'NA';
 							
+							my $N_n0 = (scalar(@N_n0)) ? Util::mean(@N_n0) : 'NA';
+							my $PPV_n0 = (scalar(@PPV_n0)) ? Util::mean(@PPV_n0) : 'NA';
+							
 							push(@output_fields_byLevelCorrect,
 								scalar(@callRate),
 								($N_total ne $N_total_truthDefined) ? join(' / ', $N_total, $N_total_truthDefined) : $N_total,
 								($percOK_total ne $percOK_total_truthDefined) ? join(' / ', $percOK_total, $percOK_total_truthDefined) : $percOK_total, 
 								($N_madeCall ne $N_madeCall_truthDefined) ? join(' / ', $N_madeCall, $N_madeCall_truthDefined) : $N_madeCall,
 								($percOK_madeCall ne $percOK_madeCall_truthDefined) ? join(' / ', $percOK_madeCall, $percOK_madeCall_truthDefined) : $percOK_madeCall,
-								$percMissing
+								$percMissing,
+								$N_n0,
+								$PPV_n0
 							);
 							
 							print "Generating ", $prefix_for_outputFiles . '_forPlot_barplots_fullDB', " $readLevel $variety $methodName: averaging over ", scalar(@callRate), " iterations.\n";
 						 
 							if($evaluationLevel ne 'absolute')
 							{
-								print BARPLOTSFULLDB join("\t",  $readLevel, $variety, $methodName, $evaluationLevel, $callRate, $percOK_madeCall_fullAccuracy, scalar(@N_total)), "\n";						
+								print BARPLOTSFULLDB join("\t",  $readLevel, $variety, $methodName, $evaluationLevel, $callRate, $percOK_madeCall_fullAccuracy, $PPV_n0, scalar(@N_total)), "\n";						
 							}
 						}
 					}

@@ -125,7 +125,7 @@ for(doWhat in c("limits", "plot"))
 			barplot(vector_identities[min(allIdentity_min_not0):length(vector_identities)], xlab = "Identity", ylab = "Density", main = paste("Read identities"), ylim = c(0, max(allIdentityDensities)))		
 			histogram_coverage <- hist(allWindows_coverages, plot = F)	
 			plot(histogram_coverage, main = "Genome window coverage histogram", xlab = "Coverage")
-			title(paste("MetaMap mapping summary for ", taxonLabel, " (taxon ID ", taxonID, ") - ", reads_count, " mapped reads assigned", sep = ""), outer=TRUE, cex.main = 1.5)			
+			title(paste("MetaMaps mapping summary for ", taxonLabel, " (taxon ID ", taxonID, ") - ", reads_count, " mapped reads assigned", sep = ""), outer=TRUE, cex.main = 1.5)			
 		}
 		else
 		{
