@@ -301,17 +301,17 @@ int main(int argc, char** argv)
 }
 
 void highLevelUsage()
-{
+{ 
 	std::cout << "\n\
-MetaMap v 0.1 \n\
+MetaMaps v 0.1 \n\
 \n\
-  Simulataenous metagenomic classification and mapping.\n\
+  Simultaneous metagenomic classification and mapping.\n\
 \n\
 Usage:\n\
 \n\
-  ./metamap mapDirectly|classify|mapAgainstIndex|index\n\
+  ./metamaps mapDirectly|classify|mapAgainstIndex|index\n\
 \n\
 Parameters:\n\
 \n\
-   ./metamap COMMAND -h for help\n\n";
+   ./metamaps COMMAND -h for help\n\n";
 }
