@@ -105,6 +105,7 @@ foreach my $FASTAComponent (split(/,/, $FASTAs))
 	else
 	{
 		die "Specified FASTA file (via --FASTAs) doesn't exist: $FASTAComponent" unless(-e $FASTAComponent);
+		push(@FASTAfiles, $FASTAComponent);
 	}
 }
 print "\nNumber of found FASTA input files: ", scalar(@FASTAfiles), "\n";
