@@ -14,10 +14,10 @@ SOURCES=src/map/mash_map.cpp
 
 OBJECTS=$(SOURCES:.cpp=.o)  
 
-all : mashmap
+all : metamaps
 
-mashmap : $(OBJECTS) 
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(OBJECTS) -o mashmap @mathlib@ -lstdc++ -lz -lm -lpthread -lboost_system -lboost_filesystem -lboost_serialization -lboost_regex
+metamaps : $(OBJECTS) 
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(OBJECTS) -o metamaps @mathlib@ -lstdc++ -lz -lm -lpthread -lboost_system -lboost_filesystem -lboost_serialization -lboost_regex
 
 .SUFFIXES :
 
@@ -27,10 +27,10 @@ mashmap : $(OBJECTS)
 %.o : %.c++
 	$(CXX) -c $(CXXFLAGS) $(CPPFLAGS) -o $@ $<
 
-install : mashmap
+install : metamaps
 	mkdir -p @prefix@/bin/
-	cp `pwd`/mashmap @prefix@/bin/
+	cp `pwd`/metamaps @prefix@/bin/
 
 clean :
-	-rm -f mashmap
+	-rm -f metamaps
 	-rm -f src/map/*.o
