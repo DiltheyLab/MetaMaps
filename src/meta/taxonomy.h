@@ -68,8 +68,8 @@ public:
 				std::cerr << "nodeID: '" << nodeID << "'" << "\n";
 				std::cerr << std::flush;
 			}			
-			assert(nodeID.find("x") == std::string::npos);
-			return runningNodeID;
+			assert(runningNodeID.find("x") == std::string::npos);
+			return runningNodeID; 
 		}
 	}
 	
