@@ -34,6 +34,24 @@ Example:
 ./metamaps classify --mappings classification_results --DB databases/miniSeq+H
 ```
 
+## Output
+
+MetaMaps outputs both an overall compositional assignment and per-read taxonomic assignments. Specifically, it will (for `-o classification_results`) produce the following files:
+
+1. `classification_results.EM.WIMP`: Sample composition at different taxonomic levels (WIMP = "What's in my pot"). The level "definedGenomes" represents strain-level resolution (i.e., the defined genomes in the classification database). The EM algorithm is carried out at this level.
+
+2. `classification_results.EM.reads2Taxon`: One line per read, and each line consists of the read ID and the taxon ID of the genome that the read was assigned to. Taxon IDs beginning with an 'x' represent MetaMaps-internal taxon IDs that disambiguate between source genomes attached to the same 'species' node. These can be interpreted using the extended database taxonomy (sub-directory `taxonomy` in the directory of the utilized database).
+
+3. `classification_results.EM.reads2Taxon.krona`: Like `classification_results.EM.reads2Taxon`, but in [Krona](https://github.com/marbl/Krona/wiki) format. Each line has an additional quality value, and only taxon IDs from the standard NCBI taxonomy are used.
+
+4. `classification_results.EM.contigCoverage`: Read coverage for contigs that appear in the final set of maximum-likelihood mappings. Contigs are split into windows of 1000 base pairs. Each line represents one window and specifies the MetaMaps taxonID of the contig (`taxonID`), a species/strain label (`equalCoverageUnitLabel`), the ID of the contig in the classification database FASTA file (`contigID`), start and stop coordinates of the window (`start` and `stop`), the number of read bases overlapping the window (`nBases`), and the number of read bases overlapping the window divided by window length, i.e. coverage (`readCoverage`).
+
+5. `classification_results.EM.lengthAndIdentitiesPerMappingUnit`: Read length and estimated identity for all reads, sorted by the contig they are mapped to. Each line represents one read and has the fields `AnalysisLevel`, which is always equal to `EqualCoverageUnit`; `ID`, which is the ID of the contig in the classification database FASTA file; `readI`, which is a simple numerical read ID; `Identity`, which is the estimated alignment identity; and `Length`, specifying the length of the read.
+
+5. `classification_results.EM`: The final and complete set of approximate read mappings. Each line represents one mapping in a simple space-delimited format. Fields: read ID, read length, beginning of the mapping in the read, end of the mapping in the read, strand, contig ID, contig length, beginning of the mapping in the contig, end of the mapping in the contig, estimated alignment identity using a Poisson model, MinHash intersection size, MinHash union size, estimated alignment identity using a binomial approximation, mapping quality. The mapping qualities of all mappings for one read sum up to 1.
+
+6. `classification_results.EM.evidenceUnknownSpecies`: Various statistics on read identities and zero-coverage regions of identified genomes. These are not particularly useful in their current state; visual inspection of coverage and identity patterns should take precedence.
+
 ## Databases
 
 The 'miniSeq+H' database is a good place to start. It contains >12000 microbial genomes and the human reference genome. We provide miniSeq+H as a download (see above for the link).
