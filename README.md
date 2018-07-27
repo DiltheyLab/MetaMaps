@@ -52,6 +52,8 @@ MetaMaps outputs both an overall compositional assignment and per-read taxonomic
 
 6. `classification_results.EM.evidenceUnknownSpecies`: Various statistics on read identities and zero-coverage regions of identified genomes. These are not particularly useful in their current state; visual inspection of coverage and identity patterns should take precedence.
 
+You can download [example output files](https://github.com/DiltheyLab/MetaMaps/blob/master/MetaMaps_example_output.zip).
+
 ## Databases
 
 The 'miniSeq+H' database is a good place to start. It contains >12000 microbial genomes and the human reference genome. We provide miniSeq+H as a download (see above for the link).
