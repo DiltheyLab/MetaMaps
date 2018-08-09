@@ -257,7 +257,18 @@ std::vector<oneMappingLocation> getMappingLocations(const std::map<std::string, 
 		}
 		assert(taxonInfo.at(contig_taxonID).count(contigID));
 
-		double mappingQuality = std::stod(line_fields.at(13));
+		double mappingQuality;
+		try {
+			mappingQuality = std::stod(line_fields.at(13));
+		} catch (const std::invalid_argument&) {
+			std::cerr << "Mapping quality is invalid\n";
+			throw;
+		} catch (const std::out_of_range&) {
+			std::cerr << "Mapping quality is out of range for a double\n";
+			std::cerr << "Input line: " << line << "\n" << std::flush;
+			throw; 
+		}
+	
 		assert(mappingQuality >= 0);
 		assert(mappingQuality <= 1);
 		mQ_sum += mappingQuality;
