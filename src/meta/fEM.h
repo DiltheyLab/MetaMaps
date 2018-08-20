@@ -32,6 +32,7 @@ void callBackForAllReads(std::string mappedFile, std::function<void(const std::v
 std::set<std::string> getRelevantLevelNames();
 void cleanF(std::map<std::string, double>& f, const std::map<std::string, size_t>& reads_per_taxonID, size_t distributedReads);
 std::map<std::string, std::vector<size_t>> get_NS_per_window(std::string DBdir, size_t windowSize, const std::map<std::string, std::map<std::string, std::vector<size_t>>>& coverage_per_contigID);
+double stringToDouble(std::string S);
 
 class oneMappingLocation
 {
@@ -257,17 +258,7 @@ std::vector<oneMappingLocation> getMappingLocations(const std::map<std::string, 
 		}
 		assert(taxonInfo.at(contig_taxonID).count(contigID));
 
-		double mappingQuality;
-		try {
-			mappingQuality = std::stod(line_fields.at(13));
-		} catch (const std::invalid_argument&) {
-			std::cerr << "Mapping quality is invalid\n";
-			throw;
-		} catch (const std::out_of_range&) {
-			std::cerr << "Mapping quality is out of range for a double\n";
-			std::cerr << "Input line: " << line << "\n" << std::flush;
-			throw; 
-		}
+		double mappingQuality = stringToDouble(line_fields.at(13));
 	
 		assert(mappingQuality >= 0);
 		assert(mappingQuality <= 1);
@@ -1226,6 +1217,23 @@ std::map<std::string, std::vector<size_t>> get_NS_per_window(std::string DBdir, 
 	return forReturn;
 }
 
+double stringToDouble(std::string S)
+{
+	double v = 0;
+	stringstream ss(S);
+	ss >> v;
+
+	if(ss.fail())
+	{
+		string errorMessage = "Unable to parse ";
+		errorMessage += S;
+		errorMessage += " as a mapping quality!";
+		throw (errorMessage);
+	}	
+	
+	return v;
+	
+}
 }
 
 #endif /* META_FEM_H_ */
