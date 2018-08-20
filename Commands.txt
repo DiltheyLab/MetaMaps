@@ -199,10 +199,27 @@ Rscript plotIdentities_EM.R /data/projects/phillippy/projects/MetaMap/databases/
 
 // Test on large dataset:
 
-./metamap classify --mappings tmp/hmp7_2_miniSeq+H --DB databases/miniSeq+H
+./metamaps classify --mappings tmp/hmp7_2_miniSeq+H --DB databases/miniSeq+H
 
 
 perl simulate.pl --DB databases/miniSeq_100 --action prepare --n_simulations 1 --suffix logNormal --coverageMode logNormal
 perl simulate.pl --DB databases/miniSeq_100 --action prepareII --suffix logNormal 
 perl simulate.pl --DB databases/miniSeq_100 --action analyzeAll --suffix logNormal 
+
+
+/usr/bin/time -v ./metamaps mapDirectly --all -r databases/refseq/DB.fa -q /scratch/tmp/hmp_set7_combined.fastq -o tmp/hmp7_2_refseq --mm 60 &> tests/resources/hmp7_2_refseq_map;\
+/usr/bin/time -v ./metamaps classify --mappings tmp/hmp7_2_refseq+H --DB databases/refseq &> tests/resources/hmp7_2_refseq_classify
+
+
+
+perl buildDB.pl --DB databases/refseq --FASTAs downloads/refseq_download_test --taxonomy downloads/taxonomy_download_test_annotated
+
+perl buildDB.pl --DB databases/refseq_microbiology --includeDirPattern archaea,bacteria,fungi,protozoa,unknown,viral --FASTAs downloads/refseq_download_test,/data/projects/phillippy/projects/MetaMap/additionalReferences/GRCh38_full_analysis_set_plus_decoy_hla.fa.with9606 --taxonomy downloads/taxonomy_download_test_annotated
+
+archaea,bacteria,fungi,protozoa,unknown,viral
+
+perl downloadRefSeq.pl --seqencesOutDirectory downloads/genbank_microbiology --taxonomyOutDirectory downloads/genbank_taxonomy --DB genbank --targetBranches archaea,bacteria,fungi,protozoa,unknown,viral
+perl downloadRefSeq.pl --seqencesOutDirectory downloads/genbank_microbiology --taxonomyOutDirectory downloads/genbank_taxonomy --DB genbank --targetBranches viral
+
+
 

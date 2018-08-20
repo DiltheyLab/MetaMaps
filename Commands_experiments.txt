@@ -95,3 +95,7 @@ Just i100:
 
 perl simulate.pl --action inferenceJobI --DB databases/miniSeq+H --jobI 0 --suffix simulations_i100_specifiedFrequencies_limitedMemory --varietyI 0 && perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix i100_specifiedFrequencies_limitedMemory
  
+ 
+ 
+/usr/bin/time -v ./metamaps mapDirectly --all -r databases/miniSeq+H/DB.fa -q /scratch/tmp/hmp_set7_combined.fastq.mappable.short -o tmp/hmp7_2_short_miniSeq+H;\
+/usr/bin/time -v ./metamaps classify --mappings tmp/hmp7_2_short_miniSeq+H --DB databases/miniSeq+H

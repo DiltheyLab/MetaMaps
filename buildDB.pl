@@ -21,6 +21,7 @@ my $maxSpecies;
 # my $Utest;
 my $updateTaxonomy;
 my $oldTaxonomy;
+my $includeDirPattern = '';
 GetOptions (
 	'DB:s' => \$DB, 
 	'FASTAs:s' => \$FASTAs, 
@@ -28,6 +29,7 @@ GetOptions (
 	'maxSpecies:s' => \$maxSpecies, 
 	'updateTaxonomy:s' => \$updateTaxonomy, 
 	'oldTaxonomy:s' => \$oldTaxonomy, 
+	'includeDirPattern:s' => \$includeDirPattern,
 #	'Utest:s' => \$Utest, 
 );
 
@@ -40,6 +42,8 @@ unless($DB and $FASTAs and $taxonomyDir)
 
 die "Please specify a taxonomy directory (parameter --taxonomy)" unless(-d $taxonomyDir);
 die "Taxonomy directory (--taxonomy) does not contain expected files for taxonomy in NCBI format (names.dmp, nodes.dmp..)." unless(all {-e $_} (map {$taxonomyDir . '/' . $_} taxTree::getTaxonomyFileNames()));
+
+my @includeDirPatterns = split(/,/, $includeDirPattern);
 
 unless(-d $DB)
 {
@@ -67,26 +71,43 @@ foreach my $f (taxTree::getTaxonomyFileNames())
 # Find input files
 
 my @FASTAfiles;
-if(-d $FASTAs)
+foreach my $FASTAComponent (split(/,/, $FASTAs))
 {
-	find(\&wanted, $FASTAs);
-	sub wanted {
-		my $file = $File::Find::name;
-		if($file =~ /(.fa$)|(\.fna$)/)
-		{
-			push(@FASTAfiles, $file);
+	if(-d $FASTAComponent)
+	{
+		find(\&wanted, $FASTAComponent);
+		sub wanted {
+			my $file = $File::Find::name;
+			if($file =~ /(.fa$)|(\.fna$)/)
+			{
+				my $patternOK = 1;
+				if(scalar(@includeDirPatterns))
+				{
+					$patternOK = 0;
+					PATTERNLOOP: foreach my $pattern (@includeDirPatterns)
+					{
+						my $pattern_dir = '/' . $pattern . '/';
+						if(index($file, $pattern_dir) != -1)
+						{
+							$patternOK = 1;
+							last PATTERNLOOP;
+						}
+					}
+				}
+				# print join("\t", $file, $patternOK), "\n";
+				if($patternOK)
+				{
+					push(@FASTAfiles, $file);
+				}
+			}
 		}
 	}
-}
-else
-{
-	@FASTAfiles = split(/,/, $FASTAs);
-	foreach my $f (@FASTAfiles)
+	else
 	{
-		die "Specified FASTA file (via --FASTAs) doesn't exist: $f" unless(-e $f);
+		die "Specified FASTA file (via --FASTAs) doesn't exist: $FASTAComponent" unless(-e $FASTAComponent);
+		push(@FASTAfiles, $FASTAComponent);
 	}
 }
-
 print "\nNumber of found FASTA input files: ", scalar(@FASTAfiles), "\n";
 
 # read taxonomy
