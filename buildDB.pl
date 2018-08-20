@@ -21,7 +21,7 @@ my $maxSpecies;
 # my $Utest;
 my $updateTaxonomy;
 my $oldTaxonomy;
-my $includeDirPattern;
+my $includeDirPattern = '';
 GetOptions (
 	'DB:s' => \$DB, 
 	'FASTAs:s' => \$FASTAs, 
