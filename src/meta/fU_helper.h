@@ -451,7 +451,7 @@ public:
 			double identityI = std::stoi(line_fields.at(2));
 			assert(identityI >= 0);
 			assert(identityI <= 100);
-			double p = std::stod(line_fields.at(3));
+			double p = stringToDouble(line_fields.at(3));
 			assert(p >= 0);
 			assert(p <= 1);
 			
@@ -493,7 +493,7 @@ std::map<size_t, double> readReadLengthHistogram(std::string fn)
 		std::vector<std::string> line_fields = split(line, "\t");
 		assert(line_fields.size() == 0);
 		size_t readLength = std::stoull(line_fields.at(0));
-		double p = std::stod(line_fields.at(1));
+		double p = stringToDouble(line_fields.at(1));		
 		assert(forReturn.count(readLength) == 0); 
 		forReturn[readLength] = p;
 		p_sum += p;

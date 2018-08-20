@@ -32,6 +32,7 @@ void callBackForAllReads(std::string mappedFile, std::function<void(const std::v
 std::set<std::string> getRelevantLevelNames();
 void cleanF(std::map<std::string, double>& f, const std::map<std::string, size_t>& reads_per_taxonID, size_t distributedReads);
 std::map<std::string, std::vector<size_t>> get_NS_per_window(std::string DBdir, size_t windowSize, const std::map<std::string, std::map<std::string, std::vector<size_t>>>& coverage_per_contigID);
+double stringToDouble(std::string S);
 
 class oneMappingLocation
 {
@@ -257,7 +258,8 @@ std::vector<oneMappingLocation> getMappingLocations(const std::map<std::string, 
 		}
 		assert(taxonInfo.at(contig_taxonID).count(contigID));
 
-		double mappingQuality = std::stod(line_fields.at(13));
+		double mappingQuality = stringToDouble(line_fields.at(13));
+	
 		assert(mappingQuality >= 0);
 		assert(mappingQuality <= 1);
 		mQ_sum += mappingQuality;
@@ -1116,6 +1118,7 @@ std::map<std::string, std::map<std::string, size_t>> loadRelevantTaxonInfo(std::
 	assert(tS.is_open());
 
 	std::string line;
+	size_t lineC = 0;
 	while(tS.good())
 	{
 		std::getline(tS, line);
@@ -1123,6 +1126,10 @@ std::map<std::string, std::map<std::string, size_t>> loadRelevantTaxonInfo(std::
 		if(line.length() == 0)
 			continue;
 		std::vector<std::string> line_fields = split(line, " ");
+		if(line_fields.size() != 2)
+		{
+			std::cerr << "Weird format line " << lineC << " of file " << fn_taxons << " -- wrong number of fields." << std::flush;
+		}
 		assert(line_fields.size() == 2);
 
 		std::string taxonID = line_fields.at(0);
@@ -1136,6 +1143,8 @@ std::map<std::string, std::map<std::string, size_t>> loadRelevantTaxonInfo(std::
 			assert(forReturn[taxonID].count(contigFields.at(0)) == 0);
 			forReturn[taxonID][contigFields.at(0)] = std::stoull(contigFields.at(1));
 		}
+		
+		lineC++;
 	}
 
 	return forReturn;
@@ -1238,6 +1247,23 @@ std::map<std::string, std::vector<size_t>> get_NS_per_window(std::string DBdir, 
 	return forReturn;
 }
 
+double stringToDouble(std::string S)
+{
+	double v = 0;
+	stringstream ss(S);
+	ss >> v;
+
+	if(ss.fail())
+	{
+		string errorMessage = "Unable to parse ";
+		errorMessage += S;
+		errorMessage += " as a mapping quality!";
+		throw (errorMessage);
+	}	
+	
+	return v;
+	
+}
 }
 
 #endif /* META_FEM_H_ */

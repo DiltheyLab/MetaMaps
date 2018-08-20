@@ -257,7 +257,9 @@ foreach my $assemblyReportFile (keys %file_2_taxonID)
 			substr($line, 0, 1) = '';
 			die "File $fresh_fnaFile already conains kraken segment?" if ($line =~ /kraken:taxid\|(\d+)/);
 			$contigCounter++;
-			my $newID = 'C' . $contigCounter . '|kraken:taxid|' . $taxonID . '|' . $line;
+			my $line_for_inclusion = $line;
+			$line_for_inclusion =~ s/\s.+//;
+			my $newID = 'C' . $contigCounter . '|kraken:taxid|' . $taxonID . '|' . $line_for_inclusion;
 			print F2 '>', $newID;
 		}
 		else

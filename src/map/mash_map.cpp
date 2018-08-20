@@ -105,7 +105,7 @@ void mapAgainstPrefix(const skch::Parameters& parameters, std::string prefix)
 
 */
 int main(int argc, char** argv)
-{
+{	
 	if(1 == 0)
 	{
 		{
@@ -301,11 +301,11 @@ int main(int argc, char** argv)
 }
 
 void highLevelUsage()
-{
+{ 
 	std::cout << "\n\
 MetaMaps v 0.1 \n\
 \n\
-  Metagenomic classification and mapping.\n\
+  Simultaneous metagenomic classification and mapping.\n\
 \n\
 Usage:\n\
 \n\
