@@ -17,7 +17,7 @@ Then download a database, e.g. miniSeq+H (microbial genomes and the human refere
 
 ## Usage
 
-Analysis of a dataset with MetaMap consists of two steps: mapping and classification:
+Analysis of a dataset with MetaMaps consists of two steps: mapping and classification:
 
 ```
 ./metamaps mapDirectly --all -r databases/miniSeq+H/DB.fa -q input.fastq -o classification_results
@@ -45,18 +45,25 @@ You can also download and construct your own reference databases. For example, t
 
     ```
     mkdir testDownload
-    perl downloadRefSeq.pl --seqencesOutDirectory testDownload/refseq --taxonomyOutDirectory testDownload/taxonomy
+	perl downloadRefSeq.pl --seqencesOutDirectory testDownload/refseq --taxonomyOutDirectory testDownload/taxonomy
     ```
 
 2. We need to make sure that each contig ID is annotated with a correct and unique taxon ID and we want the whole database as one file. `annotateRefSeqSequencesWithUniqueTaxonIDs.pl` can help:
+
     ```
     perl annotateRefSeqSequencesWithUniqueTaxonIDs.pl --refSeqDirectory downloads/refseq --taxonomyInDirectory downloads/taxonomy --taxonomyOutDirectory downloads/taxonomy_uniqueIDs
     ```
+    
+    By default this script will only process complete (finished) assemblies - if you want to modify this behaviour, uncomment the line `next unless($assembly_level eq 'Complete Genome');`.
+    
 3. We might also manually want to include additional genomes, for example the human reference genome. Obtain the genome in one file (e.g. `hg38.primary.fna`) and add taxon IDs:
+
     ```
     perl util/addTaxonIDToFasta.pl --inputFA hg38.primary.fna --outputFA hg38.primary.fna.with9606 --taxonID 9606
     ```
-4. Finally, construct the MetaMap database:
+    
+4. Finally, construct the MetaMaps database:
+
     ```
     perl buildDB.pl --DB databases/myDB --FASTAs downloads/refseq,hg38.primary.fna.with9606 --taxonomy downloads/taxonomy_uniqueIDs
     ```
