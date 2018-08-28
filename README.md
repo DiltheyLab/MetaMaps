@@ -9,6 +9,9 @@ It is faster than classical exact alignment-based approaches, and its output is 
 
 The approximate mapping algorithm employed by MetaMaps is based on [MashMap](https://github.com/marbl/MashMap). MetaMaps adds a mapping quality model and EM-based estimation of sample composition.
 
+## News
+(28 August 2018) We're adding more flexible tools to construct your own databases - see [here](https://github.com/DiltheyLab/MetaMaps/issues/5#issuecomment-414301437) for details. Feedback welcome!
+
 ## Installation
 Follow [`INSTALL.txt`](INSTALL.txt) to compile and install MetaMaps.
 
