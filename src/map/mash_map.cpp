@@ -272,6 +272,21 @@ int main(int argc, char** argv)
 	skch::initCmdParser(cmd, firstArgument);
 	skch::parseandSave(argc, argv, cmd, parameters, firstArgument);
 
+	if(parameters.querySequences.size() > 1)
+    {
+    	throw std::runtime_error("Please specify multiple input files as a comma-separated list.");
+    }
+
+    if(parameters.querySequences.size() == 1)
+    {
+    	std::vector<std::string> qS = split(parameters.querySequences.at(0), ",");
+    	std::vector<std::string> oS = split(parameters.outFileName, ",");
+    	if(qS.size() != oS.size())
+    	{
+    		throw std::runtime_error("Please specify an equal number of input and output files (as comma-separated lists)");
+    	}
+    }
+	
 	mapWrap mW;
 
 	if(firstArgument == "index")
@@ -293,8 +308,12 @@ int main(int argc, char** argv)
 		assert(parameters.DB.length());
 		assert(parameters.mappingsForClassification.length());
 
-		meta::doEM(parameters.DB, parameters.mappingsForClassification, parameters.minimumReadsForU);
-		// meta::doU(parameters.DB, parameters.mappingsForClassification, parameters.minimumReadsForU);
+		std::vector<std::string> mappingsFiles = split(parameters.mappingsForClassification, ",");
+		for(auto mappingsFile : mappingsFiles)
+		{
+			meta::doEM(parameters.DB, mappingsFile, parameters.minimumReadsForU);
+			// meta::doU(parameters.DB, parameters.mappingsForClassification, parameters.minimumReadsForU);
+		}											 
 	}
 
 	return 0;

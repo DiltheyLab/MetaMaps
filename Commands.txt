@@ -193,16 +193,59 @@ perl simulate.pl --DB databases/miniSeq_100 --action prepare --n_simulations 2 -
 
 // Test run on small dataset:
 
-./metamap mapDirectly --all -r databases/miniSeq_100/DB.fa -q /data/projects/phillippy/projects/MetaMap/databases/miniSeq_100/simulations_logNormal/0/reads.fastq -o /data/projects/phillippy/projects/MetaMap/databases/miniSeq_100/simulations_logNormal/0/reads.fastq.mapped
-./metamap classify --mappings /data/projects/phillippy/projects/MetaMap/databases/miniSeq_100/simulations_logNormal/0/reads.fastq.mapped --DB databases/miniSeq_100 --minreads 1
+./metamaps mapDirectly --all -r databases/miniSeq_100/DB.fa -q /data/projects/phillippy/projects/MetaMap/databases/miniSeq_100/simulations_logNormal/0/reads.fastq -o /data/projects/phillippy/projects/MetaMap/databases/miniSeq_100/simulations_logNormal/0/reads.fastq.mapped
+./metamaps classify --mappings /data/projects/phillippy/projects/MetaMap/databases/miniSeq_100/simulations_logNormal/0/reads.fastq.mapped --DB databases/miniSeq_100 --minreads 1
 Rscript plotIdentities_EM.R /data/projects/phillippy/projects/MetaMap/databases/miniSeq_100/simulations_logNormal/0/reads.fastq.mapped
 
 // Test on large dataset:
 
-./metamap classify --mappings tmp/hmp7_2_miniSeq+H --DB databases/miniSeq+H
+./metamaps classify --mappings tmp/hmp7_2_miniSeq+H --DB databases/miniSeq+H
 
 
 perl simulate.pl --DB databases/miniSeq_100 --action prepare --n_simulations 1 --suffix logNormal --coverageMode logNormal
 perl simulate.pl --DB databases/miniSeq_100 --action prepareII --suffix logNormal 
 perl simulate.pl --action analyzeAll --suffix logNormal 
+
+
+### build DB from file test
+
+
+/data/projects/phillippy/projects/mashsim/db/refseq/ref.fa,/data/projects/phillippy/references/h_sapiens/hg38/hg38.primary.fna
+
+head -n 100 /data/projects/phillippy/references/h_sapiens/hg38/hg38.primary.fna > tests/shortHuman1.fa;\
+head -n 100 /data/projects/phillippy/references/h_sapiens/hg38/hg38.primary.fna >> tests/shortHuman1.fa;\
+head -n 100 /data/projects/phillippy/references/h_sapiens/hg38/hg38.primary.fna >> tests/shortHuman1.fa
+head -n 100 /data/projects/phillippy/references/h_sapiens/hg38/hg38.primary.fna.with9606 > tests/shortHuman2.fa;\
+head -n 100 /data/projects/phillippy/references/h_sapiens/hg38/hg38.primary.fna.with9606 >> tests/shortHuman2.fa;\
+head -n 100 /data/projects/phillippy/references/h_sapiens/hg38/hg38.primary.fna.with9606 >> tests/shortHuman2.fa
+
+head -n 100 /data/projects/phillippy/projects/MetaMap/additionalReferences/GCA_000001635.8_GRCm38.p6_genomic.fna > tests/shortMouse.fa;\
+head -n 100 /data/projects/phillippy/projects/MetaMap/additionalReferences/GCA_000001635.8_GRCm38.p6_genomic.fna >> tests/shortMouse.fa;\
+
+echo '9606 tests/shortHuman1.fa' > tests/fileList;\
+echo '9606 tests/shortHuman2.fa' >> tests/fileList;\
+echo '10090 tests/shortMouse.fa' >> tests/fileList
+
+perl combineAndAnnotateReferences.pl --inputFileList tests/fileList --outputFile tests/combinedHumanMouse.fa --taxonomyInDirectory /data/projects/phillippy/projects/MetaMap/downloads/taxonomy --taxonomyOutDirectory tests/combinedHumanMouse_NCBI_taxonomy_modified
+
+perl buildDB.pl --DB databases/testHumanMouse --FASTAs tests/combinedHumanMouse.fa --taxonomy tests/combinedHumanMouse_NCBI_taxonomy_modified
+
+# Some test commands:
+
+perl buildDB.pl --DB databases/miniSeq_200 --FASTAs /data/projects/phillippy/projects/mashsim/db/refseq/ref.fa --taxonomy /data/projects/phillippy/projects/mashsim/src/krakenDBTemplate/taxonomy --maxSpecies 200 --oldTaxonomy /data/projects/phillippy/projects/mashsim/NCBI/refseq/taxonomy/ --updateTaxonomy 1
+
+
+./metamaps mapDirectly --all -r databases/miniSeq_200/DB.fa -q /data/projects/phillippy/projects/MetaMap/databases/miniSeq_100/simulations_logNormal/0/reads.fastq -o tmp/s1;\
+./metamaps mapDirectly --all -r databases/miniSeq_200/DB.fa -q /data/projects/phillippy/projects/MetaMap/databases/miniSeq+H/simulations_i100_specifiedFrequencies/0/reads.fastq -o tmp/s2;\
+./metamaps mapDirectly --all -r databases/miniSeq_200/DB.fa --maxmemory 1 -q /data/projects/phillippy/projects/MetaMap/databases/miniSeq_100/simulations_logNormal/0/reads.fastq -o tmp/s1_mm1;\
+./metamaps mapDirectly --all -r databases/miniSeq_200/DB.fa --maxmemory 1 -q /data/projects/phillippy/projects/MetaMap/databases/miniSeq+H/simulations_i100_specifiedFrequencies/0/reads.fastq -o tmp/s2_mm1;\
+
+./metamaps mapDirectly --all -r databases/miniSeq_200/DB.fa -q /data/projects/phillippy/projects/MetaMap/databases/miniSeq_100/simulations_logNormal/0/reads.fastq -o tmp/v2_s1;\
+./metamaps mapDirectly --all -r databases/miniSeq_200/DB.fa -q /data/projects/phillippy/projects/MetaMap/databases/miniSeq+H/simulations_i100_specifiedFrequencies/0/reads.fastq -o tmp/v2_s2;\
+./metamaps mapDirectly --all -r databases/miniSeq_200/DB.fa --maxmemory 1 -q /data/projects/phillippy/projects/MetaMap/databases/miniSeq_100/simulations_logNormal/0/reads.fastq -o tmp/v2_s1_mm1;\
+./metamaps mapDirectly --all -r databases/miniSeq_200/DB.fa --maxmemory 1 -q /data/projects/phillippy/projects/MetaMap/databases/miniSeq+H/simulations_i100_specifiedFrequencies/0/reads.fastq -o tmp/v2_s2_mm1;\
+
+./metamaps mapDirectly --all -r databases/miniSeq_200/DB.fa -q /data/projects/phillippy/projects/MetaMap/databases/miniSeq_100/simulations_logNormal/0/reads.fastq,/data/projects/phillippy/projects/MetaMap/databases/miniSeq+H/simulations_i100_specifiedFrequencies/0/reads.fastq -o tmp/v3_s1,tmp/v3_s2
+./metamaps mapDirectly --all -r databases/miniSeq_200/DB.fa --maxmemory 1 -q /data/projects/phillippy/projects/MetaMap/databases/miniSeq_100/simulations_logNormal/0/reads.fastq,/data/projects/phillippy/projects/MetaMap/databases/miniSeq+H/simulations_i100_specifiedFrequencies/0/reads.fastq -o tmp/v3_s1_mm1,tmp/v3_s2_mm1
+
 

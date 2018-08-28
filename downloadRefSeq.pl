@@ -142,9 +142,9 @@ foreach my $subDir (@target_subdirs)
 			
 			my @assembly_dir_contents = $ftp->ls();
 	  
-			my @genomic_fna_files = grep {$_ =~ /_genomic.fna.gz$/} grep {$_ !~ /(_cds_from_)|(_rna_from_g)/} @assembly_dir_contents;
+			my @genomic_fna_files = grep {($_ =~ /_genomic.fna.gz$/) or ($_ =~ /_genomic.gff.gz$/)} grep {$_ !~ /(_cds_from_)|(_rna_from_g)/} @assembly_dir_contents;
 			my @assembly_report_files = grep {$_ =~ /_assembly_report.txt$/} @assembly_dir_contents;
-			die Dumper("Problem identifying files for download", \@genomic_fna_files, \@assembly_report_files, join('/', $ftp_root_genomes,  $DB, $subDir, $speciesDir_with_latest), $assembly_version) unless((scalar(@assembly_report_files) == 1) and (scalar(@genomic_fna_files) == 1));
+			die Dumper("Problem identifying files for download", \@genomic_fna_files, \@assembly_report_files, join('/', $ftp_root_genomes,  $DB, $subDir, $speciesDir_with_latest), $assembly_version) unless((scalar(@assembly_report_files) == 1) and (scalar(@genomic_fna_files) >= 1) and (scalar(@genomic_fna_files) <= 2));
 			
 			my $assemblyVersion_local = $speciesDir_local . '/'. $assembly_version;
 			mkdir($assemblyVersion_local);

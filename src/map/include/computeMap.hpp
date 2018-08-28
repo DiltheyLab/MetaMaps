@@ -104,6 +104,7 @@ namespace skch
         seqno_t seqCounter = 0;
 
         std::ofstream outstrm(param.outFileName);
+        assert(param.querySequences.size() <= 1);
 
         for(const auto &fileName : param.querySequences)
         {
