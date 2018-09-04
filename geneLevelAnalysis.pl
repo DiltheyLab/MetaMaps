@@ -80,7 +80,7 @@ while(<ANNOTATIONS>)
 	my $line = $_;
 	chomp($line);
 	next unless($line);
-	my @line_fields = split(/\t/, $line);
+	my @line_fields = split(/\t/, $line, -1);
 	if(exists $relevantContigIDs{$line_fields[0]})
 	{
 		my %line = (mesh @annotations_header_fields, @line_fields);
@@ -92,9 +92,10 @@ while(<ANNOTATIONS>)
 			$foundAnnotations_perContig{$line{ContigId}} = Set::IntervalTree->new;
 		}
 		
-		$foundAnnotations_perContig{$line{ContigId}}->insert($line{GeneName}, $line{Start}, $line{Stop}+1);
-		die if(defined $gene_2_protein_and_product{$line{GeneName}});
-		$gene_2_protein_and_product{$line{GeneName}} = [$line{CDSProduct}, $line{CDSProteinId}]; # CDSProteinId is actually product, and vice versa
+		my $geneId = $line{GeneName} . '//' . $line{GeneLocusTag};
+		$foundAnnotations_perContig{$line{ContigId}}->insert($geneId, $line{Start}, $line{Stop}+1);
+		die Dumper("Multi-defined gene - $line{GeneName} - $annotations_file $.") if(defined $gene_2_protein_and_product{$line{GeneName}});
+		$gene_2_protein_and_product{$geneId} = [$line{GeneName}, $line{GeneLocusTag}, $line{CDSProduct}, $line{CDSProteinId}]; # CDSProteinId is actually product, and vice versa
 	}
 }
 close(ANNOTATIONS);
@@ -132,12 +133,12 @@ print "Of ", ($nReads_mapped_toContigWithAnnotations + $nReads_mapped_toContigWi
 
 my $output_file = $EM_file . '.geneLevelAnalysis';
 open(OUTPUT, '>', $output_file) or die "Cannot open $output_file";
-print OUTPUT join("\t", "GeneName", "ProteinId", "Product", "nReads", "medianIdentity"), "\n";
+print OUTPUT join("\t", "GeneName", "GeneLocusTag", "ProteinId", "Product", "nReads", "medianIdentity"), "\n";
 foreach my $geneName (keys %summary_per_gene_name)
 {
 	my @identities = @{$summary_per_gene_name{$geneName}[1]};
 	my $medianIdentity = getMedian(\@identities);
-	print OUTPUT join("\t", $geneName, $gene_2_protein_and_product{$geneName}[0], $gene_2_protein_and_product{$geneName}[1], $summary_per_gene_name{$geneName}[0], $medianIdentity), "\n";
+	print OUTPUT join("\t", $gene_2_protein_and_product{$geneName}[0], $gene_2_protein_and_product{$geneName}[1], $gene_2_protein_and_product{$geneName}[2], $gene_2_protein_and_product{$geneName}[3], $summary_per_gene_name{$geneName}[0], $medianIdentity), "\n";
 	
 }
 close(OUTPUT);

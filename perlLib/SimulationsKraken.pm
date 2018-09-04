@@ -19,7 +19,7 @@ sub getBrackenDir
 
 sub getKrakenDBTemplate()
 {
-	return '/data/projects/phillippy/projects/mashsim/src/krakenDBTemplate/'; # make sure this is current!
+	return '/data/projects/phillippy/projects/mashsim/src/krakenDBTemplate2/'; # make sure this is current!
 }
 
 

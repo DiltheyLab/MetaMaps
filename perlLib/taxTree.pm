@@ -442,7 +442,7 @@ sub taxonomy_checkConsistency
 			die unless($childNode->{parent} eq $node);
 		}
 	}
-	print "\n";
+	# print "\n";
 	
 	die unless($root_nodes == 1);
 }
