@@ -75,6 +75,8 @@ my $annotations_header_line = <ANNOTATIONS>;
 chomp($annotations_header_line);
 my @annotations_header_fields = split(/\t/, $annotations_header_line);
 die unless($annotations_header_fields[0] eq 'ContigId');
+die unless($annotations_header_fields[$#annotations_header_fields - 1] eq 'CDSProduct');
+
 while(<ANNOTATIONS>)
 {
 	my $line = $_;
