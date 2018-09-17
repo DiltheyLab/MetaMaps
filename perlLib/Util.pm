@@ -9,10 +9,10 @@ use taxTree;
 
 sub get_metaMap_bin_and_enforce_mainDir
 {
-	my $metamap_bin = './metamap';
+	my $metamap_bin = './metamaps';
 	unless(-e $metamap_bin)
 	{
-		die "Please execute me from the main MetaMap directory";
+		die "Please execute me from the main MetaMaps directory";
 	}
 	return $metamap_bin;
 }

@@ -312,7 +312,7 @@ int main(int argc, char** argv)
 		for(auto mappingsFile : mappingsFiles)
 		{
 			meta::doEM(parameters.DB, mappingsFile, parameters.minimumReadsForU);
-			// meta::doU(parameters.DB, parameters.mappingsForClassification, parameters.minimumReadsForU);
+			//meta::doU(parameters.DB, parameters.mappingsForClassification, parameters.minimumReadsForU);
 		}											 
 	}
 

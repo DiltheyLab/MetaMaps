@@ -56,7 +56,7 @@ my $masterTaxonomy_merged;
 
 my $PBsim_cmd = qq(/data/projects/phillippy/projects/mashsim/PBSIM-PacBio-Simulator/src/pbsim --model_qc /data/projects/phillippy/projects/mashsim/PBSIM-PacBio-Simulator/data/model_qc_clr --data-type CLR --depth DEPTH --prefix --length-mean $simulation_read_length --accuracy-mean 0.88 REF);
 
-my $metamap_bin = './metamap';
+my $metamap_bin = './metamaps';
 my $metaPalette_installation_dir = qq(/data/projects/phillippy/software/MetaPalette/);
 my $jellyfish_2_bin = qq(/data/projects/phillippy/software/jellyfish-2.2.6/bin/jellyfish);
 
