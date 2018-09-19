@@ -184,6 +184,8 @@ my %contig_2_length;
 my %taxonIDs;
 my @contigs;
 my %gene_2_protein;
+my $processed_annotation_files = 0;
+my $processed_protein_files = 0;
 for(my $fileI = 0; $fileI <= $#FASTAfiles; $fileI++)
 {
 	my $currentContigID;
@@ -325,12 +327,14 @@ for(my $fileI = 0; $fileI <= $#FASTAfiles; $fileI++)
 				else
 				{ 
 					push(@output_fields, '', '');
+					warn "File $annotationFile gene $gene_id no gene";
 				}
 				
 				print ANNOTATIONS_OUT join("\t", @output_fields), "\n";
 			}
 		}
-		close(A);		
+		close(A);	
+		$processed_annotation_files++;
 	}
 	
 
@@ -373,9 +377,13 @@ for(my $fileI = 0; $fileI <= $#FASTAfiles; $fileI++)
 		}
 		close(P);
 		$flush->();
+		
+		$processed_protein_files++;
 	}
 }
 @contigs = shuffle @contigs;
+
+die Dumper(["Annotation files", $processed_annotation_files], ["Protein files", $processed_protein_files]);
 
 my $getContigSequence = sub {
 	my $contigInfoAref = shift;
