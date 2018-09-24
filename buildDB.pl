@@ -380,10 +380,12 @@ for(my $fileI = 0; $fileI <= $#FASTAfiles; $fileI++)
 		
 		$processed_protein_files++;
 	}
+	
+	print "Running count keys in gene-2-protein: ", scalar(keys %gene_2_protein), "\n";
 }
 @contigs = shuffle @contigs;
 
-die Dumper(["Annotation files", $processed_annotation_files], ["Protein files", $processed_protein_files]);
+warn Dumper(["Annotation files", $processed_annotation_files], ["Protein files", $processed_protein_files]);
 
 my $getContigSequence = sub {
 	my $contigInfoAref = shift;
@@ -596,6 +598,7 @@ print "\nProduced randomized-order database sequence file $outputFN and\n\ttaxon
 
 my $totalProteinsInAnnotations = 0;
 my $totalProteinsInAnnotationsWithSequence = 0;
+print 'scalar((keys %gene_2_protein)): ', scalar((keys %gene_2_protein)), "\n";
 foreach my $geneID (keys %gene_2_protein)
 {
 	if($gene_2_protein{$geneID}[0])
@@ -606,7 +609,7 @@ foreach my $geneID (keys %gene_2_protein)
 			$totalProteinsInAnnotationsWithSequence++;
 		}
 	} 
-}
+} 
 print "\tTotal protein annotations: $totalProteinsInAnnotations -- with sequence: $totalProteinsInAnnotationsWithSequence\n";
 
 sub update_contigID_newTaxon_ID
