@@ -161,6 +161,7 @@ perl estimateSelfSimilarity.pl --DB new_simulations/0/DB_removeOne_genus2 --temp
 
 /usr/bin/time -v ./mashmap mapDirectly --all -r databases/miniSeq+H/DB.fa -q /scratch/tmp/hmp_set7_combined.fastq -o tmp/hmp7_2_miniSeq+H &> tests/resources/hmp7_2_miniSeq;\
 ./mashmap classify --mappings tmp/hmp7_2_miniSeq+H --DB databases/miniSeq+H
+./mashmap classifyU --mappings tmp/hmp7_2_miniSeq+H --DB databases/miniSeq+H
 (also see Commands_experiments)
 
 

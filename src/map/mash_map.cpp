@@ -254,7 +254,7 @@ int main(int argc, char** argv)
 	}
 
 
-	if((argc < 2) || (!((std::strcmp(argv[1], "index") == 0) || (std::strcmp(argv[1], "mapDirectly") == 0) || (std::strcmp(argv[1], "mapAgainstIndex") == 0) || (std::strcmp(argv[1], "classify") == 0))))
+	if((argc < 2) || (!((std::strcmp(argv[1], "index") == 0) || (std::strcmp(argv[1], "mapDirectly") == 0) || (std::strcmp(argv[1], "mapAgainstIndex") == 0) || (std::strcmp(argv[1], "classify") == 0) || (std::strcmp(argv[1], "classifyU") == 0))))
 	{
 		highLevelUsage();
 		exit(1);
@@ -294,9 +294,14 @@ int main(int argc, char** argv)
 		assert(parameters.mappingsForClassification.length());
 
 		meta::doEM(parameters.DB, parameters.mappingsForClassification, parameters.minimumReadsForU);
+	}
+	else if(firstArgument == "classifyU")
+	{
+		assert(parameters.DB.length());
+		assert(parameters.mappingsForClassification.length());
+ 
 		meta::doU(parameters.DB, parameters.mappingsForClassification, parameters.minimumReadsForU);
 	}
-
 	return 0;
 }
 
