@@ -19,10 +19,6 @@ my $DB = '../databases/miniSeq+H';
 my $metaMap_taxonomy_dir = $DB . '/taxonomy';
 my $MetaMap_taxonomy = taxTree::readTaxonomy($metaMap_taxonomy_dir);
 
-
-
-
-	
 my %taxonID_2_contigs;
 my %contigLengths;
 Util::read_taxonIDs_and_contigs($DB, \%taxonID_2_contigs, \%contigLengths);

@@ -154,7 +154,7 @@ std::vector<oneMappingLocation_U> getMappingLocations_U(const identityManager& i
 
 void compute_U_mappingQualities(std::vector<oneMappingLocation_U>& mappingLocations, const identityManager& iM, int kmerSize)
 {
-	bool verbose = true;
+	bool verbose = false;
 	assert(mappingLocations.size());
 
 	for(auto& mL : mappingLocations)
@@ -175,14 +175,22 @@ void compute_U_mappingQualities(std::vector<oneMappingLocation_U>& mappingLocati
 		}
 		mL.p = 0;
 	}
-	assert((max_int_identity > 0) && (max_int_identity <= 100));
+	
+	std::string readID = mappingLocations.at(0).readID;
+	assert((max_int_identity > 0) && (max_int_identity <= 100)); 
+	
+	if(readID == "m131217_210252_42161_c100527102550000001823083509281480_s1_p0/4505/6895_13844")
+	{
+		verbose = false;
+	}
+
 	if(verbose)
 	{
 		std::cerr << "Read " << mappingLocations.at(0).readID << ", maximum direct mapping identity (int) " << max_int_identity << "\n" << std::flush;
 	}
 
 	int iM_maxReadIdentity = iM.getMaximumReadIdentity();
-	if(!(max_int_identity <= iM_maxReadIdentity))
+	if(!(max_int_identity <= iM_maxReadIdentity)) 
 	{
 		std::cerr << "max_int_identity: " << max_int_identity << "\n";
 		std::cerr << "iM_maxReadIdentity: " << iM_maxReadIdentity << "\n";
@@ -201,54 +209,109 @@ void compute_U_mappingQualities(std::vector<oneMappingLocation_U>& mappingLocati
 			double thisReadIdentity_thisML_l = 0;
 			if(mL.direct)
 			{
+				/*
 				std::cerr << "kmerSize" << ": " << kmerSize << "\n";
 				std::cerr << "n_kmers" << ": " << n_kmers << "\n";
 				std::cerr << "readIdentity" << ": " << readIdentity << "\n";
 				std::cerr << "mL.minimizerUnion" << ": " << mL.minimizerUnion << "\n";
 				std::cerr << "mL.minimizerIntersection" << ": " << mL.minimizerIntersection << "\n" << std::flush;
-
-				thisReadIdentity_thisML_l = mapWrap::likelihood_observed_set_sizes(kmerSize, n_kmers, readIdentity/100.0, mL.minimizerUnion, mL.minimizerIntersection);
-			}
-			else
-			{
-				std::map<int, double> node_shiftDistribution = iM.getOriginalUHistogramForNode_oneReadLength(mL.taxonID, mL.readLength);
-				for(auto shiftE : node_shiftDistribution) 
+				*/
+				
+				double directL = mapWrap::likelihood_observed_set_sizes(kmerSize, n_kmers, readIdentity/100.0, mL.minimizerUnion, mL.minimizerIntersection);
+				thisReadIdentity_thisML_l += directL;
+				
+				if(verbose)
 				{
-					if(shiftE.first == 0)
-					{
-						continue;
-					}
-					int thisShift_identityLoss = 100 - shiftE.first;
-					assert(thisShift_identityLoss >= 0);
-					
-					int thisShift_identity = readIdentity - thisShift_identityLoss;
-					if(!(thisShift_identity > 0))
-					{
-						std::cerr << "thisShift_identity" << ": " << thisShift_identity << "\n";
-						std::cerr << "readIdentity" << ": " << readIdentity << "\n";
-						std::cerr << "shiftE.first" << ": " << shiftE.first << "\n" << std::flush;		
-						for(auto sD : node_shiftDistribution)
-						{
-							std::cerr << "\t" << sD.first << " " << sD.second << "\n" << std::flush;
-						}
-					}
-					assert(thisShift_identity > 0);
-					if(thisShift_identity > iM.getMinimumReadIdentity())
-					{	
-						/*
-						std::cerr << "kmerSize" << ": " << kmerSize << "\n";
-						std::cerr << "n_kmers" << ": " << n_kmers << "\n";
-						std::cerr << "thisShift_identity" << ": " << thisShift_identity << "\n";
-						std::cerr << "mL.minimizerUnion" << ": " << mL.minimizerUnion << "\n";
-						std::cerr << "mL.minimizerIntersection" << ": " << mL.minimizerIntersection << "\n" << std::flush;
-						*/
-						
-						thisReadIdentity_thisML_l += shiftE.second * mapWrap::likelihood_observed_set_sizes(kmerSize, n_kmers, thisShift_identity/100.0, mL.minimizerUnion, mL.minimizerIntersection);
-					}
+					std::cerr << "Direct " << readIdentity << "\n";
+					std::cerr << "\t" << "directL (observed " << mL.originalIdentity << " v/s assumed " << readIdentity << ") " << ": " << directL << "\n";
+					std::cerr << "\t" << "readIdentity_P" << ": " << readIdentity_P << "\n";
+					std::cerr << "\t" << "(readIdentity_P * directL)" << ": " << readIdentity_P * directL << "\n" << std::flush;
 				}
 			}
+			else  
+			{
+				if(verbose)
+				{
+					std::cerr << "Indirect " << readIdentity << "\n";
+				}
+				double indirect_acrossDistribution = 0;
+				std::map<int, double> node_shiftDistribution = iM.getOriginalUHistogramForNode_oneReadLength(mL.taxonID, mL.readLength);
+				double p_sum_generateMapping = 0;
+				for(int count_p_generateMapping = 1; count_p_generateMapping >= 0; count_p_generateMapping--)
+				{
+					for(auto shiftE : node_shiftDistribution) 
+					{
+							
+						if(verbose)
+						{
+							// std::cerr << "\t\t" << "shift" << " " << shiftE.first << " " << shiftE.second << "\n";
+						}	
+						
+						if(shiftE.first == 0)  
+						{
+							continue;
+						}
+						int thisShift_identityLoss = 100 - shiftE.first;
+						assert(thisShift_identityLoss >= 0);
+						
+						// int thisShift_identity = readIdentity - thisShift_identityLoss;
+						double thisShift_identity = (readIdentity/100.0) * (shiftE.first/100.0);
+						if(!(thisShift_identity > 0)) 
+						{
+							//std::cerr << "thisShift_identity" << ": " << thisShift_identity << "\n";
+							//std::cerr << "readIdentity" << ": " << readIdentity << "\n";
+							//std::cerr << "shiftE.first" << ": " << shiftE.first << "\n" << std::flush;		
+							for(auto sD : node_shiftDistribution)
+							{
+								// std::cerr << "\t" << sD.first << " " << sD.second << "\n" << std::flush;
+							}
+						}
+						assert(thisShift_identity > 0);
+						
+						if(verbose)
+						{
+							// std::cerr << "\t\t\teffective identity: " << thisShift_identity << "\n";
+						} 
+						
+						if(thisShift_identity > (iM.getMinimumReadIdentity()/100.0))
+						{	
+							/*
+							std::cerr << "kmerSize" << ": " << kmerSize << "\n";
+							std::cerr << "n_kmers" << ": " << n_kmers << "\n";
+							std::cerr << "thisShift_identity" << ": " << thisShift_identity << "\n";
+							std::cerr << "mL.minimizerUnion" << ": " << mL.minimizerUnion << "\n";
+							std::cerr << "mL.minimizerIntersection" << ": " << mL.minimizerIntersection << "\n" << std::flush;
+							*/
+							
+							double indirectL = mapWrap::likelihood_observed_set_sizes(kmerSize, n_kmers, thisShift_identity, mL.minimizerUnion, mL.minimizerIntersection);
+							
+							if(count_p_generateMapping)
+							{
+								p_sum_generateMapping += (shiftE.second * indirectL);
+							}
+							else
+							{
+								assert(p_sum_generateMapping > 0);
+								indirect_acrossDistribution += ((shiftE.second * indirectL)/p_sum_generateMapping);
+							}
+							if(verbose)
+							{						
+								//std::cerr << "\t\t\t\t" << "indirectL (observed " << mL.originalIdentity << " v/s assumed " << thisShift_identity << ") " << indirectL << "\n";
+								//std::cerr << "\t\t\t\t" << "readIdentity_P: " << readIdentity_P << "\n";
+								//std::cerr << "\t\t\t\t" << "(readIdentity_P * shiftE.second * indirectL): " << readIdentity_P * shiftE.second * indirectL << "\n" << std::flush;
+							}
+						}
+					}
+				}
+				thisReadIdentity_thisML_l += indirect_acrossDistribution;
+				
+				if(verbose)
+				{
+					std::cerr << "\t" << "indirect_acrossDistribution" << ": " << indirect_acrossDistribution << "\n" << std::flush;
+				}				
+			}
 			// assert(thisReadIdentity_thisML_l > 0); // perhaps too strong
-			mL.mapQ += thisReadIdentity_thisML_l; 
+			mL.mapQ += (readIdentity_P * thisReadIdentity_thisML_l); 
 		}
 	}
 	
@@ -260,14 +323,34 @@ void compute_U_mappingQualities(std::vector<oneMappingLocation_U>& mappingLocati
 	assert(mL_p_sum > 0);
 	
 	double mL_after = 0;
+	double mL_after_direct = 0;
+	double mL_after_indirect = 0;
 	for(auto& mL : mappingLocations)
 	{
 		mL.mapQ /= mL_p_sum;
 		mL_after += mL.mapQ;
+		if(mL.direct)
+		{
+			mL_after_direct += mL.mapQ;
+		}
+		else
+		{
+			mL_after_indirect += mL.mapQ;
+		}
 	}	
 	
 	assert(abs(1 - mL_after) <= 1e-3);
 	
+	if(verbose)
+	{
+		std::cerr << "p_direct: " << mL_after_direct << "\n";
+		std::cerr << "p_indirect: " << mL_after_indirect << "\n";
+		std::cerr << std::flush;
+	}
+	if(verbose)
+	{
+		assert(1 == 0);
+	}
 	/*
 	std::cerr << "newRead II\n";
 	for(auto& mL : mappingLocations)
@@ -1305,9 +1388,9 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 			}
 		}
 
-		if(EMiteration > 10)
+		if(EMiteration > 3)
 		{
-			// continueEM = false;
+			// continueEM = false; // todo
 		}
 
 		double f_sum_postNormalization  = sumF(f_nextIteration);

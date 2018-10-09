@@ -41,7 +41,7 @@ die unless(-e 'estimateSelfSimilarity.pl');
 my $simulation_read_length = 5000;
 
 # my $taxonomyDir = '/data/projects/phillippy/projects/mashsim/NCBI/refseq/taxonomy/';
-my $masterTaxonomy_dir = '/data/projects/phillippy/projects/MetaMap/downloads/taxonomy';
+my $masterTaxonomy_dir =  '/data/projects/phillippy/projects/MetaMap/downloads/taxonomy';
 
 # these are populated globally if required
 my $masterTaxonomy; 

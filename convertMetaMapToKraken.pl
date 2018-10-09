@@ -14,8 +14,12 @@ use SimulationsKraken;
 use Util;
 
 my $kraken_binPrefix = SimulationsKraken::getKrakenBinPrefix();
+my $kraken2_binPrefix = SimulationsKraken::getKraken2BinPrefix();
+
 my $Bracken_dir = SimulationsKraken::getBrackenDir();
+
 my $krakenDBTemplate = SimulationsKraken::getKrakenDBTemplate();
+my $kraken2DBTemplate = SimulationsKraken::getKraken2DBTemplate();
 
 unless(scalar(@ARGV) == 1)
 {
@@ -31,14 +35,23 @@ my $database = $ARGV[0];
 #Util::read_taxonIDs_and_contigs($database, \%taxonID_2_contigs, \%contigLength);
 
 my $outputDir_kraken = $database . '/kraken';
+my $outputDir_kraken2 = $database . '/kraken2';
 
-SimulationsKraken::translateMetaMapToKraken (
-	$outputDir_kraken,
+# SimulationsKraken::translateMetaMapToKraken (
+	# $outputDir_kraken,
+	# $database,
+	# $krakenDBTemplate,
+	# $kraken_binPrefix,
+	# $Bracken_dir
+# );
+
+SimulationsKraken::translateMetaMapToKraken2 (
+	$outputDir_kraken2,
 	$database,
-	$krakenDBTemplate,
-	$kraken_binPrefix,
-	$Bracken_dir
+	$kraken2DBTemplate,
+	$kraken2_binPrefix,
 );
+
 
 sub print_help
 {
