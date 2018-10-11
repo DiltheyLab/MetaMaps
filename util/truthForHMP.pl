@@ -11,10 +11,7 @@ use simulation;
 use validation;
 
 my $prefix_out = '../tmp/truthHMP7';
-my $targetDB = '../databases/miniSeq';
-
 my $DB = '../databases/miniSeq+H';
-
 	
 my $metaMap_taxonomy_dir = $DB . '/taxonomy';
 my $MetaMap_taxonomy = taxTree::readTaxonomy($metaMap_taxonomy_dir);

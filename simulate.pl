@@ -63,6 +63,9 @@ my $jellyfish_2_bin = qq(/data/projects/phillippy/software/jellyfish-2.2.6/bin/j
 my $kraken_binPrefix = SimulationsKraken::getKrakenBinPrefix();
 my $Bracken_dir = SimulationsKraken::getBrackenDir();
 my $krakenDBTemplate = SimulationsKraken::getKrakenDBTemplate();
+my $kraken2DBTemplate = SimulationsKraken::getKraken2DBTemplate();
+my $kraken2_binPrefix = SimulationsKraken::getKraken2BinPrefix();
+my $centrifugeBinDir = SimulationsKraken::getCentrifugeDir();
 
 die unless(-e $metamap_bin);
 
@@ -899,11 +902,14 @@ sub inferenceOneSimulation
 		unless($skipKraken)
 		{
 			SimulationsKraken::doKraken($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $krakenDBTemplate, $kraken_binPrefix, $Bracken_dir);
+			SimulationsKraken::doKraken2($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $kraken2DBTemplate, $kraken2_binPrefix);			
 			if($simulation_href->{inferenceDBs}[$varietyI][2] eq 'fullDB')
 			{
 				# SimulationsMetaPalette::doMetaPalette($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $metaPalette_installation_dir, $jellyfish_2_bin, $masterTaxonomy_dir);			
 			}
 		}
+		
+		SimulationsKraken::doCentrifuge($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $centrifugeBinDir); 
 	} 
 	
 	# foreach my $oneDBdir (@{$simulation_href->{dbDirs_metamap}}) 

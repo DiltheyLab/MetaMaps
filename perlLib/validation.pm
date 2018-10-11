@@ -19,6 +19,11 @@ sub getEvaluationLevels
 	return @evaluateAccuracyAtLevels;
 }
 
+sub getMasterTaxonomyDir
+{
+	return '/data/projects/phillippy/projects/MetaMap/downloads/taxonomy';
+}
+
 my %_cache_prepare_masterTaxonomy_withX_taxonomies;
 sub prepare_masterTaxonomy_withX
 {

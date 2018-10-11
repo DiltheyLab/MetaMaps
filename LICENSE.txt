@@ -1,8 +1,8 @@
 PURPOSE
 
-MashMap is a fast long-read mapping tool that uses an algorithm based 
-on MinHash and minimizer techniques. It estimates approximate read 
-mapping positions and nucleotide identity for PacBio and ONT sequences. 
+MetaMaps is a method for the analysis of long-read
+(PacBio/ONT) metagenomic datasets.
+
 It is implemented in C++ and is distributed with:
 
 KSeq

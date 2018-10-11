@@ -38,19 +38,24 @@ sub getCentrifugeDir
 	return qq(/data/projects/phillippy/software/centrifuge-1.0.4-beta);
 }
 
+sub getMasterTaxonomy
+{
+	return qq(/data/projects/phillippy/software/centrifuge-1.0.4-beta);
+}
+
 
 sub translateMetaMapToCentrifuge
 {
 	my $outputDir = shift;
 	my $MetaMapDBDir = shift;
-	my $kraken2DBTemplate = shift;
-	my $centrifugeDir = shift;
+	my $centrifugeBinDir = shift;
 	
 	my $dbDir_abs = abs_path($MetaMapDBDir);
 		
 	if(-e $outputDir)
 	{
 		# system("rm -rf $outputDir") and die "Cannot delete $outputDir";
+		warn "Directory deletion deactivated";
 	}
 	
 	my $MetaMapDBDir_abs = abs_path($MetaMapDBDir);
@@ -91,7 +96,7 @@ sub translateMetaMapToCentrifuge
 		
 	# system("mv ${fasta_for_mapping}.centrifugeTranslation .") and die "Cannot move ${fasta_for_mapping}.centrifuge";
 	 
-	my $cmd_build_I = qq(${centrifugeDir}/centrifuge-build -p 32 --conversion-table ${fasta_for_mapping}.centrifugeTranslation --taxonomy-tree $taxonomy_nodes --name-table $taxonomy_names $fasta_for_mapping DB);
+	my $cmd_build_I = qq(${centrifugeBinDir}/centrifuge-build -p 32 --conversion-table ${fasta_for_mapping}.centrifugeTranslation --taxonomy-tree $taxonomy_nodes --name-table $taxonomy_names $fasta_for_mapping DB);
 	system($cmd_build_I) and die "Could not execute command: $cmd_build_I";
 	
 
@@ -307,6 +312,49 @@ sub doKraken2OnExistingDB
 	chdir($pre_chdir_cwd) or die;			
 }
 
+sub doCentrifuge
+{
+	my $jobDir = shift;
+	my $dbDir = shift;
+	my $reads_fastq = shift;
+	my $centrifugeBinDir = shift;
+		
+	my $simulatedReads = abs_path($reads_fastq);
+	die unless(-e $simulatedReads);
+	
+	my $centrifuge_dir = $jobDir . '/centrifuge/';
+	my $jobDir_abs = abs_path($jobDir);
+	
+	unless(-e $centrifuge_dir)
+	{
+		mkdir($centrifuge_dir) or "Cannot mkdir $centrifuge_dir";
+	}
+	
+	my $centrifuge_DB_dir = $centrifuge_dir . '/DB/';
+	unless(-e $centrifuge_DB_dir)
+	{
+		mkdir($centrifuge_DB_dir) or "Cannot mkdir $centrifuge_DB_dir";
+	}	
+	
+	my %taxonID_original_2_contigs;
+	my %contigLength;
+	Util::read_taxonIDs_and_contigs($dbDir, \%taxonID_original_2_contigs, \%contigLength);
+	
+	SimulationsKraken::translateMetaMapToCentrifuge (
+		$centrifuge_DB_dir,
+		$dbDir, 
+		$centrifugeBinDir,
+	);
+
+	SimulationsKraken::doCentrifugeOnExistingDB (
+		$centrifuge_DB_dir,
+		$simulatedReads,
+		$centrifuge_dir,
+		$centrifugeBinDir,
+		\%taxonID_original_2_contigs
+	);
+}
+
 sub doCentrifugeOnExistingDB
 {
 	my $centrifugeDBDir = shift;
@@ -333,7 +381,7 @@ sub doCentrifugeOnExistingDB
 	
 	create_compatible_composition_file_from_centrifuge(
 		$outputDir . '/results_centrifuge.txt',
-		$centrifugeDBDir . '/../taxonomy',
+		validation::getMasterTaxonomyDir(),
 		$outputDir.'/reads_classified_kreport',
 		$outputDir.'/reads_classified',	
 		$taxonID_original_2_contigs_href
@@ -341,7 +389,7 @@ sub doCentrifugeOnExistingDB
 
 	create_compatible_reads_file_from_centrifuge( 
 		$outputDir . '/results_centrifuge.txt.reads2Taxon',
-		$centrifugeDBDir . '/../taxonomy',
+		validation::getMasterTaxonomyDir(),
 		$outputDir.'/reads_classified',
 	);
 
@@ -370,11 +418,12 @@ sub doKraken
 	my $kraken_dir = $jobDir . '/kraken/';
 	my $jobDir_abs = abs_path($jobDir);
 	
-	#unless(-e $kraken_dir)
-	#{
-	#	mkdir($kraken_dir) or "Cannot mkdir $kraken_dir";
-	#}
-	# translateMetaMapToKraken($kraken_dir, $dbDir, $krakenDBTemplate, $kraken_binPrefix, $Bracken_dir); # todo
+	unless(-e $kraken_dir)
+	{
+		mkdir($kraken_dir) or "Cannot mkdir $kraken_dir";
+	}
+	
+	translateMetaMapToKraken($kraken_dir, $dbDir, $krakenDBTemplate, $kraken_binPrefix, $Bracken_dir); # todo
 	
 	my $simulatedReads = abs_path($reads_fastq);
 	die unless(-e $simulatedReads);
@@ -401,11 +450,11 @@ sub doKraken2
 	my $kraken2_dir = $jobDir . '/kraken2/';
 	my $jobDir_abs = abs_path($jobDir);
 	
-	#unless(-e $kraken2_dir)
-	#{
-	#	mkdir($kraken2_dir) or "Cannot mkdir $kraken2_dir";
-	#}
-	# translateMetaMapToKraken2($kraken2_dir, $dbDir, $kraken2DBTemplate, $kraken2_binPrefix); # todo
+	unless(-e $kraken2_dir)
+	{
+		mkdir($kraken2_dir) or "Cannot mkdir $kraken2_dir";
+	}
+	translateMetaMapToKraken2($kraken2_dir, $dbDir, $kraken2DBTemplate, $kraken2_binPrefix); # todo
 	
 	my $simulatedReads = abs_path($reads_fastq);
 	die unless(-e $simulatedReads);
@@ -614,6 +663,10 @@ sub create_compatible_composition_file_from_centrifuge
 		}
 		else
 		{
+			unless(($taxonID eq '0') or (exists $taxonomy_kraken->{$taxonID}))
+			{
+				warn "Not sure what to do with taxon ID $taxonID (file $f_reads)";
+			}
 			my $lightning = validation::getAllRanksForTaxon_withUnclassified($taxonomy_kraken, $taxonID, $create_compatible_file_from_kraken);
 			$_getLightning_cache{$taxonID} = $lightning;
 			return $lightning;
@@ -649,6 +702,7 @@ sub create_compatible_composition_file_from_centrifuge
 		}
 		else
 		{
+			die if($taxID eq '0');
 			my $lightning = $getLightning->($taxID);
 			$reads_at_levels{'definedAndHypotheticalGenomes'}{$taxID}++;
 			RANK: foreach my $rank (@evaluateAccuracyAtLevels)

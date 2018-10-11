@@ -61,6 +61,8 @@ perl simulate.pl --DB databases/miniSeq+H --action inferenceJobI --jobI 0 --suff
 qsub /data/projects/phillippy/projects/MetaMap/databases/miniSeq+H/simulations_i100_specifiedFrequencies/inferenceJobs.asArray
 qsub /data/projects/phillippy/projects/MetaMap/databases/miniSeq+H/simulations_p25_logNormal/inferenceJobs.asArray.manual
 perl callKrakenOnConvertedDB.pl databases/miniSeq+H /scratch/tmp/hmp_set7_combined.fastq.mappable /scratch/tmp/hmp_set7_combined_kraken_results
+perl callKraken2OnConvertedDB.pl databases/miniSeq+H /scratch/tmp/hmp_set7_combined.fastq.mappable /scratch/tmp/hmp_set7_combined_kraken2_results
+perl callCentrifugeOnConvertedDB.pl databases/miniSeq+H /scratch/tmp/hmp_set7_combined.fastq.mappable /scratch/tmp/hmp_set7_combined_centrifuge_results
 
   
 All combined:

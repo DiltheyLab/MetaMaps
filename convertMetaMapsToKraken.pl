@@ -37,6 +37,8 @@ my $database = $ARGV[0];
 my $outputDir_kraken = $database . '/kraken';
 my $outputDir_kraken2 = $database . '/kraken2';
 
+warn "Kraken 1 conversion currently deactivated.";
+
 # SimulationsKraken::translateMetaMapToKraken (
 	# $outputDir_kraken,
 	# $database,
@@ -56,17 +58,17 @@ SimulationsKraken::translateMetaMapToKraken2 (
 sub print_help
 {
 	print qq(
-convertMetaMapToKraken.pl
+convertMetaMapsToKraken.pl
 
-  Convert a MetaMap DB to Kraken/Bracken.
+  Convert a MetaMaps DB to Kraken/Bracken.
   
 Usage:
 
-  perl convertMetaMapToKraken.pl dbNAME
+  perl convertMetaMapsToKraken.pl dbNAME
   
 Example:
 
-  perl convertMetaMapToKraken.pl databases/miniSeq
+  perl convertMetaMapsToKraken.pl databases/miniSeq
   
   
 );
