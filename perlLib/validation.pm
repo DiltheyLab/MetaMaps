@@ -439,7 +439,7 @@ sub readLevelComparison
 	
 	my @readIDs = keys %$reads_truth_absolute;
 	die "readLevelComparison(..): We don't have absolute truth for some reads" unless(all {exists $reads_truth_absolute->{$_}} keys %$reads_inferred);
-	@readIDs = grep {exists $readLengths_href->{$_}} @readIDs; # todo remove 
+	# @readIDs = grep {exists $readLengths_href->{$_}} @readIDs; # todo remove 
 	
 	#unless((scalar(@readIDs) == scalar(keys %$reads_inferred)) and (all {exists $reads_inferred->{$_}} @readIDs))
 	#{
@@ -566,6 +566,7 @@ sub readLevelComparison
 		my %_read_categories = map {$_ => 1} @read_categories;
 		
 		die unless(defined $readLengths_href->{$readID});
+		my $readLength = $readLengths_href->{$readID};
 		my $readLengthBin = $getLengthBinForLength->($readLengths_href->{$readID});
 		
 		foreach my $category (@read_categories)
@@ -576,7 +577,13 @@ sub readLevelComparison
 				$n_reads_correct{$category}{N} = 0;
 				$n_reads_correct{$category}{correct} = 0;
 				$n_reads_correct{$category}{N_n0} = 0;
-				$n_reads_correct{$category}{correct_n0} = 0;				
+				$n_reads_correct{$category}{correct_n0} = 0;
+
+				$n_reads_correct{$category}{weightedByLength_missing} = 0;
+				$n_reads_correct{$category}{weightedByLength_N} = 0;
+				$n_reads_correct{$category}{weightedByLength_correct} = 0;
+				$n_reads_correct{$category}{weightedByLength_N_n0} = 0;
+				$n_reads_correct{$category}{weightedByLength_correct_n0} = 0;					
 			}	
 			
 			unless(defined $n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{N})
@@ -585,7 +592,13 @@ sub readLevelComparison
 				$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{N} = 0;
 				$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{correct} = 0;			
 				$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{N_n0} = 0;
-				$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{correct_n0} = 0;							
+				$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{correct_n0} = 0;
+				
+				$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{weightedByLength_missing} = 0;
+				$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{weightedByLength_N} = 0;
+				$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{weightedByLength_correct} = 0;			
+				$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{weightedByLength_N_n0} = 0;
+				$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{weightedByLength_correct_n0} = 0;							
 			}	
 			
 			unless(defined $n_reads_unknownStats_byLevel{$category}{'genome'}{N_unclassified_should0_is0})
@@ -593,7 +606,12 @@ sub readLevelComparison
 				$n_reads_unknownStats_byLevel{$category}{'genome'}{N_unclassified_should0_is0} = 0;
 				$n_reads_unknownStats_byLevel{$category}{'genome'}{N_unclassified_should0_is1} = 0;
 				$n_reads_unknownStats_byLevel{$category}{'genome'}{N_unclassified_should1_is0} = 0;
-				$n_reads_unknownStats_byLevel{$category}{'genome'}{N_unclassified_should1_is1} = 0;			
+				$n_reads_unknownStats_byLevel{$category}{'genome'}{N_unclassified_should1_is1} = 0;
+				
+				$n_reads_unknownStats_byLevel{$category}{'genome'}{weightedByLength_N_unclassified_should0_is0} = 0;
+				$n_reads_unknownStats_byLevel{$category}{'genome'}{weightedByLength_N_unclassified_should0_is1} = 0;
+				$n_reads_unknownStats_byLevel{$category}{'genome'}{weightedByLength_N_unclassified_should1_is0} = 0;
+				$n_reads_unknownStats_byLevel{$category}{'genome'}{weightedByLength_N_unclassified_should1_is1} = 0;			
 			}
 
 			foreach my $level ('absolute', @evaluateAccuracyAtLevels)
@@ -612,7 +630,21 @@ sub readLevelComparison
 					$n_reads_unknownStats_byLevel{$category}{$level}{N_unclassified_should0_is0} = 0;
 					$n_reads_unknownStats_byLevel{$category}{$level}{N_unclassified_should0_is1} = 0;
 					$n_reads_unknownStats_byLevel{$category}{$level}{N_unclassified_should1_is0} = 0;
-					$n_reads_unknownStats_byLevel{$category}{$level}{N_unclassified_should1_is1} = 0;				
+					$n_reads_unknownStats_byLevel{$category}{$level}{N_unclassified_should1_is1} = 0;
+					
+					$n_reads_correct_byLevel{$category}{$level}{weightedByLength_missing} = 0;
+					$n_reads_correct_byLevel{$category}{$level}{weightedByLength_N} = 0;
+					$n_reads_correct_byLevel{$category}{$level}{weightedByLength_N_truthDefined} = 0;
+					$n_reads_correct_byLevel{$category}{$level}{weightedByLength_correct} = 0;
+					$n_reads_correct_byLevel{$category}{$level}{weightedByLength_correct_exactlyAtLevel} = 0;
+					$n_reads_correct_byLevel{$category}{$level}{weightedByLength_correct_truthDefined} = 0;	
+					$n_reads_correct_byLevel{$category}{$level}{weightedByLength_N_n0} = 0;
+					$n_reads_correct_byLevel{$category}{$level}{weightedByLength_correct_n0} = 0;	
+					
+					$n_reads_unknownStats_byLevel{$category}{$level}{weightedByLength_N_unclassified_should0_is0} = 0;
+					$n_reads_unknownStats_byLevel{$category}{$level}{weightedByLength_N_unclassified_should0_is1} = 0;
+					$n_reads_unknownStats_byLevel{$category}{$level}{weightedByLength_N_unclassified_should1_is0} = 0;
+					$n_reads_unknownStats_byLevel{$category}{$level}{weightedByLength_N_unclassified_should1_is1} = 0;				
 				}
 				
 				unless(defined $n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{N})
@@ -622,6 +654,11 @@ sub readLevelComparison
 					$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{correct} = 0;
 					$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{N_n0} = 0;
 					$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{correct_n0} = 0;
+					
+					$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{weightedByLength_N} = 0;
+					$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{weightedByLength_correct} = 0;
+					$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{weightedByLength_N_n0} = 0;
+					$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{weightedByLength_correct_n0} = 0;
 				}
 			}
 		}
@@ -641,16 +678,25 @@ sub readLevelComparison
 			
 			foreach my $category (@read_categories)
 			{
-				$n_reads_correct{$category}{N}++; 
+				$n_reads_correct{$category}{N}++;
+				$n_reads_correct{$category}{weightedByLength_N} += $readLength;
+				
 				$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{N}++;
+				$n_reads_correct_byLevel_byLength{$category}{'weightedByLength_absolute'}{$readLengthBin}{N} =+ $readLength;
 
 				$n_reads_correct{$category}{'attachedTo_' . $attachedTo_inInference}++;
 				$n_reads_correct{$category}{'attachedToDirectlyMappable'} += ((exists $mappableTaxonIDs->{$inferredTaxonID}) ? 1 : 0);
-					
+				
+				$n_reads_correct{$category}{'weightedByLength_attachedTo_' . $attachedTo_inInference} += $readLength;
+				$n_reads_correct{$category}{'weightedByLength_attachedToDirectlyMappable'} += ((exists $mappableTaxonIDs->{$inferredTaxonID}) ? 1 : 0)*$readLength;
+				
 				if($inferredTaxonID eq $trueTaxonID_inUsedDB)
 				{
 					$n_reads_correct{$category}{correct}++;
 					$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{correct}++;
+					
+					$n_reads_correct{$category}{weightedByLength_correct} += $readLength;
+					$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{weightedByLength_correct} += $readLength;
 				}
 				else
 				{
@@ -668,6 +714,14 @@ sub readLevelComparison
 					{
 						$n_reads_correct{$category}{correct_n0}++;
 						$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{correct_n0}++;
+					}
+					
+					$n_reads_correct{$category}{weightedByLength_N_n0} += $readLength;
+					$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{weightedByLength_N_n0} += $readLength;
+					if($inferredTaxonID eq $trueTaxonID_inUsedDB)
+					{
+						$n_reads_correct{$category}{weightedByLength_correct_n0} += $readLength;
+						$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{weightedByLength_correct_n0} += $readLength;
 					}					
 					
 				}
@@ -723,6 +777,7 @@ sub readLevelComparison
 					}
 					
 					$n_reads_unknownStats_byLevel{$category}{'genome'}{$unclassified_key}++;
+					$n_reads_unknownStats_byLevel{$category}{'genome'}{'weightedByLength_' . $unclassified_key} += $readLength;
 				}
 			}
 			
@@ -745,9 +800,17 @@ sub readLevelComparison
 					{
 						$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{N}++;
 					}
-					
 					$n_reads_correct_byLevel{$category}{$level}{'attachedTo_' . $attachedTo_inInference}++;
 					$n_reads_correct_byLevel{$category}{$level}{'attachedToDirectlyMappable'} += ((exists $mappableTaxonIDs->{$inferredTaxonID}) ? 1 : 0);
+					
+					$n_reads_correct_byLevel{$category}{$level}{weightedByLength_N} += $readLength;
+					$n_reads_correct_byLevel{$category}{$level}{weightedByLength_N_truthDefined} += $readLength if($lightning_truth->{$level} ne 'NotLabelledAtLevel');
+					if($level ne 'absolute')
+					{
+						$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{weightedByLength_N} += $readLength;
+					}
+					$n_reads_correct_byLevel{$category}{$level}{'weightedByLength_attachedTo_' . $attachedTo_inInference} += $readLength;
+					$n_reads_correct_byLevel{$category}{$level}{'weightedByLength_attachedToDirectlyMappable'} += ((exists $mappableTaxonIDs->{$inferredTaxonID}) ? 1 : 0)*$readLength;
 					
 					my $unclassified_key;
 										
@@ -770,22 +833,27 @@ sub readLevelComparison
 					die unless(defined $unclassified_key);
 
 					$n_reads_unknownStats_byLevel{$category}{$level}{$unclassified_key}++;
+					$n_reads_unknownStats_byLevel{$category}{$level}{'weightedByLength_' . $unclassified_key} += $readLength;
 						
 		
 					if(($lightning_inferred->{$level} ne 'Unclassified') and ($lightning_inferred->{$level} ne '0'))
 					{
 						$n_reads_correct_byLevel{$category}{$level}{N_n0}++;
+						$n_reads_correct_byLevel{$category}{$level}{weightedByLength_N_n0} += $readLength;;
 						if($level ne 'absolute')
 						{
 							$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{N_n0}++;
+							$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{weightedByLength_N_n0} += $readLength;;
 						}		
 				
 						if($lightning_truth->{$level} eq $lightning_inferred->{$level})
 						{
 							$n_reads_correct_byLevel{$category}{$level}{correct_n0}++;
+							$n_reads_correct_byLevel{$category}{$level}{weightedByLength_correct_n0} += $readLength;;
 							if($level ne 'absolute')
 							{						
 								$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{correct_n0}++;						
+								$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{weightedByLength_correct_n0} += $readLength;						
 							}
 						}
 					}
@@ -798,17 +866,21 @@ sub readLevelComparison
 						# }
 						
 						$n_reads_correct_byLevel{$category}{$level}{correct}++;
+						$n_reads_correct_byLevel{$category}{$level}{weightedByLength_correct} += $readLength;		
 						if($level ne 'absolute')
 						{						
 							$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{correct}++;						
+							$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{weightedByLength_correct} += $readLength;							
 						}
 						if($inferredTaxonID eq $trueTaxonID_inUsedDB)
 						{
 							$n_reads_correct_byLevel{$category}{$level}{correct_exactly}++;
+							$n_reads_correct_byLevel{$category}{$level}{weightedByLength_correct_exactly} += $readLength;		
 						}					
 
 											
 						$n_reads_correct_byLevel{$category}{$level}{correct_truthDefined}++ if($lightning_truth->{$level} ne 'NotLabelledAtLevel');
+						$n_reads_correct_byLevel{$category}{$level}{weightedByLength_correct_truthDefined} += $readLength if($lightning_truth->{$level} ne 'NotLabelledAtLevel');
 					}		
 					else
 					{
@@ -837,21 +909,28 @@ sub readLevelComparison
 			foreach my $category (@read_categories)
 			{
 				$n_reads_correct{$category}{missing}++;			
+				$n_reads_correct{$category}{weightedByLength_missing} += $readLength;			
+				
 				die unless($n_reads_correct{$category}{missing} <= scalar(@readIDs));
+				
 				$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{missing}++;
+				$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{weightedByLength_missing} += $readLength;
 				
 				foreach my $level ('absolute', @evaluateAccuracyAtLevels)
 				{
 					$n_reads_correct_byLevel{$category}{$level}{missing}++;
+					$n_reads_correct_byLevel{$category}{$level}{weightedByLength_missing} += $readLength;
 					die unless($n_reads_correct_byLevel{$category}{$level}{missing} <= scalar(@readIDs));
 					
 					if($level ne 'absolute')
 					{
 						$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{missing}++;
+						$n_reads_correct_byLevel_byLength{$category}{$level}{$readLengthBin}{weightedByLength_missing} += $readLength;
 					}
 				}
 				
 				$n_reads_unknownStats_byLevel{$category}{'genome'}{$unclassified_key_absolute}++;		
+				$n_reads_unknownStats_byLevel{$category}{'genome'}{'weightedByLength_' . $unclassified_key_absolute} += $readLength;		
 
 				foreach my $level ('absolute', @evaluateAccuracyAtLevels)
 				{
@@ -869,6 +948,7 @@ sub readLevelComparison
 					}
 		
 					$n_reads_unknownStats_byLevel{$category}{$level}{$unclassified_key}++;		
+					$n_reads_unknownStats_byLevel{$category}{$level}{'weightedByLength_' . $unclassified_key} += $readLength;		
 				}
 			}
 		}
@@ -901,7 +981,7 @@ sub readLevelComparison
 	{
 		foreach my $category (keys %n_reads_correct_byLevel)
 		{
-			foreach my $level (keys %{$n_reads_correct_byLevel{$category}})
+			foreach my $level (keys %{$n_reads_correct_byLevel{$category}}) 
 			{
 				foreach my $key (keys %{$n_reads_correct_byLevel{$category}{$level}})
 				{

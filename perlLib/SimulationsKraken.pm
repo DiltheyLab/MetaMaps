@@ -426,7 +426,7 @@ sub doCentrifugeOnExistingDB
 	
 	create_compatible_composition_file_from_centrifuge(
 		$outputDir . '/results_centrifuge.txt',
-		"${centrifugeDBDir}/DB/taxonomy",
+		"${centrifugeDBDir}/taxonomy",
 		$outputDir.'/reads_classified_kreport',
 		$outputDir.'/reads_classified',	
 		$taxonID_original_2_contigs_href
@@ -434,7 +434,7 @@ sub doCentrifugeOnExistingDB
 
 	create_compatible_reads_file_from_centrifuge( 
 		$outputDir . '/results_centrifuge.txt.reads2Taxon', 
-		"${centrifugeDBDir}/DB/taxonomy",
+		"${centrifugeDBDir}/taxonomy",
 		$outputDir.'/reads_classified',
 	);
 
@@ -660,14 +660,14 @@ sub create_compatible_file_from_kraken
 sub create_compatible_composition_file_from_centrifuge
 {
 	my $target_output_fn = shift;
-	my $taxonomy_kraken_dir = shift;
+	my $taxonomy_centrifuge_dir = shift;
 	my $f_distribution_krakenFormat = shift;
 	my $f_reads = shift;
 	my $create_compatible_file_from_kraken = shift;	
 	die unless(defined $create_compatible_file_from_kraken);
 	
-	my $taxonomy_kraken = taxTree::readTaxonomy($taxonomy_kraken_dir);
-	
+	my $taxonomy_kraken = taxTree::readTaxonomy($taxonomy_centrifuge_dir);
+		
 	my $target_output_fn_2 = $target_output_fn . '.ignoreUnclassified';
 	my %S_byLevel;
 	my $n_unclassified;
@@ -725,8 +725,10 @@ sub create_compatible_composition_file_from_centrifuge
 	
 	my @evaluateAccuracyAtLevels = validation::getEvaluationLevels();
 	
-	my %reads_at_levels;
+	my %classifications_per_read;
+	my %is_unclassified;
 	open(CENTRIFUGE, '<', $f_reads) or die "Cannot open $f_reads";
+	my %sawRead;
 	my $headerLine = <CENTRIFUGE>;
 	my @header_fields = split(/\t/, $headerLine);
 	die unless($header_fields[0] eq 'readID');
@@ -743,13 +745,35 @@ sub create_compatible_composition_file_from_centrifuge
 		my $taxID = $f[2];
 		if(($seqID eq 'unclassified') or ($taxID eq '0'))
 		{
-			$n_unclassified_check++;		
+			$is_unclassified{$readID}++;
 		}
 		else
 		{
-			die "Line $. of file $f_reads - taxID is $taxID, but not unclassified?\n$line" if($taxID eq '0');
-			my $lightning = $getLightning->($taxID);
-			$reads_at_levels{'definedAndHypotheticalGenomes'}{$taxID}++;
+			$classifications_per_read{$readID}{$taxID}++;
+			# print OUTPUT $readID, "\t", $taxID, "\n";
+		}
+	}
+	close(CENTRIFUGE);
+	
+	foreach my $unclassifiedID (keys %is_unclassified)
+	{
+		die if($classifications_per_read{$unclassifiedID});
+		$classifications_per_read{$unclassifiedID}{0}++;
+	}	
+	
+	my %reads_at_levels;
+	foreach my $readID (keys %classifications_per_read)
+	{
+		my $lca = taxTree::lowestCommonAncestor($taxonomy_kraken, [keys %{$classifications_per_read{$readID}}]);
+		if($lca eq '0')
+		{
+			$n_unclassified_check++;				
+		}  
+		else
+		{
+			die "Read $readID of file $f_reads - LCA is $lca, but not unclassified?" if($lca eq '0');
+			my $lightning = $getLightning->($lca);
+			$reads_at_levels{'definedAndHypotheticalGenomes'}{$lca}++;
 			RANK: foreach my $rank (@evaluateAccuracyAtLevels)
 			{
 				die unless(defined $lightning->{$rank});
@@ -757,7 +781,9 @@ sub create_compatible_composition_file_from_centrifuge
 			}
 		}
 	}
-	close(CENTRIFUGE);
+	
+	close(OUTPUT);
+	close(OUTPUT_UNCL);	
 
 	die "Inconsistency w.r.t. unclassified reads -- $n_unclassified_check vs $n_unclassified" unless($n_unclassified_check == $n_unclassified);
 	
@@ -777,7 +803,7 @@ sub create_compatible_composition_file_from_centrifuge
 		foreach my $taxonID (keys %{$reads_at_levels{$level}})
 		{
 			my $taxonID_for_print = $taxonID;
-			my $name; 
+			my $name;   
 			if($taxonID eq 'Unclassified')
 			{
 				$name = 'Unclassified';
@@ -809,7 +835,7 @@ sub create_compatible_composition_file_from_centrifuge
 			$reads_all_taxa_ignoreUnclassified += (($taxonID eq 'Unclassified') ? ($nReads - $n_unclassified): $nReads);
 		}
 		
-		die unless($reads_all_taxa == $n_total_reads);
+		die "$reads_all_taxa != $n_total_reads output file $f_reads" unless($reads_all_taxa == $n_total_reads);
 		die unless($reads_all_taxa_ignoreUnclassified == $n_root);
 	}
 	close(OUTPUT);
@@ -862,6 +888,8 @@ sub create_compatible_reads_file_from_centrifuge
 	
 	my $taxonomy_kraken = taxTree::readTaxonomy($taxonomy_kraken_dir);
 	
+	my %is_unclassified;
+	my %classifications_per_read;
 	my $output_fn_unclassified = $output_fn . '.unclassified';
 	open(OUTPUT, '>', $output_fn) or die "Cannot open $output_fn";	
 	open(OUTPUT_UNCL, '>', $output_fn_unclassified) or die "Cannot open $output_fn_unclassified";	
@@ -880,20 +908,41 @@ sub create_compatible_reads_file_from_centrifuge
 		my $readID = $f[0];
 		my $seqID = $f[1];
 		my $taxID = $f[2];
-		if($seqID eq 'unclassified')
+		if(($seqID eq 'unclassified') or ($taxID eq '0'))
+		{
+			$is_unclassified{$readID}++;
+			print OUTPUT $readID, "\t", 0, "\n";		 
+			print OUTPUT_UNCL $readID, "\t", 'Unclassified', "\n";			
+		}
+		else
+		{
+			$classifications_per_read{$readID}{$taxID}++;
+			# print OUTPUT $readID, "\t", $taxID, "\n";
+		}
+	}
+	close(CENTRIFUGE);
+	
+	foreach my $unclassifiedID (keys %is_unclassified)
+	{
+		die if($classifications_per_read{$unclassifiedID});
+	}	
+
+	foreach my $readID (keys %classifications_per_read)
+	{
+		my $lca = taxTree::lowestCommonAncestor($taxonomy_kraken, [keys %{$classifications_per_read{$readID}}]);
+		if($lca eq '0')
 		{
 			print OUTPUT $readID, "\t", 0, "\n";		 
 			print OUTPUT_UNCL $readID, "\t", 'Unclassified', "\n";			
 		}
 		else
 		{
-			print OUTPUT $readID, "\t", $taxID, "\n";
+			print OUTPUT $readID, "\t", $lca, "\n";
 		}
 	}
-	close(CENTRIFUGE);
+	
 	close(OUTPUT);
 	close(OUTPUT_UNCL);
-	
 }
 
 sub create_compatible_file_from_kraken_bracken

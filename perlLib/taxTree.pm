@@ -14,6 +14,7 @@ sub readTaxonomy
 	my $taxonomy_nodes_f = $buildDB_taxonomyDir . '/nodes.dmp';
 	my $merged_nodes_f = $buildDB_taxonomyDir . '/merged.dmp';
 	
+
 	unless(-e $taxonomy_names_f)
 	{
 		die "File $taxonomy_names_f missing, $buildDB_taxonomyDir is not a valid taxonomy directory.";
@@ -792,6 +793,71 @@ sub findCurrentNodeID
 			die "Cannot transate ID $originalID (running $runningID)";
 		}
 	}
+}
+
+sub test_lowestCommonAncestor
+{
+	my $taxonomy_href = shift;
+	my $ntests = 1000;
+	my @nodes = keys %$taxonomy_href;
+	for(my $testI = 0; $testI < $ntests;)
+	{
+		my $selectNodeI = rand(scalar(@nodes));
+		die unless(($selectNodeI >= 0) and ($selectNodeI <= $#nodes));
+		my $taxonID = $nodes[$selectNodeI];
+		if(scalar(@{$taxonomy_href->{$taxonID}{children}}) > 1)
+		{
+			my @taxonID_descendants = descendants($taxonomy_href, $taxonID);
+			die unless (scalar(@taxonID_descendants) > 1);
+			{
+				print $taxonID,"\n";
+				die Dumper("Discrepancy I", \@taxonID_descendants, $taxonID . " vs " . lowestCommonAncestor($taxonomy_href, \@taxonID_descendants)), unless(lowestCommonAncestor($taxonomy_href, \@taxonID_descendants) eq $taxonID);
+				die Dumper("Discrepancy II", \@taxonID_descendants, $taxonID . " vs " . lowestCommonAncestor($taxonomy_href, [$taxonID, @taxonID_descendants])) unless(lowestCommonAncestor($taxonomy_href, [$taxonID, @taxonID_descendants]) eq $taxonID);
+				$testI++;
+			}
+		}
+	}
+	warn "$ntests tests successful";
+}
+
+sub lowestCommonAncestor
+{
+	my $taxonomy_href = shift;
+	my $nodes_aref = shift; 
+	if((scalar(@$nodes_aref) == 1) and ($nodes_aref->[0] eq '0'))
+	{
+		return 0;
+	}		
+	
+	die Dumper("lowestCommonAncestor: some nodes not part of the taxonomy", $nodes_aref) unless(all {exists $taxonomy_href->{$_}} @$nodes_aref);
+	die if(scalar(@$nodes_aref) == 0);
+	if(scalar(@$nodes_aref) == 1)
+	{
+		return $nodes_aref->[0];
+	}	
+	my %taxonID_counts;
+	foreach my $taxonID (@$nodes_aref)
+	{	
+		my @ancestors = ($taxonID, get_ancestors($taxonomy_href, $taxonID));
+		foreach my $ancestor (@ancestors)
+		{
+			$taxonID_counts{$ancestor}++;
+			die unless(($taxonID_counts{$ancestor}) <= scalar(@$nodes_aref));
+		}
+	}
+	
+	my $lca;
+	my @ancestors_o = ($nodes_aref->[0], get_ancestors($taxonomy_href, $nodes_aref->[0]));
+	foreach my $ancestor (@ancestors_o)
+	{
+		if($taxonID_counts{$ancestor} == scalar(@$nodes_aref))
+		{
+			$lca = $ancestor;
+			last;
+		}
+	}
+	die unless(defined $lca);
+	return $lca;
 }
 
 sub getNodesForPotentialAttachmentOfNovelSpecies

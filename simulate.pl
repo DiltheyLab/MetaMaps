@@ -878,7 +878,7 @@ sub inferenceOneSimulation
 	my $skipKraken = shift;
 	my $maxMemory = shift;
 
-	my $fullTaxonomy = taxTree::readTaxonomy($masterTaxonomy_dir);
+	# my $fullTaxonomy = taxTree::readTaxonomy($masterTaxonomy_dir);
 	
 	for(my $varietyI = 0; $varietyI <= $#{$simulation_href->{dbDirs_metamap}}; $varietyI++)
 	{		
@@ -898,8 +898,8 @@ sub inferenceOneSimulation
 		
 		print "Doing inference in $DB_target_dir\n";
 		 
-		warn "MetaMaps skipped";
-		# doMetaMap($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $maxMemory);
+		# warn "MetaMaps skipped";
+		doMetaMap($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $maxMemory);
 		unless($skipKraken)
 		{
 			SimulationsKraken::doKraken($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $krakenDBTemplate, $kraken_binPrefix, $Bracken_dir);
