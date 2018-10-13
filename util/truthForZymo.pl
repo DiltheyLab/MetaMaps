@@ -26,61 +26,14 @@ my $prefix_out = '../tmp/truthZymp';
 my $masterTaxonomy_dir = '/data/projects/phillippy/projects/MetaMap/downloads/taxonomy';
 my $master_taxonomy = taxTree::readTaxonomy($masterTaxonomy_dir);
 
-
-
-my %file_2_taxonID = (
-	'Lactobacillus_fermentum_complete_genome.fasta' => '1613',
-	'Bacillus_subtilis_complete_genome.fasta' => '1423',
-	'Saccharomyces_cerevisiae_draft_genome.fa' => '4932',
-	'Staphylococcus_aureus_complete_genome.fasta' => '1280',
-	'Salmonella_enterica_complete_genome.fasta' => '28901',
-	'Pseudomonas_aeruginosa_complete_genome.fasta' => '287',
-	'Listeria_monocytogenes_complete_genome.fasta' => '1639',
-	'Escherichia_coli_complete_genome.fasta' => '562',
-	'Enterococcus_faecalis_complete_genome.fasta' => '1351',
-	'Cryptococcus_neoformans_draft_genome.fasta' => '5207',
-);
-
-my %contig_from_genome;
-my %taxa_genome_lengths;
-my %contig_lengths;
 my $referenceDir = '/data/projects/phillippy/projects/MetaMap/loman/ZymoBIOMICS.STD.refseq.v2/Genomes/';
-my @genomes = (glob($referenceDir . '/*.fasta'), glob($referenceDir . '/*.fa'));
-foreach my $genome (@genomes)
-{
-	next if($genome =~ /combined/);
-	my $genome_basename = fileparse($genome);
-	die "Genome $genome_basename undefined" unless($file_2_taxonID{$genome_basename});
-	my $currentContigID;
-	open(GENOME, '<', $genome) or die;
-	while(<GENOME>)
-	{	
-		if(substr($_, 0, 1) eq '>')
-		{
-			chomp($_);
-			substr($_, 0, 1) = '';
-			my $contigID = $_;
-			$contigID =~ s/\s.+//;			
-			die if($contig_from_genome{$contigID});
-			$contig_from_genome{$contigID} = $genome_basename;
-			$currentContigID = $contigID;
-		}		
-		else
-		{
-			chomp($_);
-			die unless(defined $currentContigID);
-			$contig_lengths{$currentContigID} += length($_);
-				
-			die unless($file_2_taxonID{$genome_basename});
-			$taxa_genome_lengths{$file_2_taxonID{$genome_basename}} += length($_);
-		}	
-	}
-	close(GENOME);
-}
-
-my $referenceGenome = $referenceDir . '/combined.fasta';
+my $referenceGenome = $referenceDir . '/combined.fa';
 my %reference_contigs_2_taxon;
 my %reference_contigs_unique;
+my %taxa_genome_lengths;
+my %contig_lengths;
+my $currentContigID;
+my $currentTaxonID;
 open(REF, '<', $referenceGenome) or die;
 while(<REF>)
 {
@@ -91,12 +44,26 @@ while(<REF>)
 		substr($_, 0, 1) = '';
 		my $contigID = $_;
 		$contigID =~ s/\s.+//;
-		die unless($contig_from_genome{$contigID});
-		die unless($file_2_taxonID{$contig_from_genome{$contigID}});
-		my $taxonID = $file_2_taxonID{$contig_from_genome{$contigID}};
-		die unless(defined $master_taxonomy->{$taxonID});
+		
+		die "Contig ID $contigID not unique in file $referenceGenome" if($reference_contigs_unique{$contigID});
+		$reference_contigs_unique{$contigID}++;
+		
+		die unless($contigID =~ /^tx(.+?)\|/);
+		my $taxonID = $1;
+
 		$reference_contigs_2_taxon{$contigID} = $taxonID;
+		die unless(defined $master_taxonomy->{$taxonID});	
+
+		$currentContigID = $contigID;
+		$currentTaxonID = $taxonID;
 	}	
+	else
+	{
+		chomp($_);
+		die unless(defined $currentContigID);
+		$contig_lengths{$currentContigID} += length($_);
+		$taxa_genome_lengths{$currentTaxonID} += length($_);		
+	}
 }
 close(REF);
 

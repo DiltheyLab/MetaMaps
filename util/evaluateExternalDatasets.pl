@@ -31,18 +31,46 @@ my @resultsSets = (
 		# '/scratch/tmp/hmp-nanopore.fasta.fastq'
 	# ],
 	[
-		'PacBio',
+		'HMP',
 		'tmp/hmp7_2_miniSeq+H',
-		'/scratch/tmp/hmp_set7_combined_kraken_results',
+		[
+			'/scratch/tmp/hmp_set7_combined_kraken_results',
+			'/scratch/tmp/hmp_set7_combined_kraken2_results',
+			'/scratch/tmp/hmp_set7_combined_centrifuge_results',
+		],
 		'tmp/truthHMP7_bwa_pacbio',
 		'/scratch/tmp/hmp_set7_combined.fastq.mappable'
 	],
+	[
+		'Zymo',
+		'/scratch/tmp/Zymo_metamaps',
+		[
+			'/scratch/tmp/Zymo_combined_kraken_results',
+			'/scratch/tmp/Zymo_combined_kraken2_results',
+			'/scratch/tmp/Zymo_combined_centrifuge_results',
+		],
+		'tmp/truthZymp',
+		'/data/projects/phillippy/projects/MetaMap/loman/GridION-Zymo_CS_MPZBB_LSK109.all.fq.mappable'
+	],	
+	[
+		'CAMIMouseGut',
+		'/scratch/tmp/CAMI_metamaps',
+		[
+			'/scratch/tmp/CAMI_combined_kraken_results',
+			'/scratch/tmp/CAMI_combined_kraken2_results',
+			'/scratch/tmp/CAMI_combined_centrifuge_results',
+		],
+		'tmp/truthCAMI',
+		'/data/projects/phillippy/software/camiClient/19122017_mousegut_pacbio_scaffolds/2018.02.13_14.02.01_sample_0/reads/anonymous_reads.fq'
+	],		
 );
 
 foreach my $resultsSet (@resultsSets)
 {
 	my $MetaMap_results = $resultsSet->[1];
-	my $kraken_results_dir = $resultsSet->[2];
+	my $kraken_results_dir = $resultsSet->[2][0];
+	my $kraken2_results_dir = $resultsSet->[2][1];
+	my $centrifuge_results_dir = $resultsSet->[2][2];
 	my $truth = $resultsSet->[3];
 	my $fastq = $resultsSet->[4];
 
@@ -53,6 +81,8 @@ foreach my $resultsSet (@resultsSets)
 		#'Bracken' => [undef, $kraken_results_dir . '/results_bracken.txt.ignoreUnclassified'],
 		'Kraken' => [$kraken_results_dir . '/results_kraken.txt.reads2Taxon', $kraken_results_dir . '/results_kraken.txt'],
 		'Bracken' => [undef, $kraken_results_dir . '/results_bracken.txt'], 
+		'Kraken2' => [$kraken2_results_dir . '/results_kraken2.txt.reads2Taxon', $kraken2_results_dir . '/results_kraken2.txt'],
+		'Centrifuge' => [$centrifuge_results_dir . '/results_centrifuge.txt.reads2Taxon', $centrifuge_results_dir . '/results_centrifuge.txt'],
 	);
 
 	my $missingFiles = 0;
@@ -180,7 +210,7 @@ foreach my $resultsSet (@resultsSets)
 
 	$allSimulations_data_href->{realizedN} = 1;
 	
-	validation::produceValidationOutputFiles($allSimulations_data_href, $extendedMaster, 'HMPresults/' . $resultsSet->[0], 'HMPresults/', $resultsSet->[0]);
+	validation::produceValidationOutputFiles($allSimulations_data_href, $extendedMaster, 'externalDataResults/' . $resultsSet->[0], 'externalDataResults/', $resultsSet->[0]);
 
 	
 	# my $n_reads_correct_byVariety = {};

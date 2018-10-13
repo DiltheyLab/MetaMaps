@@ -3,7 +3,7 @@ package SimulationsKraken;
 use strict;
 use Data::Dumper;
 use Cwd qw/abs_path getcwd/;
-use List::Util qw/all/;
+use List::Util qw/min max all/;
 
 use taxTree;
 use validation;
@@ -52,11 +52,7 @@ sub translateMetaMapToCentrifuge
 	
 	my $dbDir_abs = abs_path($MetaMapDBDir);
 		
-	if(-e $outputDir)
-	{
-		# system("rm -rf $outputDir") and die "Cannot delete $outputDir";
-		warn "Directory deletion deactivated";
-	}
+
 	
 	my $MetaMapDBDir_abs = abs_path($MetaMapDBDir);
 	
@@ -69,12 +65,31 @@ sub translateMetaMapToCentrifuge
 	
 	chdir($outputDir) or die; 
 	
-	my @files = map {'DB.' . $_ . '.cf'} 1 .. 4;
+	my $fasta_for_mapping = abs_path($dbDir_abs . '/DB.fa');	
+	
+	my @files = map {'DB.' . $_ . '.cf'} 1 .. 3;
 	if(all {-e $_} @files)
 	{	
-		warn "DB in directory $outputDir already present.";
-		return;
+		my $max_time_since_centrifuge_index_change = max map {-M $_} @files;
+		if($max_time_since_centrifuge_index_change < (-M $fasta_for_mapping))
+		{
+			warn "Centrifuge DB already present and up to date!";		
+			chdir($pre_chdir_cwd) or die;		
+			return;			
+		}
+		else
+		{
+			# die Dumper([$files[0], -M $files[0]], [$fasta_for_mapping, -M $fasta_for_mapping]);
+		}
 	}	
+	
+	if(-e $outputDir)
+	{
+		system("rm -rf $outputDir") and die "Cannot delete $outputDir";
+		mkdir($outputDir) or die "Cannot open $outputDir";		
+	}
+	
+
 	
 	# if(-e 'DB')
 	# {
@@ -82,7 +97,6 @@ sub translateMetaMapToCentrifuge
 	# }
 	# mkdir('DB') or die "Cannot mkdir DB";
 	
-	my $fasta_for_mapping = abs_path($dbDir_abs . '/DB.fa');	
 	die "Required DB file $fasta_for_mapping not existing ($MetaMapDBDir)" unless(-e $fasta_for_mapping);	
 
 
@@ -98,8 +112,11 @@ sub translateMetaMapToCentrifuge
 	 
 	my $cmd_build_I = qq(${centrifugeBinDir}/centrifuge-build -p 32 --conversion-table ${fasta_for_mapping}.centrifugeTranslation --taxonomy-tree $taxonomy_nodes --name-table $taxonomy_names $fasta_for_mapping DB);
 	system($cmd_build_I) and die "Could not execute command: $cmd_build_I";
-	
 
+	mkdir('taxonomy') or die "Cannot mkdir DB/taxonomy from " . getcwd();
+	system("mv $taxonomy_names taxonomy/names.dmp") and die;
+	system("mv $taxonomy_nodes taxonomy/nodes.dmp") and die;
+	
 	chdir($pre_chdir_cwd) or die;
 }
 
@@ -111,7 +128,17 @@ sub translateMetaMapToKraken2
 	my $kraken2_binPrefix = shift;
 	
 	my $dbDir_abs = abs_path($MetaMapDBDir);
-		
+	
+	my $fasta_for_mapping = abs_path($dbDir_abs . '/DB.fa');	
+	die "Required DB file $fasta_for_mapping not existing ($MetaMapDBDir)" unless(-e $fasta_for_mapping);	
+	
+	my $kraken2_main_DB_file = $kraken2_dir . '/DB/hash.k2d';
+	if((-e $kraken2_main_DB_file) and ((-M $kraken2_main_DB_file) < (-M $fasta_for_mapping)))
+	{
+		warn "Kraken2 DB already present and up to date!";		
+		return;			
+	}
+
 	if(-e $kraken2_dir)
 	{
 		system("rm -rf $kraken2_dir") and die "Cannot delete $kraken2_dir";
@@ -133,8 +160,6 @@ sub translateMetaMapToKraken2
 	}
 	
 			
-	my $fasta_for_mapping = abs_path($dbDir_abs . '/DB.fa');	
-	die "Required DB file $fasta_for_mapping not existing ($MetaMapDBDir)" unless(-e $fasta_for_mapping);	
 	
 	my $cmd_copy_DB = qq(cp -r $kraken2DBTemplate DB);
 	system($cmd_copy_DB) and die "Cannot cp $kraken2DBTemplate";
@@ -165,7 +190,32 @@ sub translateMetaMapToKraken
 	my $Bracken_dir = shift;
 	
 	my $dbDir_abs = abs_path($MetaMapDBDir);
+
+	my $fasta_for_mapping = abs_path($dbDir_abs . '/DB.fa');	
+	die "Required DB file $fasta_for_mapping not existing ($MetaMapDBDir)" unless(-e $fasta_for_mapping);		
+	
+	my $kraken_present = 0;
+	my $kraken_main_DB_file = $kraken_dir . '/DB/database.kdb';
+	if((-e $kraken_main_DB_file) and ((-M $kraken_main_DB_file) < (-M $fasta_for_mapping)))
+	{
+		$kraken_present = 1;
 		
+	}
+
+	my $bracken_present = 0;	
+	my $bracken_main_DB_file = $kraken_dir . '/database75mers.kraken_cnts.bracken';
+	if((-e $bracken_main_DB_file) and ((-M $bracken_main_DB_file) < (-M $kraken_main_DB_file)))
+	{
+		$bracken_present = 1;	
+	}
+	
+	if($kraken_present and $bracken_present)
+	{
+		warn "Kraken/Bracken DB already present and up to date!";		
+		return;		
+	}
+	
+				
 	if(-e $kraken_dir)
 	{
 		system("rm -rf $kraken_dir") and die "Cannot delete $kraken_dir";
@@ -185,11 +235,6 @@ sub translateMetaMapToKraken
 	{
 		system('rm -rf DB') and die "Cannot rm";
 	}
-	
-			
-	my $fasta_for_mapping = abs_path($dbDir_abs . '/DB.fa');	
-	die "Required DB file $fasta_for_mapping not existing ($MetaMapDBDir)" unless(-e $fasta_for_mapping);	
-	
 
 	my $cmd_copy_DB = qq(cp -r $krakenDBTemplate DB);
 	system($cmd_copy_DB) and die "Cannot cp $krakenDBTemplate";
@@ -219,10 +264,7 @@ sub translateMetaMapToKraken
 	my $cmd_Bracken_kMerDist = qq(/usr/bin/time -v python ${Bracken_dir}/generate_kmer_distribution.py -i database75mers.kraken_cnts -o database75mers.kraken_cnts.bracken);
 	system($cmd_Bracken_kMerDist) and die "Could not execute command: $cmd_Bracken_kMerDist";	
 	
-	
 	chdir($pre_chdir_cwd) or die;
-	
-	
 }
 
 sub doKrakenOnExistingDB
@@ -368,7 +410,10 @@ sub doCentrifugeOnExistingDB
 	 
 	# chdir($kraken2_dir) or die "Cannot chdir into $kraken2_dir";  
 	
+	die "We have a directory problem - DB dir $centrifugeDBDir not present from " . getcwd() unless(-d $centrifugeDBDir);
+	die "We have a directory problem - DB as specified in $centrifugeDBDir not present" unless(-e $centrifugeDBDir . '/DB.1.cf');
 	my $cmd_classify = qq(/usr/bin/time -v ${centrifugeBinDir}/centrifuge  -x ${centrifugeDBDir}/DB -U $simulatedReads -S $outputDir/reads_classified --report-file $outputDir/reads_classified_report 2> $outputDir/centrifuge_resources);
+	
 	system($cmd_classify) and die "Could not execute command: $cmd_classify"; # todo
 
 	
@@ -381,15 +426,15 @@ sub doCentrifugeOnExistingDB
 	
 	create_compatible_composition_file_from_centrifuge(
 		$outputDir . '/results_centrifuge.txt',
-		validation::getMasterTaxonomyDir(),
+		"${centrifugeDBDir}/DB/taxonomy",
 		$outputDir.'/reads_classified_kreport',
 		$outputDir.'/reads_classified',	
 		$taxonID_original_2_contigs_href
 	);
 
 	create_compatible_reads_file_from_centrifuge( 
-		$outputDir . '/results_centrifuge.txt.reads2Taxon',
-		validation::getMasterTaxonomyDir(),
+		$outputDir . '/results_centrifuge.txt.reads2Taxon', 
+		"${centrifugeDBDir}/DB/taxonomy",
 		$outputDir.'/reads_classified',
 	);
 
@@ -671,7 +716,7 @@ sub create_compatible_composition_file_from_centrifuge
 			$_getLightning_cache{$taxonID} = $lightning;
 			return $lightning;
 		}
-	};
+	}; 
 	
 	if($n_total_reads == 0)
 	{
@@ -696,13 +741,13 @@ sub create_compatible_composition_file_from_centrifuge
 		my $readID = $f[0];
 		my $seqID = $f[1];
 		my $taxID = $f[2];
-		if($seqID eq 'unclassified')
+		if(($seqID eq 'unclassified') or ($taxID eq '0'))
 		{
 			$n_unclassified_check++;		
 		}
 		else
 		{
-			die if($taxID eq '0');
+			die "Line $. of file $f_reads - taxID is $taxID, but not unclassified?\n$line" if($taxID eq '0');
 			my $lightning = $getLightning->($taxID);
 			$reads_at_levels{'definedAndHypotheticalGenomes'}{$taxID}++;
 			RANK: foreach my $rank (@evaluateAccuracyAtLevels)

@@ -23,24 +23,24 @@ screen -r sim_random_uniform
 screen -r sim_random_logNormal
 screen -r sim_i100
 
-/usr/bin/time -v ./metamap mapDirectly --all -r databases/miniSeq+H/DB.fa -q /scratch/tmp/hmp_set7_combined.fastq.mappable -o tmp/hmp7_2_miniSeq+H &> tests/resources/hmp7_2_miniSeq_mapping;\
-/usr/bin/time -v ./metamap classify --mappings tmp/hmp7_2_miniSeq+H --DB databases/miniSeq+H &> tests/resources/hmp7_2_miniSeq_classification
-/usr/bin/time -v ./metamap classify --mappings tmp/hmp7_2_miniSeq+H --DB databases/miniSeq+H &> tests/resources/hmp7_2_miniSeq_classification_withU
+/usr/bin/time -v ./metamaps mapDirectly --all -r databases/miniSeq+H/DB.fa -q /scratch/tmp/hmp_set7_combined.fastq.mappable -o tmp/hmp7_2_miniSeq+H &> tests/resources/hmp7_2_miniSeq_mapping;\
+/usr/bin/time -v ./metamaps classify --mappings tmp/hmp7_2_miniSeq+H --DB databases/miniSeq+H &> tests/resources/hmp7_2_miniSeq_classification
+/usr/bin/time -v ./metamaps classify --mappings tmp/hmp7_2_miniSeq+H --DB databases/miniSeq+H &> tests/resources/hmp7_2_miniSeq_classification_withU
 Rscript plotMappingSummary.R tmp/hmp7_2_miniSeq+H
 
 perl util/HMPplot.pl
 Rscript util/HMPplot_R.R
 # Rscript util/HMPplot_R_actinomyces.R
 
-./metamap mapDirectly --all -r databases/miniSeq+H/DB.fa -q /scratch/tmp/hmp-nanopore.fasta -o tmp/hmp-nanopore_miniSeq+H
-./metamap classify --mappings tmp/hmp-nanopore_miniSeq+H --DB databases/miniSeq+H
+./metamaps mapDirectly --all -r databases/miniSeq+H/DB.fa -q /scratch/tmp/hmp-nanopore.fasta -o tmp/hmp-nanopore_miniSeq+H
+./metamaps classify --mappings tmp/hmp-nanopore_miniSeq+H --DB databases/miniSeq+H
 
 Memory testing:
 
-/usr/bin/time -v ./metamap mapDirectly --all -r databases/miniSeq+H/DB.fa -q /scratch/tmp/hmp_set7_combined.fastq -o tmp/hmp7_2_miniSeq+H_unlimitedMemory &> tests/resources/hmp7_2_miniSeq &> hmp7_unlimitedMemory;\
-./metamap classify --mappings tmp/hmp7_2_miniSeq+H_unlimitedMemory --DB databases/miniSeq+H;\
-/usr/bin/time -v ./metamap mapDirectly --all -r databases/miniSeq+H/DB.fa -q /scratch/tmp/hmp_set7_combined.fastq -o tmp/hmp7_2_miniSeq+H_limitedMemory_20G &> tests/resources/hmp7_2_miniSeq --maxmemory 20 &> hmp7_limitedMemory;\
-./metamap classify --mappings tmp/hmp7_2_miniSeq+H_limitedMemory_20G  --DB databases/miniSeq+H
+/usr/bin/time -v ./metamaps mapDirectly --all -r databases/miniSeq+H/DB.fa -q /scratch/tmp/hmp_set7_combined.fastq -o tmp/hmp7_2_miniSeq+H_unlimitedMemory &> tests/resources/hmp7_2_miniSeq &> hmp7_unlimitedMemory;\
+./metamaps classify --mappings tmp/hmp7_2_miniSeq+H_unlimitedMemory --DB databases/miniSeq+H;\
+/usr/bin/time -v ./metamaps mapDirectly --all -r databases/miniSeq+H/DB.fa -q /scratch/tmp/hmp_set7_combined.fastq -o tmp/hmp7_2_miniSeq+H_limitedMemory_20G &> tests/resources/hmp7_2_miniSeq --maxmemory 20 &> hmp7_limitedMemory;\
+./metamaps classify --mappings tmp/hmp7_2_miniSeq+H_limitedMemory_20G  --DB databases/miniSeq+H
 
 
 perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix p25_logNormal &&\
@@ -53,24 +53,6 @@ perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix i100_spec
 Rscript doPlots.R databases/miniSeq+H/simulations_i100_specifiedFrequencies_limitedMemory
 
 perl util/HMPplot.pl
-
-
-perl simulate.pl --DB databases/miniSeq+H --action inferenceJobI --jobI 0 --suffix i100_specifiedFrequencies_limitedMemory --maxMemory 20 --skipKraken 1
-perl simulate.pl --DB databases/miniSeq+H --action inferenceJobI --jobI 0 --suffix i100_specifiedFrequencies --skipKraken 1
-perl simulate.pl --DB databases/miniSeq+H --action inferenceJobI --jobI 0 --suffix p25_logNormal --varietyI 0
-qsub /data/projects/phillippy/projects/MetaMap/databases/miniSeq+H/simulations_i100_specifiedFrequencies/inferenceJobs.asArray
-qsub /data/projects/phillippy/projects/MetaMap/databases/miniSeq+H/simulations_p25_logNormal/inferenceJobs.asArray.manual
-perl callKrakenOnConvertedDB.pl databases/miniSeq+H /scratch/tmp/hmp_set7_combined.fastq.mappable /scratch/tmp/hmp_set7_combined_kraken_results
-perl callKraken2OnConvertedDB.pl databases/miniSeq+H /scratch/tmp/hmp_set7_combined.fastq.mappable /scratch/tmp/hmp_set7_combined_kraken2_results
-perl callCentrifugeOnConvertedDB.pl databases/miniSeq+H /scratch/tmp/hmp_set7_combined.fastq.mappable /scratch/tmp/hmp_set7_combined_centrifuge_results
-
-  
-All combined:
-
-perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix i100_specifiedFrequencies&&\
-Rscript doPlots.R databases/miniSeq+H/simulations_i100_specifiedFrequencies;\
-perl simulate.pl --DB databases/miniSeq+H --action analyzeAll --suffix p25_logNormal &&\
-Rscript doPlots.R databases/miniSeq+H/simulations_p25_logNormal
 
 
 For testing:

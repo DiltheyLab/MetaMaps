@@ -18,7 +18,6 @@ my $masterTaxonomy_dir = '/data/projects/phillippy/projects/MetaMap/downloads/ta
 my $master_taxonomy = taxTree::readTaxonomy($masterTaxonomy_dir);
 
 
-
 my $fn_reads = '/data/projects/phillippy/software/camiClient/19122017_mousegut_pacbio_scaffolds/2018.02.13_14.02.01_sample_0/reads/anonymous_reads.fq';
 my $fn_reads_truth = '/data/projects/phillippy/software/camiClient/19122017_mousegut_pacbio_scaffolds/2018.02.13_14.02.01_sample_0/reads/reads_mapping.tsv';
 
@@ -85,18 +84,18 @@ foreach my $readID (keys %readID_2_length)
 
 
 open(ORIGIN, '>', $fn_out_origin) or die "Cannot open $fn_out_origin";
-print ORIGIN join("\n", keys %origin_genome_ids), "\n";
+print ORIGIN join("\n", keys %origin_genome_ids), "\n"; 
 close(ORIGIN);
 
-my $fn_in_origins_fasta = $fn_out_distribution . '.fasta';
-my $genomes_href = readFASTA($fn_in_origins_fasta);
+my $fn_in_origins_fasta = $fn_out_origin . '.fasta';
+my $genomes_href = readFASTA($fn_in_origins_fasta, 1);
 
 my %taxa_genome_lengths;
 foreach my $taxonID (keys %taxonID_to_origins)
 {
 	foreach my $origin (keys %{$taxonID_to_origins{$taxonID}})
 	{
-		die "Origin seqeunce $origin not in file $fn_in_origins_fasta" unless($genomes_href->{$origin});
+		die "Origin seqeunce '$origin' not in file $fn_in_origins_fasta" unless($genomes_href->{$origin});
 		$taxa_genome_lengths{$taxonID} += length($genomes_href->{$origin});
 	}
 }
