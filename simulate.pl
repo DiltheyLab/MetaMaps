@@ -898,8 +898,8 @@ sub inferenceOneSimulation
 		
 		print "Doing inference in $DB_target_dir\n";
 		 
-		# warn "MetaMaps skipped";
-		doMetaMap($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $maxMemory);
+		warn "MetaMaps skipped";
+		# doMetaMap($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $maxMemory);
 		unless($skipKraken)
 		{
 			SimulationsKraken::doKraken($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $krakenDBTemplate, $kraken_binPrefix, $Bracken_dir);
@@ -928,16 +928,20 @@ sub inferenceOneSimulation
 }	
 
 sub get_files_for_evaluation
-{
+{ 
 	my $simulation_href = shift;
 	return (
 		# 'Bracken-Dist' => ['distribution', 'results_bracken.txt.ignoreUnclassified'],
 		# 'Kraken-Dist' => ['distribution', 'results_kraken.txt.ignoreUnclassified'],
 		'Bracken-Dist' => ['distribution', 'results_bracken.txt'],
 		'Kraken-Dist' => ['distribution', 'results_kraken.txt'],		
+		'Kraken2-Dist' => ['distribution', 'results_kraken2.txt'],		
+		'Centrifuge-Dist' => ['distribution', 'results_centrifuge.txt'],		
 		'MetaMap-EM-Dist' => ['distribution', 'metamap.EM.WIMP'],
 		# 'MetaMap-U-Dist' => ['distribution', 'metamap.U.WIMP'],
 		'Kraken-Reads' => ['reads', 'results_kraken.txt.reads2Taxon'],
+		'Kraken2-Reads' => ['reads', 'results_kraken2.txt.reads2Taxon'],
+		'Centrifuge-Reads' => ['reads', 'results_centrifuge.txt.reads2Taxon'],
 		# 'Metamap-U-Reads' => ['reads', 'metamap.U.reads2Taxon'],
 		'Metamap-EM-Reads' => ['reads', 'metamap.EM.reads2Taxon'],
 		# 'MetaPalette' => ['distribution', 'results_metapalette.txt', 1]

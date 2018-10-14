@@ -677,12 +677,12 @@ sub readLevelComparison
 			$lightning_inferred->{absolute} = $inferredTaxonID;
 			
 			foreach my $category (@read_categories)
-			{
+			{ 
 				$n_reads_correct{$category}{N}++;
 				$n_reads_correct{$category}{weightedByLength_N} += $readLength;
 				
 				$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{N}++;
-				$n_reads_correct_byLevel_byLength{$category}{'weightedByLength_absolute'}{$readLengthBin}{N} =+ $readLength;
+				$n_reads_correct_byLevel_byLength{$category}{'absolute'}{$readLengthBin}{weightedByLength_N} += $readLength;
 
 				$n_reads_correct{$category}{'attachedTo_' . $attachedTo_inInference}++;
 				$n_reads_correct{$category}{'attachedToDirectlyMappable'} += ((exists $mappableTaxonIDs->{$inferredTaxonID}) ? 1 : 0);
@@ -1568,9 +1568,37 @@ sub distributionLevelComparison
 		die Dumper("Weird r", $r, \@should_bigger0, \@is_bigger0) unless(($r >= -1*(1+1e-5)) and ($r <= 1+1e-5));
 		my $r2 = $r ** 2;
 		
+		my $n_isBigger0_n = 0;
+		my $n_isBigger0_correct = 0;
+		my $n_shouldBeBigger0_n = 0;
+		my $n_shouldBeBigger0_correct = 0;		
+		for(my $fI = 0; $fI <= $#should_bigger0; $fI++)
+		{
+			if($is_bigger0[$fI] > 0)
+			{
+				$n_isBigger0_n++;
+				if($should_bigger0[$fI] > 0)
+				{
+					$n_isBigger0_correct++;
+				}
+			}
+			if($should_bigger0[$fI] > 0)
+			{
+				$n_shouldBeBigger0_n++;
+				if($is_bigger0[$fI] > 0)
+				{
+					$n_shouldBeBigger0_correct++;
+				}
+			}
+		}
 		my $AVGRE *= (1 / scalar(keys %{$distribution_inferred->{$lookupKey_level_InInference}}));
 		my $RRMSE *= (1 / scalar(keys %{$distribution_inferred->{$lookupKey_level_InInference}}));
 		$RRMSE = sqrt($RRMSE);
+		
+		die unless($n_isBigger0_n);
+		die unless($n_shouldBeBigger0_n);
+		my $binaryPrecision = $n_isBigger0_correct / $n_isBigger0_n;
+		my $binaryRecall = $n_shouldBeBigger0_correct / $n_shouldBeBigger0_n;
 		
 		print join("\t", $label, $level, $totalFreqCorrect), "\n";
 		
@@ -1588,6 +1616,8 @@ sub distributionLevelComparison
 			push(@{$external_comparison->{$label}{$level}{L1}}, $L1);
 			push(@{$external_comparison->{$label}{$level}{L2}}, $L2);
 			push(@{$external_comparison->{$label}{$level}{r2}}, $r2);
+			push(@{$external_comparison->{$label}{$level}{binaryPrecision}}, $binaryPrecision);
+			push(@{$external_comparison->{$label}{$level}{binaryRecall}}, $binaryRecall);
 		}
 	}		
 }			
@@ -1844,7 +1874,7 @@ sub produceValidationOutputFiles
 							die unless(defined $v->{N_unclassified_should0_is1}[$i]);
 							die unless(defined $v->{N_unclassified_should1_is0}[$i]);
 							die unless(defined $v->{N_unclassified_should1_is1}[$i]);
-							die unless(scalar(keys %{$v}) == 4);
+							die Dumper("Weird number of keys", scalar(keys %{$v})) unless(scalar(keys %{$v}) == 8);
 							my $shouldBeUnclassified = $v->{N_unclassified_should1_is0}[$i] + $v->{N_unclassified_should1_is1}[$i];
 							my $isUnclassified = $v->{N_unclassified_should0_is1}[$i] + $v->{N_unclassified_should1_is1}[$i];
 							my $N = $v->{N_unclassified_should0_is0}[$i] + $v->{N_unclassified_should0_is1}[$i] + $v->{N_unclassified_should1_is0}[$i] + $v->{N_unclassified_should1_is1}[$i];
@@ -2217,8 +2247,11 @@ sub produceValidationOutputFiles
 				my $hf2_before = $#header_fields_2_byLevelCorrect;
 				foreach my $method (@methods)
 				{
-					push(@header_fields_2_byLevelCorrect, $method, '', '', '', '', '', '', '');							
-					push(@header_fields_3_byLevelCorrect, 'nExperiments', 'Ntotal_avg', 'OKtotal_avg', 'NmadeCall_avg', 'OKmadeCall_avg', 'noCall_avg', 'NmadeCall_n0_avg', 'PPV_n0');
+					push(@header_fields_2_byLevelCorrect, $method, '', '', '', '', '', '', '', '', '', '', '', '', '', '');							
+					push(@header_fields_3_byLevelCorrect, 'nExperiments',
+						'Ntotal_avg', 'OKtotal_avg', 'NmadeCall_avg', 'OKmadeCall_avg', 'noCall_avg', 'NmadeCall_n0_avg', 'PPV_n0',
+						'Ntotal_avg_bases', 'OKtotal_avg_bases', 'NmadeCall_avg_bases', 'OKmadeCall_avg_bases', 'noCall_avg_bases', 'NmadeCall_n0_avg_bases', 'PPV_n0_bases'
+					);
 				}
 				my $hf2_after = $#header_fields_2_byLevelCorrect;
 				my $requiredFields = $hf2_after - $hf2_before;
@@ -2247,7 +2280,9 @@ sub produceValidationOutputFiles
 					foreach my $variety (@varieties)
 					{
 						foreach my $methodName (@methods)
-						{											
+						{		
+							# not weighted
+							
 							my @N_total;
 							my @N_total_truthDefined;
 							
@@ -2267,6 +2302,27 @@ sub produceValidationOutputFiles
 							my @N_n0;
 							my @PPV_n0;
 							
+							#weighted 
+							
+							my @N_total_bases;
+							my @N_total_truthDefined_bases;
+							
+							my @N_madeCall_bases;
+							my @N_madeCall_truthDefined_bases;
+							
+							my @correct_bases;
+							my @correct_truthDefined_bases;
+							my @callRate_bases;
+							
+							my @percOK_total_bases;
+							my @percOK_madeCall_fullAccuracy_bases;
+							my @percOK_total_truthDefined_bases;							
+							my @percOK_madeCall_bases;
+							my @percOK_madeCall_truthDefined_bases;
+							my @percMissing_bases;
+							my @N_n0_bases;
+							my @PPV_n0_bases;
+							
 							if(exists $allSimulations_data_href->{n_reads_correct_byVariety_byLevel}->{$variety}{$methodName}{$readLevel}{$evaluationLevel})
 							{
 								my @components_N_madeCall = @{$allSimulations_data_href->{n_reads_correct_byVariety_byLevel}->{$variety}{$methodName}{$readLevel}{$evaluationLevel}{N}};
@@ -2278,51 +2334,106 @@ sub produceValidationOutputFiles
 								my @components_correct_n0 = @{$allSimulations_data_href->{n_reads_correct_byVariety_byLevel}->{$variety}{$methodName}{$readLevel}{$evaluationLevel}{correct_n0}};
 								die unless(all{scalar(@$_) == scalar(@components_N_madeCall)} (\@components_N_madeCall, \@components_N_truthDefined, \@components_correct, \@components_N_truthDefined, \@components_missing, \@components_N_n0, \@components_correct_n0));
 								
+								my @components_N_madeCall_bases = @{$allSimulations_data_href->{n_reads_correct_byVariety_byLevel}->{$variety}{$methodName}{$readLevel}{$evaluationLevel}{weightedByLength_N}};
+								my @components_N_truthDefined_bases = @{$allSimulations_data_href->{n_reads_correct_byVariety_byLevel}->{$variety}{$methodName}{$readLevel}{$evaluationLevel}{weightedByLength_N_truthDefined}};
+								my @components_correct_bases = @{$allSimulations_data_href->{n_reads_correct_byVariety_byLevel}->{$variety}{$methodName}{$readLevel}{$evaluationLevel}{weightedByLength_correct}};
+								my @components_correct_truthDefined_bases = @{$allSimulations_data_href->{n_reads_correct_byVariety_byLevel}->{$variety}{$methodName}{$readLevel}{$evaluationLevel}{weightedByLength_correct_truthDefined}};
+								my @components_missing_bases = @{$allSimulations_data_href->{n_reads_correct_byVariety_byLevel}->{$variety}{$methodName}{$readLevel}{$evaluationLevel}{weightedByLength_missing}};
+								my @components_N_n0_bases = @{$allSimulations_data_href->{n_reads_correct_byVariety_byLevel}->{$variety}{$methodName}{$readLevel}{$evaluationLevel}{weightedByLength_N_n0}};
+								my @components_correct_n0_bases = @{$allSimulations_data_href->{n_reads_correct_byVariety_byLevel}->{$variety}{$methodName}{$readLevel}{$evaluationLevel}{weightedByLength_correct_n0}};
+								die unless(all{scalar(@$_) == scalar(@components_N_madeCall_bases)} (\@components_N_madeCall_bases, \@components_N_truthDefined_bases, \@components_correct_bases, \@components_N_truthDefined_bases, \@components_missing_bases, \@components_N_n0_bases, \@components_correct_n0_bases));
+								
+								
 								for(my $componentI = 0; $componentI <= $#components_missing; $componentI++)
 								{
-									my $i_N_madeCall = $components_N_madeCall[$componentI];
-									my $i_N_madeCall_truthDefined = $components_N_truthDefined[$componentI];
-									my $i_correct = $components_correct[$componentI];
-									my $i_correct_truthDefined = $components_correct_truthDefined[$componentI];
-									my $i_missing = $components_missing[$componentI];
-									my $i_N_n0 = $components_N_n0[$componentI];
-									my $i_correct_n0 = $components_correct_n0[$componentI];
-									
-									my $i_Ntotal =  $i_missing + $i_N_madeCall;
-						
-									my $i_percOK_madeCall_fullAccuracy = ($i_correct / $i_N_madeCall) if($i_N_madeCall > 0);
-									my $i_percOK_total = ($i_correct / $i_Ntotal) if($i_Ntotal > 0);
-									my $i_perc_missing = ($i_missing / $i_Ntotal) if($i_Ntotal > 0);						
-									
-									my $i_PPV_n0 = ($i_correct_n0 / $i_N_n0) if($i_N_n0 > 0);	
-									# die Dumper("Weird - N is $N, but missing is $missing?", [$readLevel, $evaluationLevel, $variety, $methodName]) unless($missing <= $N);
-																		
-									my $i_N_total_truthDefined = $i_N_madeCall_truthDefined + $i_missing;									
-									
-									my $i_callRate = $i_N_madeCall / $i_Ntotal if($i_Ntotal > 0);
-									my $i_percOK_total_truthDefined = ($i_correct_truthDefined / $i_N_total_truthDefined) if($i_N_total_truthDefined > 0);
-									
-									my $i_percOK_madeCall = ($i_correct / $i_N_madeCall) if($i_N_madeCall > 0);
-																
-																
-									my $i_percOK_madeCall_truthDefined = ($i_correct_truthDefined / $i_N_madeCall_truthDefined) if($i_N_madeCall_truthDefined > 0);
-									
-									my $i_percMissing = ($i_missing / $i_Ntotal) if($i_Ntotal > 0);
-									
-									push(@N_total, $i_Ntotal);
-									push(@N_total_truthDefined, $i_N_total_truthDefined);
-									push(@N_madeCall, $i_N_madeCall);
-									push(@N_madeCall_truthDefined, $i_N_madeCall_truthDefined);
-									push(@callRate, $i_callRate);
-									push(@percOK_total, $i_percOK_total);
-									push(@percOK_madeCall_fullAccuracy, $i_percOK_madeCall_fullAccuracy);
-									push(@percOK_total_truthDefined, $i_percOK_total_truthDefined);
-									push(@percOK_madeCall, $i_percOK_madeCall);
-									push(@percMissing, $i_percMissing);
-									push(@percOK_madeCall_truthDefined, $i_percOK_madeCall_truthDefined);
-									
-									push(@N_n0, $i_N_n0);
-									push(@PPV_n0, $i_PPV_n0);
+									{
+										my $i_N_madeCall = $components_N_madeCall[$componentI];
+										my $i_N_madeCall_truthDefined = $components_N_truthDefined[$componentI];
+										my $i_correct = $components_correct[$componentI];
+										my $i_correct_truthDefined = $components_correct_truthDefined[$componentI];
+										my $i_missing = $components_missing[$componentI];
+										my $i_N_n0 = $components_N_n0[$componentI];
+										my $i_correct_n0 = $components_correct_n0[$componentI];
+										
+										my $i_Ntotal =  $i_missing + $i_N_madeCall;
+							
+										my $i_percOK_madeCall_fullAccuracy = ($i_correct / $i_N_madeCall) if($i_N_madeCall > 0);
+										my $i_percOK_total = ($i_correct / $i_Ntotal) if($i_Ntotal > 0);
+										my $i_perc_missing = ($i_missing / $i_Ntotal) if($i_Ntotal > 0);						
+										
+										my $i_PPV_n0 = ($i_correct_n0 / $i_N_n0) if($i_N_n0 > 0);	
+										# die Dumper("Weird - N is $N, but missing is $missing?", [$readLevel, $evaluationLevel, $variety, $methodName]) unless($missing <= $N);
+																			
+										my $i_N_total_truthDefined = $i_N_madeCall_truthDefined + $i_missing;									
+										
+										my $i_callRate = $i_N_madeCall / $i_Ntotal if($i_Ntotal > 0);
+										my $i_percOK_total_truthDefined = ($i_correct_truthDefined / $i_N_total_truthDefined) if($i_N_total_truthDefined > 0);
+										
+										my $i_percOK_madeCall = ($i_correct / $i_N_madeCall) if($i_N_madeCall > 0);
+																	
+										my $i_percOK_madeCall_truthDefined = ($i_correct_truthDefined / $i_N_madeCall_truthDefined) if($i_N_madeCall_truthDefined > 0);
+										
+										my $i_percMissing = ($i_missing / $i_Ntotal) if($i_Ntotal > 0);
+										
+										push(@N_total, $i_Ntotal);
+										push(@N_total_truthDefined, $i_N_total_truthDefined);
+										push(@N_madeCall, $i_N_madeCall);
+										push(@N_madeCall_truthDefined, $i_N_madeCall_truthDefined);
+										push(@callRate, $i_callRate);
+										push(@percOK_total, $i_percOK_total);
+										push(@percOK_madeCall_fullAccuracy, $i_percOK_madeCall_fullAccuracy);
+										push(@percOK_total_truthDefined, $i_percOK_total_truthDefined);
+										push(@percOK_madeCall, $i_percOK_madeCall);
+										push(@percMissing, $i_percMissing);
+										push(@percOK_madeCall_truthDefined, $i_percOK_madeCall_truthDefined);
+										
+										push(@N_n0, $i_N_n0);
+										push(@PPV_n0, $i_PPV_n0);
+									}
+									{
+										my $i_N_madeCall_bases = $components_N_madeCall_bases[$componentI];
+										my $i_N_madeCall_truthDefined_bases = $components_N_truthDefined_bases[$componentI];
+										my $i_correct_bases = $components_correct_bases[$componentI];
+										my $i_correct_truthDefined_bases = $components_correct_truthDefined_bases[$componentI];
+										my $i_missing_bases = $components_missing_bases[$componentI];
+										my $i_N_n0_bases = $components_N_n0_bases[$componentI];
+										my $i_correct_n0_bases = $components_correct_n0_bases[$componentI];
+										
+										my $i_Ntotal_bases =  $i_missing_bases + $i_N_madeCall_bases;
+							
+										my $i_percOK_madeCall_fullAccuracy_bases = ($i_correct_bases / $i_N_madeCall_bases) if($i_N_madeCall_bases > 0);
+										my $i_percOK_total_bases = ($i_correct_bases / $i_Ntotal_bases) if($i_Ntotal_bases > 0);
+										my $i_perc_missing_bases = ($i_missing_bases / $i_Ntotal_bases) if($i_Ntotal_bases > 0);						
+										
+										my $i_PPV_n0_bases = ($i_correct_n0_bases / $i_N_n0_bases) if($i_N_n0_bases > 0);	
+										# die Dumper("Weird - N is $N, but missing is $missing?", [$readLevel, $evaluationLevel, $variety, $methodName]) unless($missing <= $N);
+																			
+										my $i_N_total_truthDefined_bases = $i_N_madeCall_truthDefined_bases + $i_missing_bases;									
+										
+										my $i_callRate_bases = $i_N_madeCall_bases / $i_Ntotal_bases if($i_Ntotal_bases > 0);
+										my $i_percOK_total_truthDefined_bases = ($i_correct_truthDefined_bases / $i_N_total_truthDefined_bases) if($i_N_total_truthDefined_bases > 0);
+										
+										my $i_percOK_madeCall_bases = ($i_correct_bases / $i_N_madeCall_bases) if($i_N_madeCall_bases > 0);
+																	
+										my $i_percOK_madeCall_truthDefined_bases = ($i_correct_truthDefined_bases / $i_N_madeCall_truthDefined_bases) if($i_N_madeCall_truthDefined_bases > 0);
+										
+										my $i_percMissing_bases = ($i_missing_bases / $i_Ntotal_bases) if($i_Ntotal_bases > 0);
+										
+										push(@N_total_bases, $i_Ntotal_bases);
+										push(@N_total_truthDefined_bases, $i_N_total_truthDefined_bases);
+										push(@N_madeCall_bases, $i_N_madeCall_bases);
+										push(@N_madeCall_truthDefined_bases, $i_N_madeCall_truthDefined_bases);
+										push(@callRate_bases, $i_callRate_bases);
+										push(@percOK_total_bases, $i_percOK_total_bases);
+										push(@percOK_madeCall_fullAccuracy_bases, $i_percOK_madeCall_fullAccuracy_bases);
+										push(@percOK_total_truthDefined_bases, $i_percOK_total_truthDefined_bases);
+										push(@percOK_madeCall_bases, $i_percOK_madeCall_bases);
+										push(@percMissing_bases, $i_percMissing_bases);
+										push(@percOK_madeCall_truthDefined_bases, $i_percOK_madeCall_truthDefined_bases);
+										
+										push(@N_n0_bases, $i_N_n0_bases);
+										push(@PPV_n0_bases, $i_PPV_n0_bases);									
+									}
 								}
 							}		
 
@@ -2348,6 +2459,8 @@ sub produceValidationOutputFiles
 							my $callRate = (scalar(@callRate)) ? Util::mean(@callRate) : 'NA';
 							my $percOK_madeCall_fullAccuracy = (scalar(@callRate)) ? Util::mean(@percOK_madeCall_fullAccuracy) : 'NA';
 							
+							# non weighted
+							
 							my $N_total = (scalar(@callRate)) ? Util::mean(@N_total) : 'NA';
 							my $N_total_truthDefined = (scalar(@callRate)) ? Util::mean(@N_total_truthDefined) : 'NA';
 							
@@ -2363,15 +2476,42 @@ sub produceValidationOutputFiles
 							my $N_n0 = (scalar(@N_n0)) ? Util::mean(@N_n0) : 'NA';
 							my $PPV_n0 = (scalar(@PPV_n0)) ? Util::mean(@PPV_n0) : 'NA';
 							
+							# weighted by bases
+							
+							my $N_total_bases = (scalar(@callRate_bases)) ? Util::mean(@N_total_bases) : 'NA';
+							my $N_total_truthDefined_bases = (scalar(@callRate_bases)) ? Util::mean(@N_total_truthDefined_bases) : 'NA';
+							
+							my $N_madeCall_bases = (scalar(@callRate_bases)) ? Util::mean(@N_madeCall_bases) : 'NA';
+							my $N_madeCall_truthDefined_bases = (scalar(@callRate_bases)) ? Util::mean(@N_madeCall_truthDefined_bases) : 'NA';						 	
+							
+							my $percOK_total_bases = (scalar(@callRate_bases)) ? Util::mean(@percOK_total_bases) : 'NA';
+							my $percOK_total_truthDefined_bases = (scalar(@callRate_bases)) ? Util::mean(@percOK_total_truthDefined_bases) : 'NA';
+							my $percOK_madeCall_bases = (scalar(@callRate_bases)) ? Util::mean(@percOK_madeCall_bases) : 'NA';
+							my $percOK_madeCall_truthDefined_bases = (scalar(@callRate_bases)) ? Util::mean(@percOK_madeCall_truthDefined_bases) : 'NA';
+							my $percMissing_bases = (scalar(@callRate_bases)) ? Util::mean(@percMissing_bases) : 'NA';
+							
+							my $N_n0_bases = (scalar(@N_n0_bases)) ? Util::mean(@N_n0_bases) : 'NA';
+							my $PPV_n0_bases = (scalar(@PPV_n0_bases)) ? Util::mean(@PPV_n0_bases) : 'NA';
+							
+							
 							push(@output_fields_byLevelCorrect,
 								scalar(@callRate),
+								
 								($N_total ne $N_total_truthDefined) ? join(' / ', $N_total, $N_total_truthDefined) : $N_total,
 								($percOK_total ne $percOK_total_truthDefined) ? join(' / ', $percOK_total, $percOK_total_truthDefined) : $percOK_total, 
 								($N_madeCall ne $N_madeCall_truthDefined) ? join(' / ', $N_madeCall, $N_madeCall_truthDefined) : $N_madeCall,
 								($percOK_madeCall ne $percOK_madeCall_truthDefined) ? join(' / ', $percOK_madeCall, $percOK_madeCall_truthDefined) : $percOK_madeCall,
 								$percMissing,
 								$N_n0,
-								$PPV_n0
+								$PPV_n0,
+								
+								($N_total_bases ne $N_total_truthDefined_bases) ? join(' / ', $N_total_bases, $N_total_truthDefined_bases) : $N_total_bases,
+								($percOK_total_bases ne $percOK_total_truthDefined_bases) ? join(' / ', $percOK_total_bases, $percOK_total_truthDefined_bases) : $percOK_total_bases, 
+								($N_madeCall_bases ne $N_madeCall_truthDefined_bases) ? join(' / ', $N_madeCall_bases, $N_madeCall_truthDefined_bases) : $N_madeCall_bases,
+								($percOK_madeCall_bases ne $percOK_madeCall_truthDefined_bases) ? join(' / ', $percOK_madeCall_bases, $percOK_madeCall_truthDefined_bases) : $percOK_madeCall_bases,
+								$percMissing_bases,
+								$N_n0_bases,
+								$PPV_n0_bases							
 							);
 							
 							print "Generating ", $prefix_for_outputFiles . '_forPlot_barplots_fullDB', " $readLevel $variety $methodName: averaging over ", scalar(@callRate), " iterations.\n";
@@ -2561,8 +2701,8 @@ sub produceValidationOutputFiles
 				my $hf2_before = $#header_fields_2_freqCorrect;
 				foreach my $method (@methods)
 				{
-					push(@header_fields_2_freqCorrect, $method, '', '');	
-					push(@header_fields_3_freqCorrect, 'nExperiments', 'L1_avg', 'r2_avg');					
+					push(@header_fields_2_freqCorrect, $method, '', '', '', '');	
+					push(@header_fields_3_freqCorrect, 'nExperiments', 'L1_avg', 'r2_avg', 'precisionBinary_avg', 'recallBinary_avg');					
 				}
 				
 				my $hf2_after = $#header_fields_2_freqCorrect;
@@ -2602,6 +2742,8 @@ sub produceValidationOutputFiles
 						my $M_L1 = 'NA';
 						my $M_L2 = 'NA';
 						my $M_r2 = 'NA';
+						my $M_binaryPrecision = 'NA';
+						my $M_binaryRecall = 'NA';
 						
 						if(exists $allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel})
 						{
@@ -2616,9 +2758,11 @@ sub produceValidationOutputFiles
 							$M_L1 = sum(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{L1}}) / scalar(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{L1}});
 							$M_L2 = sum(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{L2}}) / scalar(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{L2}});
 							$M_r2 = sum(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{r2}}) / scalar(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{r2}});
+							$M_binaryPrecision = sum(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{binaryPrecision}}) / scalar(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{binaryPrecision}});
+							$M_binaryRecall = sum(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{binaryRecall}}) / scalar(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{binaryRecall}});
 						}
 						
-						push(@output_fields_freqCorrect, $n, $M_L1, $M_r2);
+						push(@output_fields_freqCorrect, $n, $M_L1, $M_r2, $M_binaryPrecision, $M_binaryRecall);
 					}				
 				}	
 				

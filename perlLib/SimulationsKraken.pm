@@ -391,12 +391,12 @@ sub doCentrifuge
 	SimulationsKraken::doCentrifugeOnExistingDB (
 		$centrifuge_DB_dir,
 		$simulatedReads,
-		$centrifuge_dir,
+		$jobDir_abs,
 		$centrifugeBinDir,
 		\%taxonID_original_2_contigs
 	);
 }
-
+ 
 sub doCentrifugeOnExistingDB
 {
 	my $centrifugeDBDir = shift;
@@ -746,7 +746,7 @@ sub create_compatible_composition_file_from_centrifuge
 		if(($seqID eq 'unclassified') or ($taxID eq '0'))
 		{
 			$is_unclassified{$readID}++;
-		}
+		} 
 		else
 		{
 			$classifications_per_read{$readID}{$taxID}++;
@@ -755,9 +755,16 @@ sub create_compatible_composition_file_from_centrifuge
 	}
 	close(CENTRIFUGE);
 	
+	my $n_additional_unclassified_reads = 0;
 	foreach my $unclassifiedID (keys %is_unclassified)
 	{
-		die if($classifications_per_read{$unclassifiedID});
+		if($classifications_per_read{$unclassifiedID})
+		{
+			warn "Read $unclassifiedID is classified and not? $f_reads" if($classifications_per_read{$unclassifiedID});
+			delete $classifications_per_read{$unclassifiedID};
+			$n_additional_unclassified_reads++;
+		}
+			
 		$classifications_per_read{$unclassifiedID}{0}++;
 	}	
 	
@@ -785,7 +792,7 @@ sub create_compatible_composition_file_from_centrifuge
 	close(OUTPUT);
 	close(OUTPUT_UNCL);	
 
-	die "Inconsistency w.r.t. unclassified reads -- $n_unclassified_check vs $n_unclassified" unless($n_unclassified_check == $n_unclassified);
+	die "Inconsistency w.r.t. unclassified reads -- $n_unclassified_check vs $n_unclassified plus $n_additional_unclassified_reads" unless($n_unclassified_check == ($n_unclassified+$n_additional_unclassified_reads));
 	
 	open(OUTPUT, '>', $target_output_fn) or die "Cannot open $target_output_fn";
 	open(OUTPUT2, '>', $target_output_fn_2) or die "Cannot open $target_output_fn_2";
@@ -797,7 +804,7 @@ sub create_compatible_composition_file_from_centrifuge
 		$reads_at_levels{$level}{"Unclassified"} = 0 if(not exists $reads_at_levels{$level}{"Unclassified"});
 		# $reads_at_levels{$level}{"Undefined"} = 0 if(not exists $reads_at_levels{$level}{"Undefined"});
 		
-		$reads_at_levels{$level}{"Unclassified"} += $n_unclassified;
+		$reads_at_levels{$level}{"Unclassified"} += $n_unclassified_check;
 		my $reads_all_taxa = 0;
 		my $reads_all_taxa_ignoreUnclassified = 0;
 		foreach my $taxonID (keys %{$reads_at_levels{$level}})
@@ -829,10 +836,10 @@ sub create_compatible_composition_file_from_centrifuge
 			my $nReads  = $reads_at_levels{$level}{$taxonID};
 			
 			print OUTPUT join("\t", $level, $taxonID_for_print, $name, $nReads, $nReads / $n_total_reads), "\n";
-			print OUTPUT2 join("\t", $level, $taxonID_for_print, $name, ($taxonID eq 'Unclassified') ? ($nReads - $n_unclassified): $nReads, $nReads / $n_root), "\n";
+			print OUTPUT2 join("\t", $level, $taxonID_for_print, $name, ($taxonID eq 'Unclassified') ? ($nReads - $n_unclassified_check): $nReads, $nReads / $n_root), "\n";
 			
 			$reads_all_taxa += $nReads;
-			$reads_all_taxa_ignoreUnclassified += (($taxonID eq 'Unclassified') ? ($nReads - $n_unclassified): $nReads);
+			$reads_all_taxa_ignoreUnclassified += (($taxonID eq 'Unclassified') ? ($nReads - $n_unclassified_check): $nReads);
 		}
 		
 		die "$reads_all_taxa != $n_total_reads output file $f_reads" unless($reads_all_taxa == $n_total_reads);
@@ -919,12 +926,15 @@ sub create_compatible_reads_file_from_centrifuge
 			$classifications_per_read{$readID}{$taxID}++;
 			# print OUTPUT $readID, "\t", $taxID, "\n";
 		}
-	}
+	} 
 	close(CENTRIFUGE);
 	
 	foreach my $unclassifiedID (keys %is_unclassified)
-	{
-		die if($classifications_per_read{$unclassifiedID});
+	{ 
+		if($classifications_per_read{$unclassifiedID})
+		{
+			delete $classifications_per_read{$unclassifiedID};
+		}
 	}	
 
 	foreach my $readID (keys %classifications_per_read)
