@@ -129,17 +129,6 @@ namespace skch
     REV = -1
   };  
 
-  //Information about query sequence during L1/L2 mapping
-  template <typename KSEQ, typename MinimizerVec>
-    struct QueryMetaData
-    {
-      KSEQ seq;                           //query sequence object pointer (kseq library) 
-      seqno_t seqCounter;                 //query sequence counter
-      offset_t len;                       //length of this query sequence
-      int sketchSize;                     //sketch size
-      MinimizerVec minimizerTableQuery;   //Vector of minimizers in the query 
-    };
-
   //Final mapping result
   struct MappingResult
   {
@@ -158,6 +147,54 @@ namespace skch
   };
 
   typedef std::vector<MappingResult> MappingResultsVector_t;
+
+  //Container to save copy of kseq object
+  struct InputSeqContainer
+  {
+    seqno_t seqCounter;                 //sequence counter
+    offset_t len;                       //sequence length             
+    std::string seq;                    //sequence string
+    std::string seqName;                //sequence id
+
+    /*
+     * @brief               constructor
+     * @param[in] kseq_seq  complete read or reference sequence
+     * @param[in] kseq_id   sequence id name
+     * @param[in] len       length of sequence
+     */
+    InputSeqContainer(const char * kseq_seq, const char * kseq_id, offset_t len, seqno_t seqcount)
+    {
+      this->seq = std::string{kseq_seq, std::size_t(len)};
+      this->seqName = std::string{kseq_id};
+      this->len = len;
+      this->seqCounter = seqcount; 
+    }
+  };
+
+  //Output type of map function
+  struct MapModuleOutput
+  {
+    MappingResultsVector_t readMappings;  //read mapping coordinates
+    std::string qseqName;                 //query sequence id
+
+    //Function to erase all output mappings
+    void reset()
+    {
+      this->readMappings.clear();
+    }
+  };
+
+  //Information about query sequence during L1/L2 mapping
+  template <typename MinimizerVec>
+    struct QueryMetaData
+    {
+      char *seq;                          //query sequence pointer 
+      seqno_t seqCounter;                 //query sequence counter
+      offset_t len;                       //length of this query sequence
+      int sketchSize;                     //sketch size
+      MinimizerVec minimizerTableQuery;   //Vector of minimizers in the query 
+    };
+
 }
 
 #endif

@@ -48,6 +48,9 @@ namespace skch
         cmd.defineOption("output", "output file", ArgvParser::OptionRequiresValue);
         cmd.defineOptionAlternative("output","o");
 
+        cmd.defineOption("threads", "count of threads for parallel execution [default : 1]", ArgvParser::OptionRequiresValue);
+        cmd.defineOptionAlternative("threads","t");
+
         cmd.defineOption("all", "report all the mapping locations for a read, default is to consider few best ones");
     }
     else if(mode == "mapDirectly" || mode == "index")
@@ -74,6 +77,9 @@ namespace skch
 
         cmd.defineOption("perc_identity", "threshold for identity [default : 80]", ArgvParser::OptionRequiresValue);
         cmd.defineOptionAlternative("perc_identity","pi");
+
+        cmd.defineOption("threads", "count of threads for parallel execution [default : 1]", ArgvParser::OptionRequiresValue);
+        cmd.defineOptionAlternative("threads","t");
 
         if(mode == "index")
         {
@@ -371,7 +377,6 @@ void parseandSave(int argc, char** argv,  CommandLineProcessing::ArgvParser &cmd
 			parameters.querySequences.push_back(query);
 		}
 
-
 		if(cmd.foundOption("all"))
 		{
 			parameters.reportAll = true;
@@ -380,6 +385,17 @@ void parseandSave(int argc, char** argv,  CommandLineProcessing::ArgvParser &cmd
 		{
 			parameters.reportAll = false;
 		}
+
+    if(cmd.foundOption("threads"))
+    {
+			std::stringstream str;
+			str << cmd.optionValue("threads");
+			str >> parameters.threads;
+    }
+    else
+    {
+      parameters.threads = 1;
+    }
 
 		if(!cmd.foundOption("output"))
 		{

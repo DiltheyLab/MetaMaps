@@ -264,9 +264,9 @@ namespace skch
               }
               else
               {
-            	thisContig_minimizerIndex.clear();
+                thisContig_minimizerIndex.clear();
 
-                skch::CommonFunc::addMinimizers(thisContig_minimizerIndex, seq, param.kmerSize, param.windowSize, param.alphabetSize, currentIndex_counter_sawSequences);
+                skch::CommonFunc::addMinimizers(thisContig_minimizerIndex, seq->seq.s, len, param.kmerSize, param.windowSize, param.alphabetSize, currentIndex_counter_sawSequences);
 
                 size_t thisContig_wouldAdd_hashes = 0;
                 size_t thisContig_wouldAdd_minimizers = thisContig_minimizerIndex.size();
