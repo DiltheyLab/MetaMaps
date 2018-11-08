@@ -67,7 +67,7 @@ while(<REF>)
 }
 close(REF);
 
-foreach my $config (['bwa_nanopore', '/data/projects/phillippy/projects/MetaMap/loman/ZymoBIOMICS.STD.refseq.v2/Genomes/GridION-Zymo_CS_MPZBB_LSK109.all.fq.bam', '/data/projects/phillippy/projects/MetaMap/loman/GridION-Zymo_CS_MPZBB_LSK109.all.fq'])
+foreach my $config (['bwa_nanopore', '/data/projects/phillippy/projects/MetaMap/loman/ZymoBIOMICS.STD.refseq.v2/Genomes/GridION-Zymo_CS_MPZBB_LSK109.all.fq.bam', '/data/projects/phillippy/projects/MetaMap/loman/Zymo-GridION-EVEN-BB-SN/GA10000/combined.fastq.subsampled'])
 {
 	print $config->[0], "\n";
 	 
@@ -225,7 +225,7 @@ sub getReadIDs
 	my $fn = shift;
 	
 	my %forReturn;
-	open(F, '<', $fn) or die;
+	open(F, '<', $fn) or die "Cannot open $fn";
 	my $isFirstLine = 1;
 	my $FASTA = 0;
 	while(<F>)

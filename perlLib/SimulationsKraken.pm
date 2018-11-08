@@ -40,6 +40,7 @@ sub getCentrifugeDir
 
 sub getMasterTaxonomy
 {
+	die; # this is not correct!
 	return qq(/data/projects/phillippy/software/centrifuge-1.0.4-beta);
 }
 
@@ -73,7 +74,7 @@ sub translateMetaMapToCentrifuge
 		my $max_time_since_centrifuge_index_change = max map {-M $_} @files;
 		if($max_time_since_centrifuge_index_change < (-M $fasta_for_mapping))
 		{
-			warn "Centrifuge DB already present and up to date!";		
+			warn "Centrifuge DB already present in $outputDir and up to date!";		
 			chdir($pre_chdir_cwd) or die;		
 			return;			
 		}
@@ -331,12 +332,12 @@ sub doKraken2OnExistingDB
 	 
 	chdir($kraken2_dir) or die "Cannot chdir into $kraken2_dir";  
 	
-	my $cmd_classify = qq(/usr/bin/time -v ${kraken2_binPrefix} --db DB --report $outputDir/reads_classified_report $simulatedReads 1> $outputDir/reads_classified 2> $outputDir/kraken_resources);
+	my $cmd_classify = qq(/usr/bin/time -v ${kraken2_binPrefix} --db DB --report $outputDir/reads_classified_report $simulatedReads 1> $outputDir/reads_classified 2> $outputDir/kraken2_resources);
 	system($cmd_classify) and die "Could not execute command: $cmd_classify"; # todo
 	
 	#my $cmd_report = qq(/usr/bin/time -v ${kraken2_binPrefix}-report --db DB $outputDir/reads_classified 1> $outputDir/reads_classified_report 2> $outputDir/kraken_report_resources);
 	#system($cmd_report) and die "Could not execute command: $cmd_report"; # todo 
-
+ 
 	create_compatible_file_from_kraken(
 		$outputDir . '/results_kraken2.txt',
 		'DB/taxonomy',
@@ -412,14 +413,14 @@ sub doCentrifugeOnExistingDB
 	
 	die "We have a directory problem - DB dir $centrifugeDBDir not present from " . getcwd() unless(-d $centrifugeDBDir);
 	die "We have a directory problem - DB as specified in $centrifugeDBDir not present" unless(-e $centrifugeDBDir . '/DB.1.cf');
-	my $cmd_classify = qq(/usr/bin/time -v ${centrifugeBinDir}/centrifuge  -x ${centrifugeDBDir}/DB -U $simulatedReads -S $outputDir/reads_classified --report-file $outputDir/reads_classified_report 2> $outputDir/centrifuge_resources);
-	
+	my $cmd_classify = qq(/usr/bin/time -v ${centrifugeBinDir}/centrifuge -p 16 -x ${centrifugeDBDir}/DB -U $simulatedReads -S $outputDir/reads_classified --report-file $outputDir/reads_classified_report 2> $outputDir/centrifuge_resources);
+	print "Now executing: $cmd_classify\n";
 	system($cmd_classify) and die "Could not execute command: $cmd_classify"; # todo
 
 	
 	my $cmd_report = qq(/usr/bin/time -v ${centrifugeBinDir}/centrifuge-kreport  -x ${centrifugeDBDir}/DB $outputDir/reads_classified > $outputDir/reads_classified_kreport 2> $outputDir/centrifuge_report_resources);
+	print "Now executing: $cmd_report\n";
 	system($cmd_report) and die "Could not execute command: $cmd_report"; # todo
-	
 	
 	#my $cmd_report = qq(/usr/bin/time -v ${kraken2_binPrefix}-report --db DB $outputDir/reads_classified 1> $outputDir/reads_classified_report 2> $outputDir/kraken_report_resources);
 	#system($cmd_report) and die "Could not execute command: $cmd_report"; # todo 
@@ -843,7 +844,7 @@ sub create_compatible_composition_file_from_centrifuge
 		}
 		
 		die "$reads_all_taxa != $n_total_reads output file $f_reads" unless($reads_all_taxa == $n_total_reads);
-		die unless($reads_all_taxa_ignoreUnclassified == $n_root);
+		die Dumper("Discrepancy", $reads_all_taxa_ignoreUnclassified, $n_root, $n_additional_unclassified_reads) unless($reads_all_taxa_ignoreUnclassified == ($n_root - $n_additional_unclassified_reads));
 	}
 	close(OUTPUT);
 	close(OUTPUT2);
@@ -917,9 +918,12 @@ sub create_compatible_reads_file_from_centrifuge
 		my $taxID = $f[2];
 		if(($seqID eq 'unclassified') or ($taxID eq '0'))
 		{
-			$is_unclassified{$readID}++;
-			print OUTPUT $readID, "\t", 0, "\n";		 
-			print OUTPUT_UNCL $readID, "\t", 'Unclassified', "\n";			
+			if(not $is_unclassified{$readID})
+			{
+				$is_unclassified{$readID}++;
+				print OUTPUT $readID, "\t", 0, "\n";		 
+				print OUTPUT_UNCL $readID, "\t", 'Unclassified', "\n";			
+			} 
 		}
 		else
 		{

@@ -22,6 +22,7 @@ my $DB = $ARGV[0];
 my $reportLevel = $ARGV[1];
 my $limitTo1 = $ARGV[2];
 my $limitTo2 = $ARGV[3];
+my $printDetails = $ARGV[4];
 
 my %taxonID_2_contigs;
 my %contigLength;
@@ -47,8 +48,9 @@ foreach my $contigID (keys %contigLength)
 	
 	if($limitTo1)
 	{
-		next unless($taxonID_ranks{$limitTo1} eq $limitTo2);
+		next unless((exists $taxonID_ranks{$limitTo1}) and ($taxonID_ranks{$limitTo1} eq $limitTo2));
 	}
+	
 	$taxonID_ranks{$reportLevel} = 'Undefined' unless(defined $taxonID_ranks{$reportLevel});
 	
 	$report{$taxonID_ranks{$reportLevel}}[0]++;
@@ -61,6 +63,13 @@ foreach my $v (sort keys %report)
 {
 	my $n_genomes = scalar(keys %{$report{$v}[2]});
 	print "\t - ${v}: $n_genomes genomes ($report{$v}[0] contigs), ", sprintf("%.2f", $report{$v}[1] / (1024**2)), "mb.\n";
+	if($printDetails)
+	{
+		foreach my $taxonID (keys %{$report{$v}[2]})
+		{
+			print "\t\t", $taxonID, " ", $taxonomy->{$taxonID}{names}[0], "\n";
+		}
+	}
 }
 print "\n";
 

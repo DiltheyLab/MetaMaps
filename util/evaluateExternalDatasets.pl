@@ -37,27 +37,28 @@ my @resultsSets = (
 			'/scratch/tmp/hmp_set7_combined_kraken_results',
 			'/scratch/tmp/hmp_set7_combined_kraken2_results',
 			'/scratch/tmp/hmp_set7_combined_centrifuge_results',
+			'tmp/hmp7_miniSeq+H_rL1000',
 		],
 		'tmp/truthHMP7_bwa_pacbio',
 		'/scratch/tmp/hmp_set7_combined.fastq.mappable'
 	],
 	[
 		'Zymo',
-		'/scratch/tmp/Zymo_metamaps',
-		[
+		'tmp/Zymo_metamaps',
+		[ 
 			'/scratch/tmp/Zymo_combined_kraken_results',
 			'/scratch/tmp/Zymo_combined_kraken2_results',
 			'/scratch/tmp/Zymo_combined_centrifuge_results',
 		],
-		'tmp/truthZymp',
-		'/data/projects/phillippy/projects/MetaMap/loman/GridION-Zymo_CS_MPZBB_LSK109.all.fq.mappable'
+		'tmp/truthZymp_bwa_nanopore',
+		'/data/projects/phillippy/projects/MetaMap/loman/Zymo-GridION-EVEN-BB-SN/GA10000/combined.fastq.subsampled.mappable'
 	],	
 	[
 		'CAMIMouseGut',
-		'/scratch/tmp/CAMI_metamaps',
+		'tmp/CAMI_metamaps',
 		[
 			'/scratch/tmp/CAMI_combined_kraken_results',
-			'/scratch/tmp/CAMI_combined_kraken2_results',
+			'/scratch/tmp/CAMI_combined_kraken2_results', 
 			'/scratch/tmp/CAMI_combined_centrifuge_results',
 		],
 		'tmp/truthCAMI',
@@ -71,6 +72,7 @@ foreach my $resultsSet (@resultsSets)
 	my $kraken_results_dir = $resultsSet->[2][0];
 	my $kraken2_results_dir = $resultsSet->[2][1];
 	my $centrifuge_results_dir = $resultsSet->[2][2];
+	my $MetaMap_1000_results = $resultsSet->[2][3];
 	my $truth = $resultsSet->[3];
 	my $fastq = $resultsSet->[4];
 
@@ -84,6 +86,11 @@ foreach my $resultsSet (@resultsSets)
 		'Kraken2' => [$kraken2_results_dir . '/results_kraken2.txt.reads2Taxon', $kraken2_results_dir . '/results_kraken2.txt'],
 		'Centrifuge' => [$centrifuge_results_dir . '/results_centrifuge.txt.reads2Taxon', $centrifuge_results_dir . '/results_centrifuge.txt'],
 	);
+	
+	if($MetaMap_1000_results)
+	{
+		$resultsFiles{'MetaMap-EM-1000'} = [$MetaMap_1000_results . '.EM.reads2Taxon',  $MetaMap_1000_results . '.EM.WIMP'];
+	}
 
 	my $missingFiles = 0;
 	foreach my $method (keys %resultsFiles)

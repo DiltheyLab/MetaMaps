@@ -350,7 +350,15 @@ sub getAllRanksForTaxon_withUnclassified
 				}
 			}
 		}
-	}		
+	}	
+	
+	foreach my $rank (keys %forReturn)
+	{
+		my $value = $forReturn{$rank};
+		next if($value eq 'Unclassified');
+		next if($rank eq 'definedGenomes');
+		die Dumper("Taxonomy mismatch in getAllRanksForTaxon_withUnclassified", $taxonID, "Should be: $rank", "Is: $taxonomy->{$value}{rank}") unless($rank eq $taxonomy->{$value}{rank});
+	}
 	
 	return \%forReturn;
 }
@@ -1144,7 +1152,7 @@ sub analyseAndAddOneExperiment
 		foreach my $descendantID (@descendants)
 		{
 			die unless(exists $extendedMaster->{$descendantID});
-			die if(exists $taxonIDs_in_direct_truth{$descendantID});
+			# die "Somewhat weird - a taxon ID $descendantID also in direct truth? Descendant of $taxonID" if(exists $taxonIDs_in_direct_truth{$descendantID});
 		}
 	}
 
@@ -1155,10 +1163,11 @@ sub analyseAndAddOneExperiment
 	{
 		$unknown_and_frequencyContributions_href->{$varietyName_forStorage}{mappable}{$taxonID} = 1;
 	}
+
 	$unknown_and_frequencyContributions_href->{$varietyName_forStorage}{truthReadsNovelTree} = $truth_reads_novelTree;
 	$unknown_and_frequencyContributions_href->{$varietyName_forStorage}{nReads} = scalar(keys %$truth_reads_href);		
 	my $frequencyComparison_details = $unknown_and_frequencyContributions_href;
-		
+		 
 	validation::addResultsToGlobalStore(
 		0,
 		$allSimulations_data_href, 
@@ -1454,6 +1463,7 @@ sub distributionLevelComparison
 	my $frequencyComparison_href = shift;
 	# my $distributionLevelComparison = shift;
 
+	my %_in_evaluateAccuracyAtLevels = map {$_ => 1} @evaluateAccuracyAtLevels;
 	foreach my $level ('absolute', 'definedGenomes', 'definedAndHypotheticalGenomes', @evaluateAccuracyAtLevels)
 	{
 		my $lookupKey_level_InInference = $level;
@@ -1533,6 +1543,10 @@ sub distributionLevelComparison
 		my %joint_taxonIDs = map {$_ => 1} ((keys %{$distribution_inferred->{$lookupKey_level_InInference}}), (keys %{$distribution_truth->{$level}}));
 		foreach my $taxonID (keys %joint_taxonIDs)
 		{
+			if($_in_evaluateAccuracyAtLevels{$level} and ($taxonID ne 'Unclassified'))
+			{
+				die Dumper("Taxonomy level mismatch", [$taxonID, $masterTaxonomy->{$taxonID}], "Should be rank: $level", "In inference: " . (exists $distribution_inferred->{$lookupKey_level_InInference}{$taxonID} ? 1 : 0), "In truth: " . (exists $distribution_truth->{$level}{$taxonID} ? 1 : 0)) unless($masterTaxonomy->{$taxonID}{rank} eq $level);
+			}
 			my $isFreq = (exists $distribution_inferred->{$lookupKey_level_InInference}{$taxonID}) ? $distribution_inferred->{$lookupKey_level_InInference}{$taxonID}[1] : 0;
 			my $shouldBeFreq = (exists $distribution_truth->{$level}{$taxonID}) ? $distribution_truth->{$level}{$taxonID} : 0;
 			my $L1_diff = abs($isFreq - $shouldBeFreq);
@@ -1547,7 +1561,10 @@ sub distributionLevelComparison
 			
 			die if(defined $frequencyComparison_href->{$label}{$level}{$taxonID});
 			$frequencyComparison_href->{$label}{$level}{$taxonID} = [$shouldBeFreq, $isFreq];
-			
+			if($taxonID eq '1765')
+			{
+				# print Dumper($label, $level, $taxonID, $frequencyComparison_href->{$label}{$level}{$taxonID}), "\n\n";
+			}
 			if(($shouldBeFreq > 0) or ($isFreq > 0))
 			{
 				push(@should_bigger0, $shouldBeFreq);			
@@ -1667,6 +1684,34 @@ sub readInferredDistribution
 		{
 			$taxonID_master = 'Unclassified';
 		}
+		
+		if(($taxonID_master ne 'Unclassified') and ($line{AnalysisLevel} ne "definedGenomes") and ($line{AnalysisLevel} ne "definedAndHypotheticalGenomes"))
+		{
+			unless ($line{AnalysisLevel} eq $taxonomy->{$taxonID_master}{rank})
+			{
+				my @ancestor_nodes = taxTree::get_ancestors($taxonomy, $taxonID_master);
+				my $newTaxonID;
+				foreach my $ancestor (@ancestor_nodes)
+				{
+					if($taxonomy->{$ancestor}{rank} eq $line{AnalysisLevel})
+					{
+						$newTaxonID = $ancestor;
+						last;
+					}
+				}
+				if($newTaxonID)
+				{
+					print "Update $taxonID_master to $newTaxonID (level $line{AnalysisLevel}) \n";
+					$taxonID_master = $newTaxonID;
+				}	
+				else
+				{
+					die Dumper(("Unresolvable level mismatch in input file $f", [$taxonID_master, $taxonID_nonMaster], $line{AnalysisLevel}, $taxonomy->{$taxonID_master}{rank}, \@ancestor_nodes));
+				}	
+			}
+			die unless ($line{AnalysisLevel} eq $taxonomy->{$taxonID_master}{rank});
+		}
+		
 		die Dumper(\%line) unless(defined $taxonID_master);
 		die Dumper("Unknown taxon ID $taxonID_master in file $f", $taxonomy->{$taxonID_master}, $taxonID_nonMaster, \%line) unless(($taxonID_master eq 'Unclassified') or (defined $taxonomy->{$taxonID_master}));
 		die Dumper("Weird line in $f", \%line) unless(defined $line{Absolute});
@@ -1674,8 +1719,9 @@ sub readInferredDistribution
 		$inference{$line{AnalysisLevel}}{$taxonID_master}[0] += $line{Absolute};
 		die unless(exists $line{PotFrequency});
 		$inference{$line{AnalysisLevel}}{$taxonID_master}[1] += $line{PotFrequency};
-		$freq_per_level{$line{AnalysisLevel}} += $line{PotFrequency};  
+		$freq_per_level{$line{AnalysisLevel}} += $line{PotFrequency}; 
 		
+
 		# if(exists $line{EMFrequency})
 		# {
 			# $inference{$line{AnalysisLevel}}{$taxonID_master}[1] += $line{EMFrequency};
@@ -1683,7 +1729,7 @@ sub readInferredDistribution
 		# else
 		# {
 			# $inference{$line{AnalysisLevel}}{$taxonID_master}[1] += $line{PotFrequency};
-		# }
+		# } 
 	}
 	close(I);	
 	
@@ -1729,7 +1775,7 @@ sub readInferredFileReads
 		}
 		
 		die "Undefined taxon ID $taxonID_master in file $file $." unless(($taxonID_master eq '0') or (exists $masterTaxonomy->{$taxonID_master}));
-		die if(defined $inferred_raw_reads{$readID});
+		die "File $file seems to have more than one entry for $readID" if(defined $inferred_raw_reads{$readID});
 		
 		$inferred_raw_reads{$readID} = $taxonID_master;
 	}
@@ -1751,6 +1797,8 @@ sub produceValidationOutputFiles
 	my $assumeHaveHeader_FREQEVALUATION_ALL = ((-e $outputDir_allSimulations . '/_frequenciesCorrectByLevel') && (-s $outputDir_allSimulations . '/_frequenciesCorrectByLevel'));
 	
 	open(READSCORRECTBYLEVEL_ALL, '>>', $outputDir_allSimulations . '/_all_readsCorrectByLevel') or die;
+	open(READSCORRECTBYLEVEL_ALL_FORPAPER_BYREAD, '>>', $outputDir_allSimulations . '/_all_forPaper_readsCorrectByLevel_byRead') or die;
+	open(READSCORRECTBYLEVEL_ALL_FORPAPER_BYBASE, '>>', $outputDir_allSimulations . '/_all_forPaper_readsCorrectByLevel_byBase') or die;
 	open(FREQEVALUATION_ALL, '>>', $outputDir_allSimulations . '/_all_frequenciesCorrectByLevel') or die;
 	open(UNCLASSIFIED_ALL, '>>', $outputDir_allSimulations . '/_all_unclassifiedSummary_reads') or die;
 	open(UNCLASSIFIED_FREQ_ALL, '>>', $outputDir_allSimulations . '/_all_unclassifiedSummary_frequencies') or die;
@@ -2226,7 +2274,7 @@ sub produceValidationOutputFiles
 						
 						print BARPLOTSFULLDB join("\t", $readLevel, $variety, $methodName, 'absolute', $callRate, $percOK_madeCall_fullAccuracy, $PPV_n0, scalar(@Ntotal)), "\n";
 
-						print "Generating ", $prefix_for_outputFiles . '_readsAbsolutelyCorrect', " $readLevel $variety $methodName: averaging over ", scalar(@Ntotal), " iterations.\n";
+						# print "Generating ", $prefix_for_outputFiles . '_readsAbsolutelyCorrect', " $readLevel $variety $methodName: averaging over ", scalar(@Ntotal), " iterations.\n";
 					}
 				}
 			
@@ -2238,13 +2286,22 @@ sub produceValidationOutputFiles
 		
 		{
 			open(READSCORRECTBYLEVEL, '>', $prefix_for_outputFiles . '_readsCorrectByLevel') or die;
+			open(READSCORRECTBYLEVEL_FORPAPER_BYREAD, '>', $prefix_for_outputFiles . '_forPaper_readsCorrectByLevel_byRead') or die;
+			open(READSCORRECTBYLEVEL_FORPAPER_BYBASE, '>', $prefix_for_outputFiles . '_forPaper_readsCorrectByLevel_byBase') or die;
+	
 			my @header_fields_1_byLevelCorrect = ('ReadLevel', 'EvaluationLevel');
 			my @header_fields_2_byLevelCorrect = ('', '');
 			my @header_fields_3_byLevelCorrect = ('', '');	
 			
+			my @header_fields_1_byLevelCorrect_forPaper = ('ReadLevel', 'EvaluationLevel');
+			my @header_fields_2_byLevelCorrect_forPaper = ('', '');
+			my @header_fields_3_byLevelCorrect_forPaper = ('', '');	
+			
 			foreach my $variety (@varieties)
 			{
 				my $hf2_before = $#header_fields_2_byLevelCorrect;
+				my $hf2_before_forPaper = $#header_fields_2_byLevelCorrect_forPaper;
+
 				foreach my $method (@methods)
 				{
 					push(@header_fields_2_byLevelCorrect, $method, '', '', '', '', '', '', '', '', '', '', '', '', '', '');							
@@ -2252,24 +2309,55 @@ sub produceValidationOutputFiles
 						'Ntotal_avg', 'OKtotal_avg', 'NmadeCall_avg', 'OKmadeCall_avg', 'noCall_avg', 'NmadeCall_n0_avg', 'PPV_n0',
 						'Ntotal_avg_bases', 'OKtotal_avg_bases', 'NmadeCall_avg_bases', 'OKmadeCall_avg_bases', 'noCall_avg_bases', 'NmadeCall_n0_avg_bases', 'PPV_n0_bases'
 					);
+					
+					push(@header_fields_2_byLevelCorrect_forPaper, $method, '', '', '', '');
+					push(@header_fields_3_byLevelCorrect_forPaper, 'Experiments',
+						'# Reads', 'Precision', 'Precision2', 'Recall',
+					);
 				}
+				
 				my $hf2_after = $#header_fields_2_byLevelCorrect;
 				my $requiredFields = $hf2_after - $hf2_before;
 				die unless($requiredFields > 0);
 				my @addToHeader1 = ($variety, (('') x ($requiredFields - 1)));
 				die unless(scalar(@addToHeader1) == $requiredFields);
 				push(@header_fields_1_byLevelCorrect, @addToHeader1);
+				
+				
+				my $hf2_after_forPaper = $#header_fields_2_byLevelCorrect_forPaper;
+				my $requiredFields_forPaper = $hf2_after_forPaper - $hf2_before_forPaper;
+				die unless($requiredFields_forPaper > 0);
+				my @addToHeader1_forPaper = ($variety, (('') x ($requiredFields_forPaper - 1)));
+				die unless(scalar(@addToHeader1_forPaper) == $requiredFields_forPaper);
+								
+				push(@header_fields_1_byLevelCorrect_forPaper, @addToHeader1_forPaper);
 			}
 			
 			print READSCORRECTBYLEVEL join("\t", @header_fields_1_byLevelCorrect), "\n";
 			print READSCORRECTBYLEVEL join("\t", @header_fields_2_byLevelCorrect), "\n";
 			print READSCORRECTBYLEVEL join("\t", @header_fields_3_byLevelCorrect), "\n";
 			
+			print READSCORRECTBYLEVEL_FORPAPER_BYREAD join("\t", @header_fields_1_byLevelCorrect_forPaper), "\n";
+			print READSCORRECTBYLEVEL_FORPAPER_BYREAD join("\t", @header_fields_2_byLevelCorrect_forPaper), "\n";
+			print READSCORRECTBYLEVEL_FORPAPER_BYREAD join("\t", @header_fields_3_byLevelCorrect_forPaper), "\n";
+			
+			print READSCORRECTBYLEVEL_FORPAPER_BYBASE join("\t", @header_fields_1_byLevelCorrect_forPaper), "\n";
+			print READSCORRECTBYLEVEL_FORPAPER_BYBASE join("\t", @header_fields_2_byLevelCorrect_forPaper), "\n";
+			print READSCORRECTBYLEVEL_FORPAPER_BYBASE join("\t", @header_fields_3_byLevelCorrect_forPaper), "\n";
+			
 			# unless($assumeHaveHeader_READSCORRECTBYLEVEL_ALL)
 			{
 				print READSCORRECTBYLEVEL_ALL join("\t", 'Experiment', @header_fields_1_byLevelCorrect), "\n";
 				print READSCORRECTBYLEVEL_ALL join("\t", '', @header_fields_2_byLevelCorrect), "\n";
 				print READSCORRECTBYLEVEL_ALL join("\t", '', @header_fields_3_byLevelCorrect), "\n";
+				
+				print READSCORRECTBYLEVEL_ALL_FORPAPER_BYREAD join("\t", 'Experiment', @header_fields_1_byLevelCorrect_forPaper), "\n";
+				print READSCORRECTBYLEVEL_ALL_FORPAPER_BYREAD join("\t", '', @header_fields_2_byLevelCorrect_forPaper), "\n";
+				print READSCORRECTBYLEVEL_ALL_FORPAPER_BYREAD join("\t", '', @header_fields_3_byLevelCorrect_forPaper), "\n";		
+				
+				print READSCORRECTBYLEVEL_ALL_FORPAPER_BYBASE join("\t", 'Experiment', @header_fields_1_byLevelCorrect_forPaper), "\n";
+				print READSCORRECTBYLEVEL_ALL_FORPAPER_BYBASE join("\t", '', @header_fields_2_byLevelCorrect_forPaper), "\n";
+				print READSCORRECTBYLEVEL_ALL_FORPAPER_BYBASE join("\t", '', @header_fields_3_byLevelCorrect_forPaper), "\n";		
 			}
 						
 			foreach my $readLevel (@readLevels)
@@ -2277,6 +2365,9 @@ sub produceValidationOutputFiles
 				foreach my $evaluationLevel (@evaluationLevels)
 				{
 					my @output_fields_byLevelCorrect = ($readLevel, $evaluationLevel);
+					my @output_fields_byLevelCorrect_forPaper_byRead = ($readLevel, $evaluationLevel);
+					my @output_fields_byLevelCorrect_forPaper_byBase = ($readLevel, $evaluationLevel);
+					
 					foreach my $variety (@varieties)
 					{
 						foreach my $methodName (@methods)
@@ -2514,6 +2605,24 @@ sub produceValidationOutputFiles
 								$PPV_n0_bases							
 							);
 							
+							push(@output_fields_byLevelCorrect_forPaper_byRead,
+								scalar(@callRate),
+								
+								($N_total ne $N_total_truthDefined) ? join(' / ', $N_total, $N_total_truthDefined) : $N_total,
+								($percOK_madeCall ne $percOK_madeCall_truthDefined) ? join(' / ', $percOK_madeCall, $percOK_madeCall_truthDefined) : $percOK_madeCall,
+								$PPV_n0,
+								($percOK_total ne $percOK_total_truthDefined) ? join(' / ', $percOK_total, $percOK_total_truthDefined) : $percOK_total, 					
+							);	
+
+							push(@output_fields_byLevelCorrect_forPaper_byBase,
+								scalar(@callRate),
+								
+								($N_total_bases ne $N_total_truthDefined_bases) ? join(' / ', $N_total_bases, $N_total_truthDefined_bases) : $N_total_bases,
+								($percOK_madeCall_bases ne $percOK_madeCall_truthDefined_bases) ? join(' / ', $percOK_madeCall_bases, $percOK_madeCall_truthDefined_bases) : $percOK_madeCall_bases,
+								$PPV_n0_bases,					
+								($percOK_total_bases ne $percOK_total_truthDefined_bases) ? join(' / ', $percOK_total_bases, $percOK_total_truthDefined_bases) : $percOK_total_bases, 
+							);											
+							
 							print "Generating ", $prefix_for_outputFiles . '_forPlot_barplots_fullDB', " $readLevel $variety $methodName: averaging over ", scalar(@callRate), " iterations.\n";
 						 
 							if($evaluationLevel ne 'absolute')
@@ -2524,10 +2633,19 @@ sub produceValidationOutputFiles
 					}
 					print READSCORRECTBYLEVEL join("\t", @output_fields_byLevelCorrect), "\n";
 					print READSCORRECTBYLEVEL_ALL join("\t", $suffix, @output_fields_byLevelCorrect), "\n";
+					
+					print READSCORRECTBYLEVEL_FORPAPER_BYREAD join("\t", @output_fields_byLevelCorrect_forPaper_byRead), "\n";
+					print READSCORRECTBYLEVEL_ALL_FORPAPER_BYREAD join("\t", $suffix, @output_fields_byLevelCorrect_forPaper_byRead), "\n";
+					
+					print READSCORRECTBYLEVEL_FORPAPER_BYBASE join("\t", @output_fields_byLevelCorrect_forPaper_byBase), "\n";
+					print READSCORRECTBYLEVEL_ALL_FORPAPER_BYBASE join("\t", $suffix, @output_fields_byLevelCorrect_forPaper_byBase), "\n";						
 				}
 			}
 			
 			close(READSCORRECTBYLEVEL);
+			close(READSCORRECTBYLEVEL_FORPAPER_BYREAD);
+			close(READSCORRECTBYLEVEL_FORPAPER_BYBASE);
+			
 		}
 		
 		close(BARPLOTSFULLDB);
@@ -2575,6 +2693,10 @@ sub produceValidationOutputFiles
 				}
 				else
 				{
+					unless($taxonID eq '0')
+					{
+						die "getLightning: Unknown taxon ID $taxonID" unless(exists $fullTaxonomy_simulation->{$taxonID});
+					}	
 					my $lightning = validation::getAllRanksForTaxon_withUnclassified($fullTaxonomy_simulation, $taxonID, $directlyMappable_href);
 					$_getLightning_cache{$taxonID} = $lightning;
 					return $lightning;
@@ -2662,7 +2784,7 @@ sub produceValidationOutputFiles
 								{
 									unless (abs($controlFrequency - $allSimulations_data_href->{frequencyComparisons_bySimulation}->[$simulationI]{$variety}{$label}{$level}{$taxonID}[0]) <= 1e-4)
 									{
-										die Dumper("Frequency mismatch -- $controlFrequency vs $allSimulations_data_href->{frequencyComparisons_bySimulation}->[$simulationI]{$variety}{$label}{$level}{$taxonID}[0]", $simulationI, $variety, $label, $level, $taxonID) ;
+										die Dumper("Frequency mismatch -- $controlFrequency vs $allSimulations_data_href->{frequencyComparisons_bySimulation}->[$simulationI]{$variety}{$label}{$level}{$taxonID}[0]", $simulationI, $variety, $label, $level, $taxonID, "have_truth_freq_data $have_truth_freq_data", $allSimulations_data_href->{frequencyComparisons_bySimulation}->[$simulationI]{$variety}{$label}{$level}{$taxonID}, [$taxonID, $fullTaxonomy_simulation->{$taxonID}]) ;
 										#warn Dumper($allSimulations_data_href->{frequencyComparisons_details_bySimulation}->[$simulationI]{$variety}{truthReadsNovelTree});
 									}
 								}

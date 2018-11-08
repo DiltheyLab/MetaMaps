@@ -149,10 +149,14 @@ my $desiredTaxa;
 my $coverageTargetsAreOrganismAbundances = 0;
 my $ignoreFullDB;
 my $skipKraken;
+my $skipCentrifuge;
+my $skipMetaMaps;
 my $FASTA;
 my $FASTA_taxon_id;
 my $maxMemory;
 my $simulationMinReadLength;
+my $minReadLengthForMetaMapsInference;
+my $makeAllOptional;
 GetOptions (
 	'DB:s' => \$DB,
 	'action:s' => \$action,
@@ -169,10 +173,14 @@ GetOptions (
 	'targetTotalSimulationInGigabytes:s' => \$targetTotalSimulationInGigabytes,
 	'ignoreFullDB:s' => \$ignoreFullDB,
 	'skipKraken:s' => \$skipKraken,
+	'skipCentrifuge:s' => \$skipCentrifuge,
+	'skipMetaMaps:s' => \$skipMetaMaps,
 	'FASTA:s' => \$FASTA,
 	'FASTA_taxon_id:s' => \$FASTA_taxon_id,
 	'maxMemory:s' => \$maxMemory,
 	'simulationMinReadLength:s' => \$simulationMinReadLength,
+	'minReadLengthForMetaMapsInference:s' => \$minReadLengthForMetaMapsInference,
+	'makeAllOptional:s' => \$makeAllOptional,
 );
 
 die unless(($coverageMode eq 'equal') or ($coverageMode eq 'logNormal') or ($coverageMode eq 'file'));
@@ -636,7 +644,7 @@ elsif($action eq 'inferenceJobI')
 		}	
 	}
 					
-	inferenceOneSimulation($simulation_href, $skipKraken, $maxMemory);
+	inferenceOneSimulation($simulation_href, $skipKraken, $skipCentrifuge, $maxMemory, $minReadLengthForMetaMapsInference);
 }
 elsif($action eq 'analyzeJobI')
 {
@@ -746,7 +754,7 @@ elsif($action eq 'analyzeAll')
 		}
 	}
 	
-	unless($haveAllFiles)
+	unless($haveAllFiles or $makeAllOptional)
 	{
 		die "Not all inference files present, abort." ;
 	}
@@ -766,7 +774,8 @@ elsif($action eq 'analyzeAll')
 	# my @frequencyComparisons_details_bySimulation;
 	
 	my $fullTaxonomy_simulation = taxTree::readTaxonomy($DB . '/taxonomy');
-	
+	(my $extendedMaster, my $extendedMaster_merged) = validation::prepare_masterTaxonomy_withX($masterTaxonomy_dir, $fullTaxonomy_simulation);
+
 	# my @highLevel_stats_keptSeparate_bySimulation;
 	# my %callRate_and_accuracy_byReadCategory;
 	# my %callRate_and_accuracy_byReadCategory_byLength;
@@ -780,7 +789,7 @@ elsif($action eq 'analyzeAll')
 		my %n_reads_correct_byVariety_byLevel_byLength;
 
 		my $simulation_href_fn = $globalOutputDir . '/' . $jobI . '/simulationStore';
-		my $simulation_href = retrieve $simulation_href_fn;
+		my $simulation_href = retrieve $simulation_href_fn; 
 		my $frequencyComparison = {};
 		my $frequencyComparison_details = {};
 		my %n_reads_correct_byVariety_local;
@@ -810,7 +819,7 @@ elsif($action eq 'analyzeAll')
 
 	## output summary stats
 
-	validation::produceValidationOutputFiles($allSimulations_data_href, $fullTaxonomy_simulation, $globalOutputDir . '/', $outputDir_allSimulations, $suffix);
+	validation::produceValidationOutputFiles($allSimulations_data_href, $extendedMaster, $globalOutputDir . '/', $outputDir_allSimulations, $suffix);
 }
 else
 {
@@ -876,8 +885,10 @@ sub inferenceOneSimulation
 {
 	my $simulation_href = shift;
 	my $skipKraken = shift;
+	my $skipCentrifuge = shift;
 	my $maxMemory = shift;
-
+	my $minReadLength = shift;
+	
 	# my $fullTaxonomy = taxTree::readTaxonomy($masterTaxonomy_dir);
 	
 	for(my $varietyI = 0; $varietyI <= $#{$simulation_href->{dbDirs_metamap}}; $varietyI++)
@@ -898,8 +909,14 @@ sub inferenceOneSimulation
 		
 		print "Doing inference in $DB_target_dir\n";
 		 
-		warn "MetaMaps skipped";
-		# doMetaMap($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $maxMemory);
+		if($skipMetaMaps)
+		{
+			warn "MetaMaps skipped";
+		}
+		else
+		{
+			doMetaMap($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $maxMemory, $minReadLength);			
+		}
 		unless($skipKraken)
 		{
 			SimulationsKraken::doKraken($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $krakenDBTemplate, $kraken_binPrefix, $Bracken_dir);
@@ -910,7 +927,10 @@ sub inferenceOneSimulation
 			}
 		}
 		
-		SimulationsKraken::doCentrifuge($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $centrifugeBinDir); 
+		unless($skipCentrifuge)
+		{
+			SimulationsKraken::doCentrifuge($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $centrifugeBinDir); 
+		}
 	} 
 	
 	# foreach my $oneDBdir (@{$simulation_href->{dbDirs_metamap}}) 
@@ -930,6 +950,11 @@ sub inferenceOneSimulation
 sub get_files_for_evaluation
 { 
 	my $simulation_href = shift;
+	# return (
+		# 'Kraken-Reads' => ['reads', 'results_kraken.txt.reads2Taxon'],
+		# 'Kraken-Dist' => ['distribution', 'results_kraken.txt'],		
+	# );
+	
 	return (
 		# 'Bracken-Dist' => ['distribution', 'results_bracken.txt.ignoreUnclassified'],
 		# 'Kraken-Dist' => ['distribution', 'results_kraken.txt.ignoreUnclassified'],
@@ -1095,7 +1120,7 @@ sub evaluateOneSimulation
 			my $optional = $methodDetails->[2];
 			unless(-e $f)
 			{
-				if($optional)
+				if($optional or $makeAllOptional)
 				{
 					warn "Expected file $f for $methodName not present.";
 					next;
@@ -1548,6 +1573,7 @@ sub doMetaMap
 	my $DB = shift;
 	my $reads = shift;
 	my $maxMemory = shift;
+	my $minReadLength = shift;
 	
 	print "Carry out MetaMap mapping and classification\n";
 	print "\tDB   : $DB\n";
@@ -1574,8 +1600,17 @@ sub doMetaMap
 	if($maxMemory)
 	{
 		$maxmemory_switch = " --maxmemory $maxMemory "
+	} 
+	my $minReadLength_switch = '';	
+	if($minReadLength)
+	{
+		$minReadLength_switch = " --minReadLen $minReadLength "
+	}	
+	else
+	{
+		$minReadLength_switch = " --minReadLen 2000 "
 	}
-	my $cmd_map = qq(/usr/bin/time -v $metamap_bin mapDirectly --all ${maxmemory_switch}-r $DB/DB.fa -q $reads -m 2000 --pi 80 -o $file_mappings &> $file_res_mapping);
+	my $cmd_map = qq(/usr/bin/time -v $metamap_bin mapDirectly --all ${maxmemory_switch} ${minReadLength_switch}-r $DB/DB.fa -q $reads --pi 80 -o $file_mappings &> $file_res_mapping);
 
 	print "Now executing: $cmd_map\n"; # todo remove?
 	# $cmd_map = qq(/usr/bin/time -v $metamap_bin mapDirectly --all -r $DB/DB.fa -q $reads -m 2000 --pi 80 -o $file_mappings);

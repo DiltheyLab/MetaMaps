@@ -11,15 +11,20 @@ my $DB;
 my $r2t;
 my $FASTQ;
 my $target;
-
+my $outputSortedFASTA = 0;
+my $outputLengthDistribution = 0;
 GetOptions (
 	'DB:s' => \$DB, 
 	'r2t:s' => \$r2t, 
 	'FASTQ:s' => \$FASTQ,
 	'target:s' => \$target,
-);
+	'outputSortedFASTA:s' => \$outputSortedFASTA,
+	'outputLengthDistribution:s' => \$outputLengthDistribution,
+); 
 
-unless($DB and $r2t and $FASTQ and (defined $target))
+die if($outputSortedFASTA and $outputLengthDistribution);
+
+unless($DB and $r2t and $FASTQ and (defined $target)) 
 {
 	print_help();
 }
@@ -29,7 +34,7 @@ unless(-e $r2t)
 	die "Reads-to-taxon file $r2t not existing";
 }
 
-my $taxonomyDir = $DB . '/taxonomy';
+my $taxonomyDir = $DB . '/taxonomy'; 
 my $taxonomy = taxTree::readTaxonomy($taxonomyDir);
 
 unless(($target eq '0') or (exists $taxonomy->{$target}))
@@ -61,6 +66,7 @@ close(R2T);
 print STDERR "Targeting ", scalar(keys %targetReads), " reads for extraction.\n";
 
 my %printedReads;
+my %readSequences;
 open(FASTQ, '<', $FASTQ) or die "Cannot open $FASTQ";
 while(<FASTQ>)
 {
@@ -76,11 +82,33 @@ while(<FASTQ>)
 	die unless(length($sequence) == length($qualities));
 	if($targetReads{$readID})
 	{
-		print $readID_line, "\n", $sequence, $plus, $qualities;
+		if($outputSortedFASTA)
+		{ 
+			$readSequences{$readID} = $sequence;
+		}
+		elsif($outputLengthDistribution)
+		{
+			chomp($sequence);
+			chomp($readID);
+			print $readID, "\t",  length($sequence), "\n";
+		}
+		else
+		{
+			print $readID_line, "\n", $sequence, $plus, $qualities;
+		}
 		$printedReads{$readID}++;
 	}
 }
 close(FASTQ);
+
+if($outputSortedFASTA)
+{
+	foreach my $readID (sort {length($readSequences{$b}) <=> length($readSequences{$a})} keys %readSequences)
+	{
+		print '>', $readID, "\n";
+		print $readSequences{$readID}, "\n";
+	}
+}
 
 print STDERR "Done. Got ", scalar(keys %printedReads), " of ", scalar(keys %targetReads), " reads.\n";
 
