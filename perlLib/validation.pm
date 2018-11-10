@@ -515,9 +515,9 @@ sub readLevelComparison
 		}	
 		
 		die Dumper("Missing read length for read $readID", scalar(keys %$readLengths_href), ((keys %$readLengths_href)[ 0 .. 10 ])) unless(defined $readLengths_href->{$readID});
-		if($readLengths_href->{$readID} > 2000)
+		if($readLengths_href->{$readID} > 1000)
 		{
-			push(@categories, 'p2000');
+			push(@categories, 'p1000'); 
 		}
 		return @categories;
 	};
