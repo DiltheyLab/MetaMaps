@@ -42,6 +42,8 @@ Example:
 MetaMaps outputs both an overall compositional assignment and per-read taxonomic assignments. Specifically, it will (for `-o classification_results`) produce the following files:
 
 1. `classification_results.EM.WIMP`: Sample composition at different taxonomic levels (WIMP = "What's in my pot"). The level "definedGenomes" represents strain-level resolution (i.e., the defined genomes in the classification database). The EM algorithm is carried out at this level.
+   
+   Output columns: `Absolute` specifies the number of reads assigned (by their maximum likelihood mapping estimate) to the taxonomic entity; `EMFrequency` specifies the estimated frequency of the taxonomic entity prior to taking into account unmapped reads; `PotFrequency` specifies the estimated final frequency of the taxonomic entity (i.e. after correcting for unmapped reads).
 
 2. `classification_results.EM.reads2Taxon`: One line per read, and each line consists of the read ID and the taxon ID of the genome that the read was assigned to. Taxon IDs beginning with an 'x' represent MetaMaps-internal taxon IDs that disambiguate between source genomes attached to the same 'species' node. These can be interpreted using the extended database taxonomy (sub-directory `taxonomy` in the directory of the utilized database).
 
