@@ -30,29 +30,30 @@ my @resultsSets = (
 		# 'tmp/truthHMP7_bwa_nanopore',
 		# '/scratch/tmp/hmp-nanopore.fasta.fastq'
 	# ],
-	[
-		'HMP',
-		'tmp/hmp7_2_miniSeq+H',
-		[
-			'/scratch/tmp/hmp_set7_combined_kraken_results',
-			'/scratch/tmp/hmp_set7_combined_kraken2_results',
-			'/scratch/tmp/hmp_set7_combined_centrifuge_results',
-			'tmp/hmp7_miniSeq+H_rL1000',
-		],
-		'tmp/truthHMP7_bwa_pacbio',
-		'/scratch/tmp/hmp_set7_combined.fastq.mappable'
-	],
-	[
-		'Zymo',
-		'tmp/Zymo_metamaps',
-		[ 
-			'/scratch/tmp/Zymo_combined_kraken_results',
-			'/scratch/tmp/Zymo_combined_kraken2_results',
-			'/scratch/tmp/Zymo_combined_centrifuge_results',
-		],
-		'tmp/truthZymp_bwa_nanopore',
-		'/data/projects/phillippy/projects/MetaMap/loman/Zymo-GridION-EVEN-BB-SN/GA10000/combined.fastq.subsampled.mappable'
-	],	
+	# [
+		# 'HMP',
+		# 'tmp/hmp7_2_miniSeq+H',
+		# [
+			# '/scratch/tmp/hmp_set7_combined_kraken_results',
+			# '/scratch/tmp/hmp_set7_combined_kraken2_results',
+			# '/scratch/tmp/hmp_set7_combined_centrifuge_results',
+			# 'tmp/HMP7_rL2000/hmp7_2_miniSeq+H',
+			# 'tmp/hmp7_2_miniSeq+H_20G',
+		# ],
+		# 'tmp/truthHMP7_bwa_pacbio',
+		# '/scratch/tmp/hmp_set7_combined.fastq.mappable'
+	# ],
+	# [
+		# 'Zymo',
+		# 'tmp/Zymo_metamaps',
+		# [ 
+			# '/scratch/tmp/Zymo_combined_kraken_results',
+			# '/scratch/tmp/Zymo_combined_kraken2_results',
+			# '/scratch/tmp/Zymo_combined_centrifuge_results',
+		# ],
+		# 'tmp/truthZymp_bwa_nanopore',
+		# '/data/projects/phillippy/projects/MetaMap/loman/Zymo-GridION-EVEN-BB-SN/GA10000/combined.fastq.subsampled.mappable'
+	# ],	
 	[
 		'CAMIMouseGut',
 		'tmp/CAMI_metamaps',
@@ -60,6 +61,10 @@ my @resultsSets = (
 			'/scratch/tmp/CAMI_combined_kraken_results',
 			'/scratch/tmp/CAMI_combined_kraken2_results', 
 			'/scratch/tmp/CAMI_combined_centrifuge_results',
+			undef,
+			undef,
+			'tmp/CAMI_metamaps',
+
 		],
 		'tmp/truthCAMI',
 		'/data/projects/phillippy/software/camiClient/19122017_mousegut_pacbio_scaffolds/2018.02.13_14.02.01_sample_0/reads/anonymous_reads.fq'
@@ -72,7 +77,10 @@ foreach my $resultsSet (@resultsSets)
 	my $kraken_results_dir = $resultsSet->[2][0];
 	my $kraken2_results_dir = $resultsSet->[2][1];
 	my $centrifuge_results_dir = $resultsSet->[2][2];
-	my $MetaMap_1000_results = $resultsSet->[2][3];
+	my $MetaMap_2000_results = $resultsSet->[2][3];
+	my $MetaMap_20G_results = $resultsSet->[2][4];
+	my $MetaMap_filtered_results = $resultsSet->[2][5];
+	
 	my $truth = $resultsSet->[3];
 	my $fastq = $resultsSet->[4];
 
@@ -87,11 +95,21 @@ foreach my $resultsSet (@resultsSets)
 		'Centrifuge' => [$centrifuge_results_dir . '/results_centrifuge.txt.reads2Taxon', $centrifuge_results_dir . '/results_centrifuge.txt'],
 	);
 	
-	if($MetaMap_1000_results)
+	if($MetaMap_2000_results)
 	{
-		$resultsFiles{'MetaMap-EM-1000'} = [$MetaMap_1000_results . '.EM.reads2Taxon',  $MetaMap_1000_results . '.EM.WIMP'];
+		$resultsFiles{'MetaMap-EM-2000'} = [$MetaMap_2000_results . '.EM.reads2Taxon',  $MetaMap_2000_results . '.EM.WIMP'];
 	}
 
+	if($MetaMap_20G_results)
+	{
+		$resultsFiles{'MetaMap-20G'} = [$MetaMap_20G_results . '.EM.reads2Taxon',  $MetaMap_20G_results . '.EM.WIMP'];
+	}
+
+	if($MetaMap_filtered_results)
+	{
+		$resultsFiles{'MetaMap-Filtered'} = [$MetaMap_filtered_results . '.EM-filtered.reads2Taxon',  $MetaMap_filtered_results . '.EM-filtered.WIMP'];
+	}
+	
 	my $missingFiles = 0;
 	foreach my $method (keys %resultsFiles)
 	{	
