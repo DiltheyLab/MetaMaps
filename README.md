@@ -97,7 +97,34 @@ You can also download and construct your own reference databases. For example, t
     ```
     perl buildDB.pl --DB databases/myDB --FASTAs download/refseq/ref.fa,hg38.primary.fna.with9606 --taxonomy download/new_taxonomy --oldTaxonomy download/taxonomy_uniqueIDs --updateTaxonomy 1
     ```
+## Advanced features
 
+### Plotting spatial genome coverage and alignment identities
 
+MetaMaps comes with a small R script (`plotIdentities_EM.R`) that helps visalize spatial genome coverage and alignment identity per genome. You can assess these metrics to identify mismatches between the sample and the database.
 
+Parameters: the classification prefix (i.e. whatever input your provided to `metamaps --classify`) of the output.
 
+Example:
+
+```
+Rscript plotIdentities_EM.R classification_results
+```
+
+### Filtering out WIMP entries with low median identity
+
+If you suspect that your sample contains many genomes not represented in the database (one way to adjudicate this is to examine the identity histograms of the maximum likelihood alignments, e.g. with `plotIdentities_EM.R`), the produced WIMP files may contain many false-positive hits.
+
+You can filter your WIMP output with the script `filterLowIdentityEntities.pl`.
+
+Parameters:
+
+1. `--DB`: Database name.
+2. `--mappings`: Path to main MetaMaps mappings file.
+3. `--identityThreshold:`: Median identity threshold (between 0 and 1). Default: 0.8, but check the identity histograms to make sure you use a sensible value.
+
+Example:
+
+```
+perl filterLowIdentityEntities.pl --DB miniSeq+H --mappings classification_results --identityThreshold 0.8
+```
