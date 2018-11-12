@@ -17,6 +17,8 @@ GetOptions (
 	'proteinDB:s' => \$proteinDB, 
 );
 
+die "You should not use me - protein sequences are now automatically included in RefSeq or GenBank downloads";
+
 die unless($DB and $proteinDB);
 
 my $annotations_file = $DB . '/DB_annotations.txt';

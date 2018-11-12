@@ -53,6 +53,11 @@ dotStyleByLevel <- list()
 dotStyleByLevel[["species"]] <- 1
 dotStyleByLevel[["absolute"]] <- 2
 
+dotStyleByMethod <- list()
+dotStyleByMethod[["MetaMap-EM-Dist"]] <- 3
+dotStyleByMethod[["Bracken-Dist"]] <- 1
+dotStyleByMethod[["Centrifuge-Dist"]] <- 1
+
 pL <- list()
 pL[["Unclassified"]] <- "Unclassified"
 # pL[["NotLabelledAtLevel"]] <- "Unlabelled"
@@ -907,22 +912,26 @@ HMP_like_reads_plot_2 <- function(prefix, plotTitle)
 	dev.off()
 }
 
-xyPlots_i100_p25 <- function(f1, t1, f2, t2)
+xyPlots_i100_p25 <- function(f1, t1, f2, t2, f3, t3)
 {
 
-	pdf("xyPlots_i100_p25.pdf", useDingbats = F, height = 5, width = 10)
+	pdf("xyPlots_i100_p25_CAMI.pdf", useDingbats = F, height = 10, width = 15)
 	
 	plotLevels <- c("absolute", "species")
 	freq_methods <- c("Bracken-Dist", "MetaMap-EM-Dist")
-	freq_methods <- c("MetaMap-EM-Dist", "Bracken-Dist")
+	freq_methods <- c("Bracken-Dist", "Centrifuge-Dist", "MetaMap-EM-Dist")
 
-	par(mfrow=c(1,2)) 
-	barplotFiles <- c(f1, f2)
-	titles <- c(t1, t2)
+	par(mfrow=c(2,3)) 
+	barplotFiles <- c(f1, f2, f3)
+	titles <- c(t1, t2, t3)
 	nGlobalPlot <- 0
+	
+	for(l in plotLevels)
+	{
+	
 	for(dI in 1:length(barplotFiles)) # todo
 	{
-		frequencyFile <- paste(barplotFiles[[dI]], "/_forPlot_frequencies_xy", sep = "")
+		frequencyFile <- paste(barplotFiles[[dI]], "", sep = "")
 		freqD <- read.delim(frequencyFile, header = T, stringsAsFactors = F)		
 		freqD[["freqTarget"]] <- as.numeric(freqD[["freqTarget"]])
 		freqD[["freqIs"]] <- as.numeric(freqD[["freqIs"]])	
@@ -937,20 +946,41 @@ xyPlots_i100_p25 <- function(f1, t1, f2, t2)
 		{
 			nPlot <- 0
 
-			for(l in plotLevels)
-			{
 				for(m in freq_methods)
 				{	
-					if(!((m == "Bracken-Dist") && (l == "absolute")))
+					if(!(((m == "Bracken-Dist") || (m == "Centrifuge-Dist")) && (l == "absolute")))
 					{
 						l_lookup <- l
+						l_name <- l
 						if((l == "absolute"))
 						{
 							l_lookup <- "definedAndHypotheticalGenomes"
+							l_name <- "strain"
 						}
-
-						indices <- which((freqD[["method"]] == m) & (freqD[["level"]] == l_lookup) & (freqD[["variety"]] == "fullDB"))
-						print(c("lengthIndices", length(indices)))
+						
+						m_lookup <- m
+						if((m == "MetaMap-EM-Dist") && (! any(freqD[["method"]] == m_lookup)))
+						{
+							m_lookup <- "MetaMap-EM"
+							stopifnot(any(freqD[["method"]] == m_lookup))
+						}
+						if((m == "Bracken-Dist") && (! any(freqD[["method"]] == m_lookup)))
+						{
+							m_lookup <- "Bracken"
+							stopifnot(any(freqD[["method"]] == m_lookup))
+						}
+						if((m == "Centrifuge-Dist") && (! any(freqD[["method"]] == m_lookup)))
+						{
+							m_lookup <- "Centrifuge"
+							stopifnot(any(freqD[["method"]] == m_lookup))
+						}
+						
+						indices <- which((freqD[["method"]] == m_lookup) & (freqD[["level"]] == l_lookup) & (freqD[["variety"]] == "fullDB"))
+						if(length(indices) == 0)
+						{
+							print(c("lengthIndices", length(indices), m, m_lookup))
+						}
+						
 						stopifnot(length(indices) > 0)
 
 						if(iteration == "defineAxes")
@@ -958,9 +988,10 @@ xyPlots_i100_p25 <- function(f1, t1, f2, t2)
 							xAxis_values <- c(xAxis_values, freqD[["freqTarget"]][indices])
 							yAxis_values <- c(yAxis_values, freqD[["freqIs"]][indices])
 							
-							legend_titles <- c(legend_titles, paste(captions[[m]], " ", l, sep = ""))
+							legend_titles <- c(legend_titles, paste(captions[[m]], " ", l_name, sep = ""))
 							legend_colours <- c(legend_colours, colourByMethod[[m]])
-							legend_symbols <- c(legend_symbols, dotStyleByLevel[[l]])
+							# legend_symbols <- c(legend_symbols, dotStyleByLevel[[l]])
+							legend_symbols <- c(legend_symbols, dotStyleByMethod[[m]])
 						}
 						else
 						{
@@ -1000,7 +1031,8 @@ xyPlots_i100_p25 <- function(f1, t1, f2, t2)
 								stopifnot(m %in% names(colourByMethod))
 								pointColour <- colourByMethod[[m]]
 								stopifnot(l %in% names(dotStyleByLevel))								
-								pointSymbol <- dotStyleByLevel[[l]]
+								# pointSymbol <- dotStyleByLevel[[l]]
+								pointSymbol <- dotStyleByMethod[[m]]
 								
 								# if(taxonID %in% names(pC))
 								# {
@@ -1045,16 +1077,17 @@ xyPlots_i100_p25 <- function(f1, t1, f2, t2)
 							
 							nPlot <- nPlot + 1
 							nGlobalPlot <- nGlobalPlot + 1
+							#if(nPlot == 1)
 							if(nPlot == 1)
 							{
-								plot(0, 0, col = "white", main = paste(titles[[dI]], " composition", sep = ""), cex.main = 2, cex.axis = 1.2, cex.lab = 1.2, xlab = "True frequency", axes = F, ylab = "Estimated frequency", xlim = c(xAxis_min, xAxis_max), ylim = c(yAxis_min, yAxis_max))	
+								plot(0, 0, col = "white", main = paste(titles[[dI]], " ", l_name, "-level composition", sep = ""), cex.main = 2.5, cex.axis = 2, cex.lab = 2, xlab = "True frequency", axes = F, ylab = "Estimated frequency", xlim = c(xAxis_min, xAxis_max), ylim = c(yAxis_min, yAxis_max))	
 								lines(c(xAxis_min, xAxis_max), c(yAxis_min, yAxis_max), col = "gray")
-								axis(2, xaxs = "i", labels = T, cex.axis = 1.2)			
-								axis(1, xaxs = "i", labels = T, cex.axis = 1.2)
+								axis(2, xaxs = "i", labels = T, cex.axis = 2)			
+								axis(1, xaxs = "i", labels = T, cex.axis = 2)
 							}
-							if(nGlobalPlot == 2)
+							#if(nGlobalPlot == 2)
 							{
-								legend("bottomright", legend = legend_titles, col = legend_colours, pch = legend_symbols, cex = 1.2, bty = "n")							
+								legend("bottomright", legend = legend_titles, col = legend_colours, pch = legend_symbols, cex = 2)							
 							}
 							
 							frTarget <- freqD[["freqTarget"]][indices]
@@ -1316,13 +1349,16 @@ HMPreadPlot <- function()
 	dev.off()   
 }
 
+xyPlots_i100_p25("../databases/miniSeq+H/simulations_i100_specifiedFrequencies/_forPlot_frequencies_xy", "i100", "../databases/miniSeq+H/simulations_p25_logNormal/_forPlot_frequencies_xy", "p25", "/data/projects/phillippy/projects/MetaMap/externalDataResults/CAMIMouseGut_forPlot_frequencies_xy", "CAMI")
+
+stop()
+
+
 HMP_like_reads_plot_2("/data/projects/phillippy/projects/MetaMap/externalDataResults/Zymo_forPlot_barplots", "Zymo")
 HMP_like_reads_plot_2("/data/projects/phillippy/projects/MetaMap/externalDataResults/CAMIMouseGut_forPlot_barplots", "CAMI")
 HMP_like_reads_plot_2("/data/projects/phillippy/projects/MetaMap/externalDataResults/HMP_forPlot_barplots", "HMP")
 HMP_like_reads_plot_2("../databases/miniSeq+H/simulations_p25_logNormal/_forPlot_barplots", "p25")
 HMP_like_reads_plot_2("../databases/miniSeq+H/simulations_i100_specifiedFrequencies/_forPlot_barplots", "i100")
-
-stop()
 
 
 readLengthPlot("../databases/miniSeq+H/simulations_i100_specifiedFrequencies", "i100")
@@ -1334,4 +1370,3 @@ readLengthPlot("../databases/miniSeq+H/simulations_i100_specifiedFrequencies", "
 #unknownFrequencyPlots("../databases/miniSeq+H/simulations_p25_logNormal", "p25")
 # twoReadPlots("../databases/miniSeq+H/simulations_i100_specifiedFrequencies/_forPlot_barplots_fullDB", "i100", "../databases/miniSeq+H/simulations_p25_logNormal/_forPlot_barplots_fullDB", "p25")
 # HMPreadPlot()
-xyPlts_i100_p25("../databases/miniSeq+H/simulations_i100_specifiedFrequencies/", "i100", "../databases/miniSeq+H/simulations_p25_logNormal/", "p25")

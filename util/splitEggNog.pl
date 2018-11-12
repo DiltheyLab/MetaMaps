@@ -121,13 +121,21 @@ python emapper.py -i $splitFile --output $outputFile -m diamond --usemem --cpu 8
 	close(SUBMITALL);
 	
 	print "\n\nDone. Execute commands in $fn_submitall to submit.\n\n";
-	
-	
-	
 }
 elsif($action eq 'collect')
 {
- 
+	die "Input file split already? (flag file $flag_split present)" unless(-e $flag_split);
+	
+	my @existing_split_input_files = glob($prefix_split . '.i.*');
+	
+	foreach my $splitFile (@existing_split_input_files)
+	{
+		(my $outputFile = $splitFile) =~ s/\.i\./.o./;
+		my $outputFile_OKflag = $outputFile . '.done';
+		my $annotations_file = $outputFile . '.emapper.annotations';
+		warn "Output OK flag file $outputFile_OKflag not present" unless(-e $outputFile_OKflag);
+		die "File $annotations_file not present" unless(-e $annotations_file);
+	}
 }
 else
 {
