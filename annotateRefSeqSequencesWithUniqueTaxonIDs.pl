@@ -220,7 +220,7 @@ foreach my $taxonID (keys %taxonID_2_files)
 	{
 		my $thisNode_rank = $taxonomy_href->{$taxonID}{rank};
 		die unless(defined $thisNode_rank);
-		unless(($thisNode_rank eq 'species') or ($thisNode_rank eq 'no rank') or ($thisNode_rank eq 'subspecies'))
+		unless(($thisNode_rank eq 'species') or ($thisNode_rank eq 'no rank') or ($thisNode_rank eq 'subspecies') or ($thisNode_rank eq 'varietas'))
 		{
 			die Dumper("Unexpected rank", $thisNode_rank, $taxonID, $taxonID_2_files{$taxonID});
 		}	
@@ -258,9 +258,11 @@ foreach my $assemblyReportFile (keys %file_2_taxonID)
 			die "File $fresh_fnaFile already conains kraken segment?" if ($line =~ /kraken:taxid\|(\d+)/);
 			$contigCounter++;
 			my $line_for_inclusion = $line;
-			$line_for_inclusion =~ s/\s.+//;
+			$line_for_inclusion =~ s/\s.*//;
+			$line_for_inclusion =~ s/[\r\n]//g;			
 			my $newID = 'C' . $contigCounter . '|kraken:taxid|' . $taxonID . '|' . $line_for_inclusion;
-			print F2 '>', $newID;
+			die "Invalid ID: $newID" if ($newID =~ /\s/);
+			print F2 '>', $newID, "\n";
 		}
 		else
 		{
@@ -364,7 +366,7 @@ sub print_help
 	print qq(
 annotateRefSeqSequencesWithUniqueTaxonIDs.pl
 
-  Prepares a RefSeq/GenBank download for MetaMap.
+  Prepares a RefSeq/GenBank download for MetaMaps.
   
 Usage:
 

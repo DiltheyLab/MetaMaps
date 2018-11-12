@@ -14,6 +14,8 @@
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/archive/binary_oarchive.hpp>
 #include <boost/archive/binary_iarchive.hpp>
+#include <stdexcept>
+#include <exception>
 
 #include <fstream>
 #include <zlib.h>
@@ -404,24 +406,38 @@ public:
 
 	void mapDirectly(skch::Parameters param, size_t maximumMemory)
 	{
-		std::string prefix = param.outFileName;
-		std::vector<std::string> individualMappingFiles;
+		assert(param.querySequences.size() == 1);
+		std::vector<std::string> prefixes = split(param.outFileName, ",");
+		std::vector<std::string> querySequences = split(param.querySequences.at(0), ",");
+		assert(prefixes.size() == querySequences.size());
+
+		std::vector<std::vector<std::string>> individualMappingFiles;
+		individualMappingFiles.resize(prefixes.size());
 
 		std::function<void(skch::Sketch*, size_t)> mapFunction = [&](skch::Sketch* referSketch, size_t N)
 		{
-			std::string outputFn = prefix + "." + std::to_string(N);
-			skch::Parameters localP = param;
-			localP.outFileName = outputFn;
+			for(unsigned int fileI = 0; fileI < individualMappingFiles.size(); fileI++)
+			{
+				std::string outputFn = prefixes.at(fileI) + "." + std::to_string(N);
+				skch::Parameters localP = param;
+				localP.outFileName = outputFn;
+				localP.querySequences = {querySequences.at(fileI)};
+				skch::Map mapper = skch::Map(localP, *referSketch);
 
-			skch::Map mapper = skch::Map(localP, *referSketch);
-
-			individualMappingFiles.push_back(outputFn);
+				individualMappingFiles.at(fileI).push_back(outputFn);
+			}
 		};
 
 		param.outFileName = "";
 		skch::Sketch referSketch(param, maximumMemory, &mapFunction);
 
-		unifyFiles(prefix, param, individualMappingFiles, param.querySequences);
+		for(unsigned int fileI = 0; fileI < individualMappingFiles.size(); fileI++)
+		{
+			skch::Parameters localP = param;
+			localP.querySequences = std::vector<std::string>({querySequences.at(fileI)});
+			localP.outFileName = prefixes.at(fileI);
+			unifyFiles(prefixes.at(fileI), localP, individualMappingFiles.at(fileI), localP.querySequences);
+		}
 	}
 
 	void mapAgainstIndex(skch::Parameters param, std::string indexPrefix)
@@ -487,6 +503,14 @@ public:
 		std::cout << "\t" << "- windowSize: " << useParameters.windowSize << "\n";
 		std::cout << "\n" << std::flush;
 
+		assert(param.querySequences.size() == 1);
+		std::vector<std::string> prefixes = split(param.outFileName, ",");
+		std::vector<std::string> querySequences = split(param.querySequences.at(0), ",");
+		assert(prefixes.size() == querySequences.size());
+
+		std::vector<std::vector<std::string>> individualMappingFiles;
+		individualMappingFiles.resize(prefixes.size());
+
 		std::vector<std::string> outputFiles;
 		std::string outputPrefix = param.outFileName;
 		size_t indexFileI = 0;
@@ -505,15 +529,27 @@ public:
 
 			sketch_serialization_istream.close();
 
-			useParameters.outFileName = outputPrefix + "." + std::to_string(indexFileI);
-			useParameters.querySequences = param.querySequences;
-			skch::Map mapper = skch::Map(useParameters, referSketchI);
+			for(unsigned int fileI = 0; fileI < individualMappingFiles.size(); fileI++)
+			{
+				std::string outputFn = prefixes.at(fileI) + "." + std::to_string(indexFileI);
+				skch::Parameters localP = useParameters;
+				localP.outFileName = outputFn;
+				localP.querySequences = {querySequences.at(fileI)};
+				skch::Map mapper = skch::Map(localP, referSketchI);
 
-			outputFiles.push_back(useParameters.outFileName);
+				individualMappingFiles.at(fileI).push_back(outputFn);
+			}
+
 			indexFileI++;
 		}
 
-		unifyFiles(outputPrefix, useParameters, outputFiles, param.querySequences);
+		for(unsigned int fileI = 0; fileI < individualMappingFiles.size(); fileI++)
+		{
+			skch::Parameters localP = useParameters;
+			localP.querySequences = std::vector<std::string>({querySequences.at(fileI)});
+			localP.outFileName = prefixes.at(fileI);
+			unifyFiles(prefixes.at(fileI), localP, individualMappingFiles.at(fileI), localP.querySequences);
+		}
 	}
 };
 

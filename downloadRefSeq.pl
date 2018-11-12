@@ -50,9 +50,8 @@ my $cwd = getcwd();
 # Establish FTP
 
 my $ftp_server = 'ftp.ncbi.nlm.nih.gov';
-my $ftp = Net::FTP->new($ftp_server, Debug => 0) or die "Cannot connect to some.host.name: $@";
-$ftp->login("anonymous",'-anonymous@') or die "Cannot login ", $ftp->message;
-$ftp->binary();
+my $ftp;
+initFTP(0);
 
 # Download taxonomy
 use taxTree;
@@ -142,9 +141,9 @@ foreach my $subDir (@target_subdirs)
 			
 			my @assembly_dir_contents = $ftp->ls();
 	  
-			my @genomic_fna_files = grep {$_ =~ /_genomic.fna.gz$/} grep {$_ !~ /(_cds_from_)|(_rna_from_g)/} @assembly_dir_contents;
+			my @genomic_fna_files = grep {($_ =~ /_genomic.fna.gz$/) or ($_ =~ /_genomic.gff.gz$/) or ($_ =~ /_protein.faa.gz$/)} grep {$_ !~ /(_cds_from_)|(_rna_from_g)/} @assembly_dir_contents;
 			my @assembly_report_files = grep {$_ =~ /_assembly_report.txt$/} @assembly_dir_contents;
-			die Dumper("Problem identifying files for download", \@genomic_fna_files, \@assembly_report_files, join('/', $ftp_root_genomes,  $DB, $subDir, $speciesDir_with_latest), $assembly_version) unless((scalar(@assembly_report_files) == 1) and (scalar(@genomic_fna_files) == 1));
+			die Dumper("Problem identifying files for download", \@genomic_fna_files, \@assembly_report_files, join('/', $ftp_root_genomes,  $DB, $subDir, $speciesDir_with_latest), $assembly_version) unless((scalar(@assembly_report_files) == 1) and (scalar(@genomic_fna_files) >= 1) and (scalar(@genomic_fna_files) <= 3));
 			
 			my $assemblyVersion_local = $speciesDir_local . '/'. $assembly_version;
 			mkdir($assemblyVersion_local);
@@ -157,10 +156,32 @@ foreach my $subDir (@target_subdirs)
 			foreach my $file_to_transfer (@genomic_fna_files, @assembly_report_files)
 			{
 				print "\r\t $speciesI / ", scalar(@subDir_content), " $subDir ($speciesDir) -- version $fileI / ", scalar(@speciesDir_latest_content), ": GET $file_to_transfer                        ";
-				$ftp->get($file_to_transfer) or die "Cannot transfer file", $ftp->message;		
+				ATTEMPT: for(my $attempt = 0; $attempt <= 100; $attempt++)
+				{
+					if($ftp->get($file_to_transfer))
+					{
+						last ATTEMPT;
+					}	
+					else
+					{
+						warn "Cannot transfer file " . $ftp->message;	
+						if($attempt <= 1)
+						{
+							initFTP(0);
+						}
+						else
+						{
+							initFTP(1);
+						}
+						if($attempt >= 2)
+						{
+							die "Attempt $attempt to get $file_to_transfer failed";
+						}
+					}
+				}
 			}		
 			
-			# die Dumper($assemblyVersion_local, \@genomic_fna_files);
+			# die Dumper($assemblyVersion_local, \@genomic_fna_files); 
 			# print "Downloaded $assembly_version for $speciesDir\n";
 			
 			$downloaded_assemblies++;
@@ -228,4 +249,12 @@ Parameters:
    
 );
 exit;
+}
+
+sub initFTP
+{
+	my $debug = shift;
+	$ftp = Net::FTP->new($ftp_server, Debug => $debug, Timeout => 360) or die "Cannot connect to some.host.name: $@";
+	$ftp->login("anonymous",'-anonymous@') or die "Cannot login ", $ftp->message;
+	$ftp->binary();	
 }

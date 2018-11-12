@@ -1,7 +1,6 @@
 PURPOSE
 
-MetaMaps is a method for the analysis of long-read
-(PacBio/ONT) metagenomic datasets.
+MetaMaps is a tool for long-read metagenomic analysis.
 
 It is implemented in C++ and is distributed with:
 

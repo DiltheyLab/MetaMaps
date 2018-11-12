@@ -31,8 +31,8 @@ while(<FIN>)
 {
 	if(substr($_, 0, 1) eq '>')
 	{
-		$contigI++;
-		$_ =~ s/ .+//;
+		$contigI++; 
+		$_ =~ s/\s.+//;
 		substr($_, 0, 1) = '>kraken:taxid|' . $taxonID . '|C' . $contigI . '|';
 	}
 	print FOUT $_;

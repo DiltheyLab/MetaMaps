@@ -9,6 +9,9 @@ It is faster than classical exact alignment-based approaches, and its output is 
 
 The approximate mapping algorithm employed by MetaMaps is based on [MashMap](https://github.com/marbl/MashMap). MetaMaps adds a mapping quality model and EM-based estimation of sample composition.
 
+## News
+(28 August 2018) We're adding more flexible tools to construct your own databases - see [here](https://github.com/DiltheyLab/MetaMaps/issues/5#issuecomment-414301437) for details. Feedback welcome!
+
 ## Installation
 Follow [`INSTALL.txt`](INSTALL.txt) to compile and install MetaMaps.
 
@@ -39,6 +42,8 @@ Example:
 MetaMaps outputs both an overall compositional assignment and per-read taxonomic assignments. Specifically, it will (for `-o classification_results`) produce the following files:
 
 1. `classification_results.EM.WIMP`: Sample composition at different taxonomic levels (WIMP = "What's in my pot"). The level "definedGenomes" represents strain-level resolution (i.e., the defined genomes in the classification database). The EM algorithm is carried out at this level.
+   
+   Output columns: `Absolute` specifies the number of reads assigned (by their maximum likelihood mapping estimate) to the taxonomic entity; `EMFrequency` specifies the estimated frequency of the taxonomic entity prior to taking into account unmapped reads; `PotFrequency` specifies the estimated final frequency of the taxonomic entity (i.e. after correcting for unmapped reads).
 
 2. `classification_results.EM.reads2Taxon`: One line per read, and each line consists of the read ID and the taxon ID of the genome that the read was assigned to. Taxon IDs beginning with an 'x' represent MetaMaps-internal taxon IDs that disambiguate between source genomes attached to the same 'species' node. These can be interpreted using the extended database taxonomy (sub-directory `taxonomy` in the directory of the utilized database).
 
@@ -92,7 +97,34 @@ You can also download and construct your own reference databases. For example, t
     ```
     perl buildDB.pl --DB databases/myDB --FASTAs download/refseq/ref.fa,hg38.primary.fna.with9606 --taxonomy download/new_taxonomy --oldTaxonomy download/taxonomy_uniqueIDs --updateTaxonomy 1
     ```
+## Advanced features
 
+### Plotting spatial genome coverage and alignment identities
 
+MetaMaps comes with a small R script (`plotIdentities_EM.R`) that helps visalize spatial genome coverage and alignment identity per genome. You can assess these metrics to identify mismatches between the sample and the database.
 
+Parameters: the classification prefix (i.e. whatever input your provided to `metamaps --classify`) of the output.
 
+Example:
+
+```
+Rscript plotIdentities_EM.R classification_results
+```
+
+### Filtering out WIMP entries with low median identity
+
+If you suspect that your sample contains many genomes not represented in the database (one way to adjudicate this is to examine the identity histograms of the maximum likelihood alignments, e.g. with `plotIdentities_EM.R`), the produced WIMP files may contain many false-positive hits.
+
+You can filter your WIMP output with the script `filterLowIdentityEntities.pl`.
+
+Parameters:
+
+1. `--DB`: Database name.
+2. `--mappings`: Path to main MetaMaps mappings file.
+3. `--identityThreshold:`: Median identity threshold (between 0 and 1). Default: 0.8, but check the identity histograms to make sure you use a sensible value.
+
+Example:
+
+```
+perl filterLowIdentityEntities.pl --DB miniSeq+H --mappings classification_results --identityThreshold 0.8
+```

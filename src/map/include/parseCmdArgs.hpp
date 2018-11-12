@@ -143,13 +143,17 @@ namespace skch
       //Open file one by one
       for(auto &e : querySequences)
       {
-        std::ifstream in(e);
-
-        if (in.fail())
-        {
-          std::cerr << "ERROR, skch::validateInputFiles, Could not open " << e << "\n";
-          exit(1);
-        }
+		std::vector<std::string> e_parts = split(e, ",");
+		for(auto e_part : e_parts)
+		{
+			std::ifstream in(e_part);
+			
+			if (in.fail())
+			{
+			  std::cerr << "ERROR, skch::validateInputFiles, Could not open " << e_part << "\n";
+			  exit(1);
+			}
+		}
       }
 
       for(auto &e : refSequences)

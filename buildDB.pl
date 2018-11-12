@@ -71,10 +71,13 @@ foreach my $f (taxTree::getTaxonomyFileNames())
 # Find input files
 
 my @FASTAfiles;
+my @annotationFiles;
+my @proteinFiles;
 foreach my $FASTAComponent (split(/,/, $FASTAs))
 {
 	if(-d $FASTAComponent)
 	{
+		my $wd = getcwd();
 		find(\&wanted, $FASTAComponent);
 		sub wanted {
 			my $file = $File::Find::name;
@@ -98,6 +101,26 @@ foreach my $FASTAComponent (split(/,/, $FASTAs))
 				if($patternOK)
 				{
 					push(@FASTAfiles, $file);
+					(my $annotationFile = $file) =~ s/\.fna/.gff/;
+					$annotationFile = $wd . '/' . $annotationFile;
+					if(-e $annotationFile)
+					{
+						push(@annotationFiles, $annotationFile);
+					}
+					else
+					{
+						push(@annotationFiles, undef);
+					}
+					(my $proteinsFile = $file) =~ s/genomic\.fna/protein.faa/;
+					$proteinsFile = $wd . '/' . $proteinsFile;
+					if(-e $proteinsFile)
+					{
+						push(@proteinFiles, $proteinsFile);
+					}
+					else
+					{
+						push(@proteinFiles, undef);
+					}					
 				}
 			}
 		}
@@ -106,9 +129,13 @@ foreach my $FASTAComponent (split(/,/, $FASTAs))
 	{
 		die "Specified FASTA file (via --FASTAs) doesn't exist: $FASTAComponent" unless(-e $FASTAComponent);
 		push(@FASTAfiles, $FASTAComponent);
+		push(@annotationFiles, undef);
+		push(@proteinFiles, undef);
 	}
 }
 print "\nNumber of found FASTA input files: ", scalar(@FASTAfiles), "\n";
+die unless(scalar(@FASTAfiles) == scalar(@annotationFiles));
+die unless(scalar(@FASTAfiles) == scalar(@proteinFiles));
 
 # read taxonomy
 
@@ -142,12 +169,23 @@ else
 	 $taxonomy_href = taxTree::readTaxonomy($taxonomyDir);		
 }
 
+# open annotations file
+my $outputFN_annotations_pre = $DB . '/' . 'DB_annotations.txt.pre';
+open(ANNOTATIONS_OUT, '>', $outputFN_annotations_pre) or die;
+print ANNOTATIONS_OUT join("\t", "ContigId", "Start", "Stop", "GeneName", "GeneLocusTag", "CDSProteinId", "CDSProduct"), "\n";
 # get list of contigs IDs and their positions			
-			
-my %taxonID_2_contig;	
+		
+my $outputFN_proteins = $DB . '/' . 'DB_proteins.faa';
+open(PROTEINS_OUT, '>', $outputFN_proteins) or die;
+	
+my %haveProteinID;	
+my %taxonID_2_contig;	 
 my %contig_2_length;		
 my %taxonIDs;
 my @contigs;
+my %gene_2_protein;
+my $processed_annotation_files = 0;
+my $processed_protein_files = 0;
 for(my $fileI = 0; $fileI <= $#FASTAfiles; $fileI++)
 {
 	my $currentContigID;
@@ -204,8 +242,150 @@ for(my $fileI = 0; $fileI <= $#FASTAfiles; $fileI++)
 		die "Duplicate contig ID in $currentContigID" if(defined $contig_2_length{$currentContigID});		
 		$contig_2_length{$currentContigID} = $currentContigRunningLength;
 	}	
+	
+	my $annotationFile = $annotationFiles[$fileI];
+	if($annotationFile)
+	{
+		# first pass - populate gene to protein
+		open(A, '<', $annotationFile) or die "Cannot open $annotationFile";
+		while(<A>)
+		{
+			my $line = $_;
+			chomp($line);
+			next unless($line);
+			next if(substr($line, 0, 1) eq '#');
+			my @line_fields = split(/\t/, $line);
+			if($line_fields[2] eq 'CDS')
+			{
+				if($line_fields[8] =~ /Parent=(gene\d+);/)
+				{
+					my $gene = $1;
+					my $product = '';
+					my $protein_id = '';
+					if($line_fields[8] =~ /product=(.+?);/)
+					{
+						$product = $1;
+					}
+					if($line_fields[8] =~ /protein_id=(.+?);/)
+					{
+						$protein_id = $1;
+					}
+					$gene_2_protein{$gene} = [$protein_id, $product];
+				}
+			}
+		}
+		close(A);
+		# second pass
+		open(A, '<', $annotationFile) or die "Cannot open $annotationFile";
+		while(<A>)
+		{
+			my $line = $_;
+			chomp($line);
+			next unless($line);
+			next if(substr($line, 0, 1) eq '#');
+			my @line_fields = split(/\t/, $line);
+			if($line_fields[2] eq 'gene')
+			{
+				my $contig = $line_fields[0];
+				my $start = $line_fields[3];
+				my $stop = $line_fields[4];
+				unless($start <= $stop)
+				{
+					warn "Line $. of $annotationFile: not $start < $stop";
+					my $oldStop = $stop;
+					$stop = $start;
+					$start = $oldStop;
+					die unless($start <= $stop);
+				}
+				
+				unless($line_fields[8] =~ /ID=(gene\d+);/)
+				{
+					warn "Can't parse gene line -- $line_fields[8] \n$line" ;
+					next;
+				}
+				
+				my $gene_id = $1;
+					
+				my $gene_name = '';
+				my $gene_locus_tag = '';
+
+				if($line_fields[8] =~ /Name=(.+?);/)
+				{
+					$gene_name = $1;
+				}
+				
+				if($line_fields[8] =~ /locus_tag=(.+?);/)
+				{
+					$gene_locus_tag = $1;
+				}
+
+				my @output_fields = ($contig, $start, $stop, $gene_name, $gene_locus_tag);
+				if(exists $gene_2_protein{$gene_id})
+				{
+					push(@output_fields, @{$gene_2_protein{$gene_id}});
+				}
+				else
+				{ 
+					push(@output_fields, '', '');
+					warn "File $annotationFile gene $gene_id no gene";
+				}
+				
+				print ANNOTATIONS_OUT join("\t", @output_fields), "\n";
+			}
+		}
+		close(A);	
+		$processed_annotation_files++;
+	}
+	
+
+	my $proteinsFile = $proteinFiles[$fileI];
+	if($proteinsFile)
+	{
+		# first pass - populate gene to protein
+		my $runningFullID;
+		my $runningSequence;
+		my $flush = sub {
+			if($runningFullID)
+			{
+				(my $proteinShortID = $runningFullID) =~ s/\s.*//;
+				if(not $haveProteinID{$proteinShortID})
+				{
+					print PROTEINS_OUT '>' , $runningFullID, "\n";
+					print PROTEINS_OUT $runningSequence, "\n";
+					$haveProteinID{$proteinShortID}++;
+				}
+			}
+			$runningFullID = '';
+			$runningSequence = '';
+		};
+		open(P, '<', $proteinsFile) or die "Cannot open $proteinsFile";
+		while(<P>)
+		{
+			my $line = $_;
+			chomp($line);
+			next unless($line);
+			if(substr($line, 0, 1) eq '>')
+			{
+				my $proteinID = substr($line, 1);
+				$flush->();
+				$runningFullID = $proteinID;
+			}	
+			else
+			{
+				$runningSequence .= $line;
+			}
+		}
+		close(P);
+		$flush->();
+		
+		$processed_protein_files++;
+	}
+	
+	print "Running count keys in gene-2-protein: ", scalar(keys %gene_2_protein), "\n";
 }
 @contigs = shuffle @contigs;
+
+warn Dumper(["Annotation files", $processed_annotation_files], ["Protein files", $processed_protein_files]);
 
 my $getContigSequence = sub {
 	my $contigInfoAref = shift;
@@ -284,7 +464,7 @@ if((defined $maxSpecies) and (scalar(@useTaxonIDs) > $maxSpecies))
 	# exit;
 # }
 
-
+my $outputFN_annotations = $DB . '/' . 'DB_annotations.txt';
 my %_useTaxonID = map {$_ => 1} @useTaxonIDs;
 my %_useTaxonIDs_afterUpdate;
 my $outputTaxonsAndContigs = $DB . '/' . 'taxonInfo.txt';
@@ -295,7 +475,7 @@ if($updateTaxonomy)
 	my %new_contig_2_length;
 	my $made_updates_taxonID = 0;
 	my $made_updates_contigID = 0;
-	
+	my %old_to_new_contigIDs; 
 	foreach my $taxonID (@useTaxonIDs)
 	{
 		my $newTaxonID = taxTree::findCurrentNodeID($new_taxonomy_href, $new_taxonomy_href_merged, $taxonID);
@@ -307,6 +487,7 @@ if($updateTaxonomy)
 			die unless(Util::extractTaxonID($contigID, '?', '?') eq $taxonID);
 			my $newContigID = update_contigID_newTaxon_ID($contigID);
 			$made_updates_contigID++ if ($contigID ne $newContigID);
+			$old_to_new_contigIDs{$contigID} = $newContigID;
 			die if(defined $new_contig_2_length{$newContigID});
 			$new_contig_2_length{$newContigID} = $contig_2_length{$contigID};
 			push(@new_contigs, $newContigID);
@@ -318,29 +499,53 @@ if($updateTaxonomy)
 	foreach my $taxonID (@new_useTaxonIDs)
 	{
 		my @new_contigs = @{$new_taxonID_2_contigs{$taxonID}};
+		die Dumper("Some contig IDs contain whitespaces I", [grep {$_ =~ /\s/} @contigs]) unless(all {$_ !~ /\s/} @new_contigs);
 		print DB $taxonID, " ", join(';', map {die unless(defined $new_contig_2_length{$_}); $_ . '=' . $new_contig_2_length{$_}} @new_contigs), "\n";
 	}
 	
 	%_useTaxonIDs_afterUpdate = map {$_ => 1} @new_useTaxonIDs;
 	
 	print "Updated taxonomic information -- $made_updates_taxonID taxons, $made_updates_contigID contig IDs.\n";
-}
+	
+	open(APRE, '<', $outputFN_annotations_pre) or die "Cannot open $outputFN_annotations_pre";
+	open(AFINAL, '>', $outputFN_annotations) or die "Cannot open $outputFN_annotations";
+	my $firstLine = <APRE>;
+	print AFINAL $firstLine;
+	while(<APRE>)
+	{
+		my $line = $_;
+		chomp($line);
+		next unless($line);
+		die unless($line =~ /^(.+?)\t/);
+		my $contigID = $1;
+		die "Contig ID $contigID undefined" unless(defined $old_to_new_contigIDs{$contigID});
+		$line =~ s/^(.+?)\t/$old_to_new_contigIDs{$contigID}\t/;
+		print AFINAL $line, "\n";
+	}
+	close(APRE);
+	close(AFINAL);
+} 
 else
 {
 	foreach my $taxonID (@useTaxonIDs)
 	{
 		my @contigs = @{$taxonID_2_contig{$taxonID}};
+		die Dumper("Some contig IDs contain whitespaces II", [grep {$_ =~ /\s/} @contigs]) unless(all {$_ !~ /\s/} @contigs);
 		print DB $taxonID, " ", join(';', map {die unless(defined $contig_2_length{$_}); $_ . '=' . $contig_2_length{$_}} @contigs), "\n";
 	}
 	
 	%_useTaxonIDs_afterUpdate = map {$_ => 1} @useTaxonIDs;
+	
+	system("mv $outputFN_annotations_pre $outputFN_annotations") and die "Moving $outputFN_annotations_pre to $outputFN_annotations failed";
 }
 close(DB);
+close(PROTEINS_OUT);
 
 my $countNs_windowSize = 1000;
 my $outputFN_contigWindows = $DB . '/' . 'contigNstats_windowSize_' . $countNs_windowSize . '.txt';
 
 my $outputFN = $DB . '/' . 'DB.fa';
+
 open(DB, '>', $outputFN) or die "Cannot open $outputFN - check whether I have write permissions";
 open(NSTATS, '>', $outputFN_contigWindows) or die "Cannot open $outputFN_contigWindows - check whether I have write permissions";
 for(my $contigI = 0; $contigI <= $#contigs; $contigI++)
@@ -389,8 +594,23 @@ close(NSTATS);
 
 taxTree::trimTaxonomyInDir($dir_copy_taxonomy, \%_useTaxonIDs_afterUpdate);
 
-print "\nProduced randomized-order database sequence file $outputFN and\n\ttaxon info file $outputTaxonsAndContigs (" . scalar(@useTaxonIDs) . " taxa).\n\n";
+print "\nProduced randomized-order database sequence file $outputFN and\n\ttaxon info file $outputTaxonsAndContigs (" . scalar(@useTaxonIDs) . " taxa).\n";
 
+my $totalProteinsInAnnotations = 0;
+my $totalProteinsInAnnotationsWithSequence = 0;
+print 'scalar((keys %gene_2_protein)): ', scalar((keys %gene_2_protein)), "\n";
+foreach my $geneID (keys %gene_2_protein)
+{
+	if($gene_2_protein{$geneID}[0])
+	{
+		$totalProteinsInAnnotations++;
+		if($haveProteinID{$gene_2_protein{$geneID}[0]})
+		{
+			$totalProteinsInAnnotationsWithSequence++;
+		}
+	} 
+} 
+print "\tTotal protein annotations: $totalProteinsInAnnotations -- with sequence: $totalProteinsInAnnotationsWithSequence\n";
 
 sub update_contigID_newTaxon_ID
 {

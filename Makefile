@@ -1,4 +1,4 @@
-CXXFLAGS += -ggdb -O2 -std=c++11 -Isrc -L /data/projects/phillippy/software/boost_1_60_0/lib -I /data/projects/phillippy/software/boost_1_60_0/include
+CXXFLAGS += -O2 -ggdb -std=c++11 -Isrc -L /data/projects/phillippy/software/boost_1_60_0//lib -I /data/projects/phillippy/software/boost_1_60_0//include 
 CPPFLAGS += -DUSE_BOOST
 
 UNAME_S=$(shell uname -s)
@@ -9,7 +9,7 @@ else
 	CXXFLAGS += -include src/common/memcpyLink.h -Wl,--wrap=memcpy
 	CFLAGS += -include src/common/memcpyLink.h
 endif
-
+ 
 SOURCES=src/map/mash_map.cpp
 
 OBJECTS=$(SOURCES:.cpp=.o)  
@@ -17,7 +17,7 @@ OBJECTS=$(SOURCES:.cpp=.o)
 all : metamaps
 
 metamaps : $(OBJECTS) 
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(OBJECTS) -o metamaps /data/projects/phillippy/software/boost_1_60_0/lib/libboost_math_c99.a -lstdc++ -lz -lm -lpthread -lboost_system -lboost_filesystem -lboost_serialization -lboost_regex
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(OBJECTS) -o metamaps /data/projects/phillippy/software/boost_1_60_0//lib/libboost_math_c99.a -lstdc++ -lz -lm -lpthread -lboost_system -lboost_filesystem -lboost_serialization -lboost_regex
 
 .SUFFIXES :
 
