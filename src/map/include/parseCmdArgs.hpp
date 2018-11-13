@@ -179,6 +179,7 @@ namespace skch
 		std::cout << "Index = " << parameters.index << std::endl;
 		std::cout << "Query = " << parameters.querySequences << std::endl;
 		std::cout << "Report all = " << parameters.reportAll << std::endl;
+		std::cout << "Threads = " << parameters.threads << std::endl;
 		std::cout << "Mapping output file = " << parameters.outFileName << std::endl;
 		std::cout << ">>>>>>>>>>>>>>>>>>" << std::endl;
 	}
@@ -209,6 +210,7 @@ namespace skch
 		std::cout << "Percentage identity threshold = " << parameters.percentageIdentity << std::endl;
 		std::cout << "Report all = " << parameters.reportAll << std::endl;
 		std::cout << "Target max. memory = " << parameters.maximumMemory << std::endl;
+		std::cout << "Threads = " << parameters.threads << std::endl;
 		std::cout << "Mapping output file = " << parameters.outFileName << std::endl;
 		std::cout << ">>>>>>>>>>>>>>>>>>" << std::endl;
 	}

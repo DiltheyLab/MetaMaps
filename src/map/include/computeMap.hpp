@@ -88,7 +88,12 @@ namespace skch
         refSketch(refsketch),
         processMappingResults(f)
     {
+      auto t0 = skch::Time::now();
+
       this->mapQuery();
+
+      std::chrono::duration<double> timeMapQuery = skch::Time::now() - t0;
+      std::cout << "INFO, skch::Map::Map, Time spent mapping the query : " << timeMapQuery.count() << " sec" << std::endl;
     }
 
     private:
