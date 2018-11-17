@@ -21,6 +21,7 @@
 #include "map/include/map_stats.hpp"
 #include "map/include/slidingMap.hpp"
 #include "map/include/MIIteratorL2.hpp"
+#include "map/include/ThreadPool.hpp"
 
 //External includes
 
@@ -87,7 +88,12 @@ namespace skch
         refSketch(refsketch),
         processMappingResults(f)
     {
+      auto t0 = skch::Time::now();
+
       this->mapQuery();
+
+      std::chrono::duration<double> timeMapQuery = skch::Time::now() - t0;
+      std::cout << "INFO, skch::Map::Map, Time spent mapping the query : " << timeMapQuery.count() << " sec" << std::endl;
     }
 
     private:
@@ -104,7 +110,12 @@ namespace skch
         seqno_t seqCounter = 0;
 
         std::ofstream outstrm(param.outFileName);
+        MappingResultsVector_t allReadMappings;  //Aggregate mapping results for the complete run
+
         assert(param.querySequences.size() <= 1);
+
+        //Create the thread pool 
+        ThreadPool<InputSeqContainer, MapModuleOutput> threadPool( [this](InputSeqContainer* e){return mapModule(e);}, param.threads);
 
         for(const auto &fileName : param.querySequences)
         {
@@ -125,48 +136,96 @@ namespace skch
             //Is the read too short?
             if(len < param.windowSize || len < param.kmerSize || len < param.minReadLength)
             {
-              seqCounter++;
 
 #ifdef DEBUG
               std::cout << "WARNING, skch::Map::mapQuery, read is not long enough for mapping" << std::endl;
 #endif
 
+              seqCounter++;
               continue;
             }
             else 
             {
-              QueryMetaData <decltype(seq), MinVec_Type> Q;
-
-              Q.seq = seq;
-              Q.seqCounter = seqCounter;
-              Q.len = len; 
-
-              //Map this sequence
-              bool mappingReported = mapSingleQuerySeq(Q, outstrm);
-              if(mappingReported)
-                totalReadsMapped++;
-
-              seqCounter++;
               totalReadsPickedForMapping++;
+
+              //Dispatch input to thread
+              threadPool.runWhenThreadAvailable(new InputSeqContainer(seq->seq.s, seq->name.s, len, seqCounter));
+
+              //Collect output if available
+              while ( threadPool.outputAvailable() )
+                mapModuleHandleOutput(threadPool.popOutputWhenAvailable(), allReadMappings, totalReadsMapped, outstrm);
             }
-          }
+
+            seqCounter++;
+          } //Finish reading query input file
 
           //Close the input file
           kseq_destroy(seq);  
           gzclose(fp);  
         }
 
-        std::cout << "INFO, skch::Map::mapQuery, [count of mapped reads, reads qualified for mapping, total input reads] = [" << totalReadsMapped << ", " << totalReadsPickedForMapping << ", " << seqCounter << "]" << std::endl;
+        //Collect remaining output objects
+        while ( threadPool.running() )
+          mapModuleHandleOutput(threadPool.popOutputWhenAvailable(), allReadMappings, totalReadsMapped, outstrm);
 
+        std::cout << "INFO, skch::Map::mapQuery, [count of mapped reads, reads qualified for mapping, total input reads] = [" << totalReadsMapped << ", " << totalReadsPickedForMapping << ", " << seqCounter << "]" << std::endl;
       }
+
+      /**
+       * @brief               main mapping function given an input read
+       * @details             this function is run in parallel by multiple threads
+       * @param[in]   input   input read details
+       * @return              output object containing the mappings
+       */
+      MapModuleOutput* mapModule (InputSeqContainer* input)
+      {
+        MapModuleOutput* output = new MapModuleOutput();
+
+        //save query sequence name
+        output->qseqName = input->seqName;
+
+        QueryMetaData <MinVec_Type> Q;
+        Q.seq = &(input->seq)[0u];
+        Q.len = input->len;
+        Q.seqCounter = input->seqCounter;
+
+        MappingResultsVector_t l2Mappings;   
+
+        //Map this sequence
+        mapSingleQuerySeq(Q, l2Mappings);
+
+        output->readMappings.insert(output->readMappings.end(), l2Mappings.begin(), l2Mappings.end());
+
+        return output;
+      }
+
+      /**
+       * @brief                       routine to handle mapModule's output of mappings
+       * @param[in] output            mapping output object
+       * @param[in] allReadMappings   vector to store mappings of all reads (optional use depending on filter)
+       * @param[in] totalReadsMapped  counter to track count of reads mapped
+       * @param[in] outstrm           outstream stream object 
+       */
+      template <typename Vec>
+        void mapModuleHandleOutput(MapModuleOutput* output, Vec &allReadMappings, seqno_t &totalReadsMapped,
+            std::ofstream &outstrm)
+        {
+          if(output->readMappings.size() > 0)
+            totalReadsMapped++;
+
+          //Report mapping
+          reportReadMappings(output->readMappings, output->qseqName, outstrm); 
+
+          delete output;
+        }
 
       /**
        * @brief               map the parsed query sequence (L1 and L2 mapping)
        * @param[in] Q         metadata about query sequence
        * @param[in] outstrm   outstream stream where mappings will be reported
        */
-      template<typename Q_Info>
-        inline bool mapSingleQuerySeq(Q_Info &Q, std::ofstream &outstrm)
+      template<typename Q_Info, typename VecOut>
+        void mapSingleQuerySeq(Q_Info &Q, VecOut &l2Mappings)
         {
 #if ENABLE_TIME_PROFILE_L1_L2
           auto t0 = skch::Time::now();
@@ -185,11 +244,7 @@ namespace skch
 #endif
 
           //L2 Mapping
-          MappingResultsVector_t l2Mappings;
-          bool mappingReported = doL2Mapping(Q, l1Mappings, l2Mappings);
-
-          //Write mapping results to file
-          reportL2Mappings(l2Mappings, outstrm);
+          doL2Mapping(Q, l1Mappings, l2Mappings);
 
 
 #if ENABLE_TIME_PROFILE_L1_L2
@@ -206,8 +261,6 @@ namespace skch
               << "\n";
           }
 #endif
-
-          return mappingReported;
         }
 
       /**
@@ -228,7 +281,7 @@ namespace skch
 
           ///1. Compute the minimizers
 
-          CommonFunc::addMinimizers(Q.minimizerTableQuery, Q.seq, param.kmerSize, param.windowSize, param.alphabetSize);
+          CommonFunc::addMinimizers(Q.minimizerTableQuery, Q.seq, Q.len, param.kmerSize, param.windowSize, param.alphabetSize);
 
 #ifdef DEBUG
           std::cout << "INFO, skch::Map:doL1Mapping, read id " << Q.seqCounter << ", minimizer count = " << Q.minimizerTableQuery.size() << "\n";
@@ -340,9 +393,8 @@ namespace skch
        * @return      T/F                       true if atleast 1 mapping region is proposed
        */
       template <typename Q_Info, typename VecIn, typename VecOut>
-        bool doL2Mapping(Q_Info &Q, VecIn &l1Mappings, VecOut &l2Mappings)
+        void doL2Mapping(Q_Info &Q, VecIn &l1Mappings, VecOut &l2Mappings)
         {
-          bool mappingReported = false;
 
           ///2. Walk the read over the candidate regions and compute the jaccard similarity with minimum s sketches
           for(auto &candidateLocus: l1Mappings)
@@ -375,7 +427,6 @@ namespace skch
                 res.nucIdentityUpperBound = nucIdentityUpperBound;
                 res.sketchSize = Q.sketchSize;
                 res.conservedSketches = l2.sharedSketchSize;
-                res.queryName = Q.seq->name.s; 
 
                 //Compute additional statistics -> strand, reference compexity
                 {
@@ -395,12 +446,8 @@ namespace skch
 
                 l2Mappings.push_back(res);
               }
-
-              mappingReported = true;
             }
           }
-
-          return mappingReported;
         }
 
       /**
@@ -491,30 +538,31 @@ namespace skch
         }
 
       /**
-       * @brief                     Report the final L2 mappings to output stream
-       * @param[in]   l2Mappings    mapping results
-       * @param[in]   outstrm       file output stream object
+       * @brief                         Report the final read mappings to output stream
+       * @param[in]   readMappings      mapping results for single or multiple reads
+       * @param[in]   queryName         input required if reporting one read at a time
+       * @param[in]   outstrm           file output stream object
        */
-      void reportL2Mappings(MappingResultsVector_t &l2Mappings, 
+      void reportReadMappings(MappingResultsVector_t &readMappings, const std::string &queryName, 
           std::ofstream &outstrm)
       {
         float bestNucIdentity = 0;
 
         //Scan through the mappings to check best identity mapping
-        for(auto &e : l2Mappings)
+        for(auto &e : readMappings)
         {
           if(e.nucIdentity > bestNucIdentity)
             bestNucIdentity = e.nucIdentity;
         }
 
         //Print the results
-        for(auto &e : l2Mappings)
+        for(auto &e : readMappings)
         {
           //Report top 1% mappings (unless reportAll flag is true, in which case we report all)
           if(param.reportAll == true || e.nucIdentity >= bestNucIdentity - 1.0)
           {
         	assert(e.refSeqId < this->refSketch.metadata.size());
-            outstrm << e.queryName 
+            outstrm <<  queryName 
               << " " << e.queryLen 
               << " " << "0"
               << " " << e.queryLen - 1 

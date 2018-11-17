@@ -44,6 +44,7 @@ namespace skch
 			ar & referenceSize;
 			ar & percentageIdentity;
 			ar & p_value;
+      ar & threads;
 			ar & refSequences;
 			ar & querySequences;
 			ar & outFileName;
@@ -60,6 +61,7 @@ namespace skch
     uint64_t referenceSize;                           //Approximate reference size
     float percentageIdentity;                         //user defined threshold for good similarity
     double p_value;                                   //user defined threshold for p value
+    int threads;                                      //execution thread count
     std::vector<std::string> refSequences;            //reference sequence(s)
     std::vector<std::string> querySequences;          //query sequence(s)
     std::string outFileName;                          //output file name
@@ -82,6 +84,7 @@ namespace skch
 		referenceSize = 0;
 		percentageIdentity = 0;
 		p_value = 0;
+    threads = 0;
 		reportAll = false;
 		maximumMemory = 0;
 		minimumReadsForU = 0;

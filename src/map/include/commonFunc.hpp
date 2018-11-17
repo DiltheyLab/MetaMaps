@@ -54,17 +54,16 @@ namespace skch
       }    
     }
 
-    template <typename KSEQ>
-      inline void makeUpperCase(KSEQ *seq)
+    inline void makeUpperCase(char* seq, offset_t len)
+    {
+      for ( int i = 0; i < len; i++ )
       {
-        for ( int i = 0; i < seq->seq.l; i++ )
+        if (seq[i] > 96 && seq[i] < 123)
         {
-          if (seq->seq.s[i] > 96 && seq->seq.s[i] < 123)
-          {
-            seq->seq.s[i] -= 32;
-          }
+          seq[i] -= 32;
         }
       }
+    }
 
     /**
      * @brief   hashing kmer string (borrowed from mash)
@@ -89,8 +88,10 @@ namespace skch
      * @param[in]   windowSize
      * @param[in]   seqCounter      current sequence number, used while saving the position of minimizer
      */
-    template <typename T, typename KSEQ>
-      inline void addMinimizers(std::vector<T> &minimizerIndex, KSEQ *seq, int kmerSize, 
+    template <typename T>
+      inline void addMinimizers(std::vector<T> &minimizerIndex, 
+          char *seq, offset_t len,
+          int kmerSize, 
           int windowSize,
           int alphabetSize,
           seqno_t seqCounter)
@@ -102,16 +103,13 @@ namespace skch
          */
         std::deque< std::pair<MinimizerInfo, offset_t> > Q;
 
-        makeUpperCase(seq);
-
-        //length of the sequencd
-        offset_t len = seq->seq.l;
+        makeUpperCase(seq, len);
 
         //Compute reverse complement of seq
         char *seqRev = new char[len];
 
         if(alphabetSize == 4) //not protein
-          CommonFunc::reverseComplement(seq->seq.s, seqRev, len);
+          CommonFunc::reverseComplement(seq, seqRev, len);
 
         for(offset_t i = 0; i < len - kmerSize + 1; i++)
         {
@@ -120,7 +118,7 @@ namespace skch
           offset_t currentWindowId = i - windowSize + 1;
 
           //Hash kmers
-          hash_t hashFwd = CommonFunc::getHash(seq->seq.s + i, kmerSize); 
+          hash_t hashFwd = CommonFunc::getHash(seq + i, kmerSize); 
           hash_t hashBwd;
 
           if(alphabetSize == 4)
@@ -179,12 +177,14 @@ namespace skch
     /**
      * @brief       overloaded function for case where seq. counter does not matter
      */
-    template <typename T, typename KSEQ>
-      inline void addMinimizers(std::vector<T> &minimizerIndex, KSEQ *seq, int kmerSize,
+    template <typename T>
+      inline void addMinimizers(std::vector<T> &minimizerIndex,
+          char *seq, offset_t len,
+          int kmerSize,
           int windowSize, 
           int alphabetSize)
       {
-        addMinimizers(minimizerIndex, seq, kmerSize, windowSize, alphabetSize, 0);
+        addMinimizers(minimizerIndex, seq, len, kmerSize, windowSize, alphabetSize, 0);
       }
 
    /**
