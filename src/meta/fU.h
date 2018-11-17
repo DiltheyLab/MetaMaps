@@ -361,7 +361,7 @@ void compute_U_mappingQualities(std::vector<oneMappingLocation_U>& mappingLocati
 	
 }
 
-void generateUnknownMapQFile(std::string DBdir, std::string mappedFile, const identityManager& iM, const taxonomy& T)
+void generateUnknownMapQFile(std::string DBdir, std::string mappedFile, const identityManager& iM, const taxonomy& T, const skch::Parameters& parameters)
 {
 	std::map<std::string, size_t> mappingStats = getMappingStats(mappedFile);
 	std::map<std::string, std::string> mappingParameters = getMappingParameters(mappedFile);
@@ -425,7 +425,7 @@ void generateUnknownMapQFile(std::string DBdir, std::string mappedFile, const id
 		assert(abs(1 - sum_mapQ) <= 1e-3);
 	};
 
-	callBackForAllReads(mappedFile, processOneRead);
+	callBackForAllReads(mappedFile, processOneRead, parameters);
 
 	outputStr_mappings_unknownMapQ.close();
 
@@ -960,7 +960,7 @@ oneMappingLocation_U getHighestProbabilityMapping_U(const std::vector<oneMapping
 
 
 
-std::pair<int, int> getMinMaxIdentities(std::string mappedFile)
+std::pair<int, int> getMinMaxIdentities(std::string mappedFile, const skch::Parameters& parameters)
 {
 	int minIdentity = -1;
 	int maxIdentity = -1;
@@ -989,7 +989,7 @@ std::pair<int, int> getMinMaxIdentities(std::string mappedFile)
 			}	
 		}		
 	};
-	callBackForAllReads(mappedFile, processOneRead);	
+	callBackForAllReads(mappedFile, processOneRead, parameters);
 	
 	assert(maxIdentity > 1);
 	
@@ -1082,7 +1082,7 @@ void normalize_f_triplet(std::tuple<std::map<std::string, double>, std::map<std:
 
 
 
-void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestContig)
+void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestContig, const skch::Parameters& parameters)
 {
 	// unsigned int round_first_unknown = 5;
 
@@ -1097,7 +1097,7 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 		std::cerr << "\n\nERROR: File " << fn_fittedLengthAndIdentities << " not existing.\n\nThis file is generated automatically by the EM step. Run the EM step first.\n\n";
 	}
 	
-	std::pair<int, int> identity_minmax_inAlignments = getMinMaxIdentities(mappedFile);
+	std::pair<int, int> identity_minmax_inAlignments = getMinMaxIdentities(mappedFile, parameters);
 
 	identityAndReadLengthHistogram iAndL;
 	iAndL.readFromEMOutput(fn_fittedLengthAndIdentities, identity_minmax_inAlignments, minimumReadsPerBestContig);
@@ -1107,7 +1107,7 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 	tAI.readFromFile(fn_tree_selfSimilarities, taxonIDsInMappings, T);
 
 	identityManager iM(iAndL, tAI);
-	generateUnknownMapQFile(DBdir, mappedFile, iM, T);
+	generateUnknownMapQFile(DBdir, mappedFile, iM, T, parameters);
 
 	// mapping stats
 	std::map<std::string, size_t> mappingStats = getMappingStats(mappedFile);
@@ -1356,7 +1356,7 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 			*/
 		};
 
-		callBackForAllReads(mappedFile+".mapQ_U", processOneRead);
+		callBackForAllReads(mappedFile+".mapQ_U", processOneRead, parameters);
 		std::cout << "\n";
 
 		double f_sum_preNormalization = sumF(f_nextIteration);
@@ -1444,7 +1444,7 @@ void doU(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestCo
 		strout_reads_taxonIDs << readID << "\t" << bestMapping.taxonID << "\n";
 	};
 
-	callBackForAllReads(mappedFile+".mapQ_U", processOneRead_final);
+	callBackForAllReads(mappedFile+".mapQ_U", processOneRead_final, parameters);
 
 	// long-enough-but-unmapped reads are set to unassigned
 	std::vector<std::string> readIDs_notMapped_despiteLongEnough = getUnmappedReadsIDs(mappedFile);

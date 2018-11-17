@@ -311,7 +311,7 @@ int main(int argc, char** argv)
 		std::vector<std::string> mappingsFiles = split(parameters.mappingsForClassification, ",");
 		for(auto mappingsFile : mappingsFiles)
 		{
-			meta::doEM(parameters.DB, mappingsFile, parameters.minimumReadsForU);
+			meta::doEM(parameters, mappingsFile);
 			//meta::doU(parameters.DB, parameters.mappingsForClassification, parameters.minimumReadsForU);
 		}											 
 	}
@@ -320,7 +320,8 @@ int main(int argc, char** argv)
 		assert(parameters.DB.length());
 		assert(parameters.mappingsForClassification.length());
  
-		meta::doU(parameters.DB, parameters.mappingsForClassification, parameters.minimumReadsForU);
+		assert(1 == 0); // multi-threading for U not checked
+		meta::doU(parameters.DB, parameters.mappingsForClassification, parameters.minimumReadsForU, parameters);
 	}
 	return 0;
 }

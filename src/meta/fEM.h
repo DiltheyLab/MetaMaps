@@ -15,6 +15,7 @@
 #include <fstream>
 #include <assert.h>
 #include <boost/regex.hpp>
+#include <omp.h>
 
 #include "util.h"
 #include "taxonomy.h"
@@ -28,7 +29,7 @@ namespace meta
 std::string extractTaxonId(std::string line);
 std::map<std::string, std::map<std::string, size_t>> loadRelevantTaxonInfo(std::string DBdir, const std::set<std::string>& taxonIDs);
 std::set<std::string> getTaxonIDsFromMappingsFile(std::string mappedFile);
-void callBackForAllReads(std::string mappedFile, std::function<void(const std::vector<std::string>&)>& callbackFunction);
+void callBackForAllReads(std::string mappedFile, std::function<void(const std::vector<std::string>&)>& callbackFunction, const skch::Parameters& parameters, unsigned int overrideThreads = 0);
 std::set<std::string> getRelevantLevelNames();
 void cleanF(std::map<std::string, double>& f, const std::map<std::string, size_t>& reads_per_taxonID, size_t distributedReads);
 std::map<std::string, std::vector<size_t>> get_NS_per_window(std::string DBdir, size_t windowSize, const std::map<std::string, std::map<std::string, std::vector<size_t>>>& coverage_per_contigID);
@@ -258,7 +259,7 @@ std::vector<oneMappingLocation> getMappingLocations(const std::map<std::string, 
 		}
 		assert(taxonInfo.at(contig_taxonID).count(contigID));
 
-		double mappingQuality = stringToDouble(line_fields.at(13));
+		double mappingQuality = std::stod(line_fields.at(13));
 	
 		assert(mappingQuality >= 0);
 		assert(mappingQuality <= 1);
@@ -429,8 +430,11 @@ std::vector<std::string> getUnmappedReadsIDs(std::string mappedFile)
 }
 
 
-void doEM(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestContig)
+void doEM(const skch::Parameters& parameters, const std::string& mappedFile)
 {
+	std::string DBdir = parameters.DB;
+	size_t minimumReadsPerBestContig = parameters.minimumReadsForU;
+
 	std::set<std::string> relevantTaxonIDs = getTaxonIDsFromMappingsFile(mappedFile);
 
 	// Get numbers of unmapped, short reads
@@ -468,17 +472,31 @@ void doEM(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestC
 		assert(abs(1 - f_sum) <= 1e-3);
 		
 		std::cout << "EM round " << EMiteration << std::endl;
-		
-		double ll_thisIteration = 0;
-		std::map<std::string, double> f_nextIteration = f;
-		for(auto& fNextEntry : f_nextIteration)
+
+		int n_threads = omp_get_num_threads();
+
+		std::vector<double> ll_thisIteration_perThread;
+		ll_thisIteration_perThread.resize(n_threads, 0);
+
+		std::vector<std::map<std::string, double>> f_nextIteration_perThread;
+		f_nextIteration_perThread.resize(n_threads, f);
+
+		for(auto& one_f_nextIteration : f_nextIteration_perThread)
 		{
-			fNextEntry.second = 0;
+			for(auto& fNextEntry : one_f_nextIteration)
+			{
+				fNextEntry.second = 0;
+			}
 		}
 
 		size_t processedRead = 0;
 		std::function<void(const std::vector<std::string>&)> processOneRead = [&](const std::vector<std::string>& readLines) -> void
 		{
+			assert(n_threads == omp_get_num_threads());
+			unsigned int thisThread = omp_get_thread_num();
+			assert(thisThread > 0);
+			assert(thisThread < n_threads);
+
 			processedRead++;
 			if((processedRead % 10000) == 0)
 			{
@@ -493,18 +511,39 @@ void doEM(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestC
 			for(const auto& mL : mappingLocations)
 			{
 				l_read += mL.l;
-				assert(f_nextIteration.count(mL.taxonID));
-				f_nextIteration.at(mL.taxonID) += mL.p;
+				assert(f_nextIteration_perThread.at(thisThread).count(mL.taxonID));
+				f_nextIteration_perThread.at(thisThread).at(mL.taxonID) += mL.p;
 				mappingLocations_sum += mL.p;
 			}
 			assert(abs(1 - mappingLocations_sum) < 1e-3);
-			ll_thisIteration += log(l_read);
+			ll_thisIteration_perThread.at(thisThread) += log(l_read);
 		};
 
-		callBackForAllReads(mappedFile, processOneRead);
+		callBackForAllReads(mappedFile, processOneRead, parameters);
+
+		double ll_thisIteration = 0;
+		for(auto ll_oneIteration : ll_thisIteration_perThread)
+		{
+			ll_thisIteration += ll_oneIteration;
+		}
+
+		std::map<std::string, double> f_nextIteration;
+		for(auto& one_f_nextIteration : f_nextIteration_perThread)
+		{
+			for(auto& fNextEntry : one_f_nextIteration)
+			{
+				if(f_nextIteration.count(fNextEntry.first) == 0)
+				{
+					f_nextIteration[fNextEntry.first] = 0;
+				}
+				f_nextIteration.at(fNextEntry.first) += fNextEntry.second;
+			}
+		}
+
 		std::cout << "\n";
 		std::cout << "\tLog likelihood: " << ll_thisIteration << std::endl;
-		
+
+
 		double sum_f_nextIteration = 0;
 		for(auto fNextIterationE : f_nextIteration)
 		{
@@ -681,7 +720,7 @@ void doEM(std::string DBdir, std::string mappedFile, size_t minimumReadsPerBestC
 	};
 	
 	std::cout << "Outputting mappings with adjusted alignment qualities." << std::endl;
-	callBackForAllReads(mappedFile, processOneRead_final);
+	callBackForAllReads(mappedFile, processOneRead_final, parameters, 1);
 
 	// long-enough-but-unmapped reads are set to unassigned
 	std::vector<std::string> readIDs_notMapped_despiteLongEnough = getUnmappedReadsIDs(mappedFile);
@@ -1063,7 +1102,115 @@ void cleanF(std::map<std::string, double>& f, const std::map<std::string, size_t
 		fI.second /= f_sum;
 	}
 }
-void callBackForAllReads(std::string mappedFile, std::function<void(const std::vector<std::string>&)>& callbackFunction)
+
+std::string cache_mappedFile;
+std::vector<std::vector<std::string>> cache_perRead;
+void callBackForAllReads(std::string mappedFile, std::function<void(const std::vector<std::string>&)>& callbackFunction, const skch::Parameters& parameters, unsigned int overrideThreads)
+{
+	if(parameters.threads >= 1)
+	{
+		if(cache_mappedFile != mappedFile)
+		{
+			cache_mappedFile.clear();
+
+			std::ifstream mappingsStream (mappedFile);
+			assert(mappingsStream.is_open());
+
+			std::string runningReadID;
+			std::vector<std::string> runningReadLines;
+
+			std::string line;
+			while(mappingsStream.good())
+			{
+				std::getline(mappingsStream, line);
+				eraseNL(line);
+				if(line.length() == 0)
+					continue;
+
+				size_t firstSpacePos = line.find(" ");
+				assert(firstSpacePos != std::string::npos);
+
+				std::string readID = line.substr(0, firstSpacePos);
+
+				if(runningReadID != readID)
+				{
+					if(runningReadLines.size())
+					{
+						cache_perRead.push_back(runningReadLines);
+					}
+
+					runningReadID = readID;
+					runningReadLines.clear();
+				}
+
+				runningReadLines.push_back(line);
+			}
+
+			if(runningReadLines.size())
+			{
+				cache_perRead.push_back(runningReadLines);
+			}
+		}
+
+		if(overrideThreads == 0)
+		{
+			omp_set_num_threads(parameters.threads);
+		}
+		else
+		{
+			omp_set_num_threads(overrideThreads);
+		}
+
+		#pragma omp parallel for
+		for(size_t readI = 0; readI < cache_perRead.size(); readI++)
+		{
+			callbackFunction(cache_perRead.at(readI));
+		}
+	}
+	else
+	{
+		std::ifstream mappingsStream (mappedFile);
+		assert(mappingsStream.is_open());
+
+		std::string runningReadID;
+		std::vector<std::string> runningReadLines;
+
+		std::string line;
+		while(mappingsStream.good())
+		{
+			std::getline(mappingsStream, line);
+			eraseNL(line);
+			if(line.length() == 0)
+				continue;
+
+			size_t firstSpacePos = line.find(" ");
+			assert(firstSpacePos != std::string::npos);
+
+			std::string readID = line.substr(0, firstSpacePos);
+
+			if(runningReadID != readID)
+			{
+				if(runningReadLines.size())
+				{
+					callbackFunction(runningReadLines);
+				}
+
+				runningReadID = readID;
+				runningReadLines.clear();
+			}
+
+			runningReadLines.push_back(line);
+		}
+
+		if(runningReadLines.size())
+		{
+			callbackFunction(runningReadLines);
+		}
+	}
+}
+
+/*
+void callBackForAllReads(std::string mappedFile, std::function<void(const std::vector<std::string>&)>& callbackFunction, const skch::Parameters& parameters)
 {
 	std::ifstream mappingsStream (mappedFile);
 	assert(mappingsStream.is_open());
@@ -1103,6 +1250,7 @@ void callBackForAllReads(std::string mappedFile, std::function<void(const std::v
 		callbackFunction(runningReadLines);
 	}
 }
+*/
 
 std::map<std::string, std::map<std::string, size_t>> loadRelevantTaxonInfo(std::string DBdir, const std::set<std::string>& taxonIDs)
 {
