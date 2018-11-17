@@ -118,9 +118,9 @@ while(<ANNOTATIONS>)
 		$foundAnnotations_perContig{$line{ContigId}}->insert($geneId, $line{Start}, $line{Stop}+1);
 		die Dumper("Multi-defined gene - $line{GeneName} - $annotations_file $.") if(defined $gene_2_protein_and_product{$line{GeneName}});
 		$gene_2_protein_and_product{$geneId} = [$line{GeneName}, $line{GeneLocusTag}, $line{CDSProteinId}, $line{CDSProduct}];
-		if($line{CDSProduct})
+		if($line{CDSProteinId})
 		{
-			$relevantProteinProduct{$line{CDSProduct}}++;		
+			$relevantProteinProduct{$line{CDSProteinId}}++;		
 		}
 	}
 }
@@ -164,6 +164,7 @@ while(<PROTEINS>)
 	}
 }
 close(PROTEINS);
+# die Dumper($protein_2_annotation{'WP_001030621.1'});
 
 if($n_proteins_in_proteinAnnotations_but_not_in_genomeAnnotations)
 {
@@ -208,7 +209,7 @@ my $readFunc_getOverlappingGenes = sub {
 				}
 				else
 				{
-					warn "No annotation for $proteinID in $protein_classification_file";
+					# warn "No annotation for $proteinID in $protein_classification_file";
 				}
 			}
 		}
