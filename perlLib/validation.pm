@@ -1278,6 +1278,10 @@ sub addResultsToGlobalStore
 					$PPV_n0 = $d->{correct_n0} / $d->{N_n0};
 				}
 				
+					 
+				my $PPV_perBase = $d->{weightedByLength_correct} / $d->{weightedByLength_N};
+				my $Sensitivity_perBase = $d->{weightedByLength_correct} / ($d->{weightedByLength_N} + $d->{weightedByLength_missing});
+								
 				push(@{$allSimulations_data_href->{highLevel_stats_keptSeparate_bySimulation}->[$jobI]{$variety_forStore}{$label}{$category}{absolute}{CR}}, $CR); # hopefully ok
 				push(@{$allSimulations_data_href->{highLevel_stats_keptSeparate_bySimulation}->[$jobI]{$variety_forStore}{$label}{$category}{absolute}{Accuracy}}, $accuracy); # hopefully ok
 				push(@{$allSimulations_data_href->{highLevel_stats_keptSeparate_bySimulation}->[$jobI]{$variety_forStore}{$label}{$category}{absolute}{PPV_n0}}, $PPV_n0); # hopefully ok
@@ -1285,7 +1289,9 @@ sub addResultsToGlobalStore
 				if(($variety !~ /allCombined/) and ($variety !~ /incompleteCombined/))
 				{
 					
-					push(@{$allSimulations_data_href->{callRate_and_accuracy_byReadCategory}->{$category}{$label}{absolute}}, [$CR, $accuracy, $accuracy, $PPV_n0]); # hopefully ok
+					push(@{$allSimulations_data_href->{callRate_and_accuracy_byReadCategory}->{$category}{$label}{absolute}}, [$CR, $accuracy, $accuracy, $PPV_n0, $PPV_perBase, $Sensitivity_perBase]); # hopefully ok
+					 
+					# warn Dumper([$category, $label, 'absolute'], [$CR, $d->{N}, $N], [$d->{weightedByLength_correct}, $d->{weightedByLength_N}, $d->{weightedByLength_missing}], [$PPV_perBase, $Sensitivity_perBase]);
 					
 					my @keys_attachedTo = grep {$_ =~ /^attachedTo/} keys %$d;
 					die unless(scalar(@keys_attachedTo));
@@ -1353,9 +1359,14 @@ sub addResultsToGlobalStore
 					push(@{$allSimulations_data_href->{highLevel_stats_keptSeparate_bySimulation}->[$jobI]{$variety_forStore}{$label}{$category}{$level}{AccuracyExactlyAtLevel}}, $accuracy_exactlyAtLevel); # hopefully ok	
 					push(@{$allSimulations_data_href->{highLevel_stats_keptSeparate_bySimulation}->[$jobI]{$variety_forStore}{$label}{$category}{$level}{PPV_n0}}, $PPV_n0); # hopefully ok	
 					 
+					my $PPV_perBase = $d->{weightedByLength_correct} / $d->{weightedByLength_N};
+					my $Sensitivity_perBase = $d->{weightedByLength_correct} / ($d->{weightedByLength_N} + $d->{weightedByLength_missing});
+					
 					if(($variety !~ /allCombined/) and ($variety !~ /incompleteCombined/) and ($level ne 'absolute'))
 					{
-						push(@{$allSimulations_data_href->{callRate_and_accuracy_byReadCategory}->{$category}{$label}{$level}}, [$CR, $accuracy, $accuracy_exactlyAtLevel, $PPV_n0]);	 # hopefully ok			
+						push(@{$allSimulations_data_href->{callRate_and_accuracy_byReadCategory}->{$category}{$label}{$level}}, [$CR, $accuracy, $accuracy_exactlyAtLevel, $PPV_n0, $PPV_perBase, $Sensitivity_perBase]);	 # hopefully ok			
+						
+						# warn Dumper([$category, $label, $level], [$CR, $d->{N}, $N], [$d->{weightedByLength_correct}, $d->{weightedByLength_N}, $d->{weightedByLength_missing}], [$PPV_perBase, $Sensitivity_perBase]);
 						
 						my @keys_attachedTo = grep {$_ =~ /^attachedTo/} keys %$d;
 						die unless(scalar(@keys_attachedTo));
@@ -1975,7 +1986,7 @@ sub produceValidationOutputFiles
 	
 	{
 		open(BARPLOTSREADCAT, '>', $prefix_for_outputFiles . '_forPlot_barplots_readCategory') or die;
-		print BARPLOTSREADCAT join("\t", qw/readCategory evaluationLevel method N callRateAvg accuracyAvg accuracyAvgExactltAtLevel PPV_n0 callRate_raw accuracy_raw accuracy_raw_exactltyAtLevel PPV_n0_raw/), "\n";
+		print BARPLOTSREADCAT join("\t", qw/readCategory evaluationLevel method N callRateAvg accuracyAvg accuracyAvgExactltAtLevel PPV_n0 PPV_perBase Sensitivity_perBase callRate_raw accuracy_raw accuracy_raw_exactltyAtLevel PPV_n0_raw/), "\n";
 		
 		#open(BYREADLENGTH, '>', $prefix_for_outputFiles . '_forPlot_byReadLength') or die;
 		#print BYREADLENGTH join("\t", qw/readCategory evaluationLevel method readLength callRateAvg accuracyAvg accuracyAvgExactltAtLevel/), "\n";
@@ -1995,12 +2006,16 @@ sub produceValidationOutputFiles
 					my @accuracies;
 					my @accuracies_exactlyAtLevel;
 					my @PPV_n0;
+					my @PPV_perBase;
+					my @Sensitivity_perBase;
 					foreach my $e (@$v)
 					{
 						push(@callRates, $e->[0]);
 						push(@accuracies, $e->[1]);
 						push(@accuracies_exactlyAtLevel, $e->[2]);
 						push(@PPV_n0, $e->[3]);
+						push(@PPV_perBase, $e->[4]);
+						push(@Sensitivity_perBase, $e->[5]);
 					}	
 					die unless(scalar(@callRates));
 					die unless(scalar(@accuracies));
@@ -2008,11 +2023,15 @@ sub produceValidationOutputFiles
 					die unless(scalar(@callRates) == scalar(@accuracies));
 					die unless(scalar(@callRates) == scalar(@accuracies_exactlyAtLevel));
 					die unless(scalar(@callRates) == scalar(@PPV_n0));
+					die unless(scalar(@callRates) == scalar(@PPV_perBase));
+					die unless(scalar(@callRates) == scalar(@Sensitivity_perBase));
 					my $avg_callRate = Util::mean(@callRates);
 					my $avg_accuracy = Util::mean(@accuracies);
 					my $avg_PPV_n0 = Util::mean(@PPV_n0);
+					my $avg_PPV_perBase = Util::mean(@PPV_perBase);
+					my $avg_Sensitivity_perBase = Util::mean(@Sensitivity_perBase);
 					my $avg_accuracy_exactlyAtLevel = Util::mean(@accuracies_exactlyAtLevel);
-					print BARPLOTSREADCAT join("\t", $readCategory, $level, $label, scalar(@callRates), $avg_callRate, $avg_accuracy, $avg_accuracy_exactlyAtLevel, $avg_PPV_n0, join(';', @callRates), join(';', @accuracies), join(';', @accuracies_exactlyAtLevel), join(';', @PPV_n0)), "\n";
+					print BARPLOTSREADCAT join("\t", $readCategory, $level, $label, scalar(@callRates), $avg_callRate, $avg_accuracy, $avg_accuracy_exactlyAtLevel, $avg_PPV_n0, $avg_PPV_perBase, $avg_Sensitivity_perBase, join(';', @callRates), join(';', @accuracies), join(';', @accuracies_exactlyAtLevel), join(';', @PPV_n0)), "\n";
 					
 					my @attachmentHashes = @{$allSimulations_data_href->{attachedTo_byReadCategory}->{$readCategory}{$label}{$level}};				
 					foreach my $h (@attachmentHashes)
@@ -2588,8 +2607,7 @@ sub produceValidationOutputFiles
 							
 							my $N_n0_bases = (scalar(@N_n0_bases)) ? Util::mean(@N_n0_bases) : 'NA';
 							my $PPV_n0_bases = (scalar(@PPV_n0_bases)) ? Util::mean(@PPV_n0_bases) : 'NA';
-							
-							
+
 							push(@output_fields_byLevelCorrect,
 								scalar(@callRate),
 								

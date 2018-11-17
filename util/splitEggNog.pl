@@ -6,7 +6,7 @@ use File::Find;
 use FindBin;
 use lib "$FindBin::Bin/perlLib";
 use List::Util qw/shuffle/;
-use List::MoreUtils qw/all/;
+use List::MoreUtils qw/all mesh/;
 use Cwd qw/abs_path getcwd/;
 
 my $input;
@@ -132,10 +132,53 @@ elsif($action eq 'collect')
 	{
 		(my $outputFile = $splitFile) =~ s/\.i\./.o./;
 		my $outputFile_OKflag = $outputFile . '.done';
-		my $annotations_file = $outputFile . '.emapper.annotations';
+		my $annotations_file = $outputFile . '.emapper.annotations';		
 		warn "Output OK flag file $outputFile_OKflag not present" unless(-e $outputFile_OKflag);
 		die "File $annotations_file not present" unless(-e $annotations_file);
 	}
+	
+	open(OUTPUT, '>', $output) or die "Cannot open $output";
+	print OUTPUT join("\t", qw/ProteinID GO_terms KEGG_KOs BiGG_reactions OGs COG_cat/), "\n";
+	
+	
+	foreach my $splitFile (@existing_split_input_files)
+	{
+		(my $outputFile = $splitFile) =~ s/\.i\./.o./;
+		my $annotations_file = $outputFile . '.emapper.annotations';
+		open(CHUNK, '<', $annotations_file) or die "Cannot open $annotations_file";
+		<CHUNK>;
+		<CHUNK>;
+		<CHUNK>;
+		my $headerLine = <CHUNK>;
+		chomp($headerLine);
+		my @header_fields = split(/\t/, $headerLine);
+		my %inHeader = map {$_ => 1} @header_fields;
+		die unless($inHeader{'#query_name'});
+		die unless($inHeader{'GO_terms'});
+		die unless($inHeader{'KEGG_KOs'});
+		die unless($inHeader{'BiGG_reactions'});
+		die unless($inHeader{'OGs'});
+		die unless($inHeader{'COG cat'});
+		while(<CHUNK>)
+		{
+			my $line = $_;
+			chomp($line);
+			next unless($line);
+			next if(substr($line, 0, 1) eq '#');
+			my @line_fields = split(/\t/, $line, -1);
+			my %line = (mesh @header_fields, @line_fields);
+			print OUTPUT join("\t", map {die "Line field $_ undefined\n$line $annotations_file" unless(defined $line{$_}); $line{$_}} ('#query_name', 'GO_terms', 'KEGG_KOs', 'BiGG_reactions', 'OGs', 'COG cat')), "\n";
+			# die "Weird COG value $line{'COG cat'}" unless(
+				# (not $line{'COG cat'}) or 
+				# ($line{'COG cat'} =~ /^[\w]$/)
+			# );
+ 		}
+		close(CHUNK);
+	}
+	
+	close(OUTPUT);
+
+	print "\nGenerated file $output.\n\n";
 }
 else
 {

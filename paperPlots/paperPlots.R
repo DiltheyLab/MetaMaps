@@ -723,8 +723,8 @@ HMP_like_reads_plot_2 <- function(prefix, plotTitle)
 	barplotD_byLevel <- read.delim(barPlotFile_byLevel, header = T, stringsAsFactors = F)
 	# pdf(paste(prefix, "plots.pdf", sep = ""))
 
-	attachedToFile_byLevel <- paste(prefix, "_attachedTo", sep = "")
-	attachedToD <- read.delim(attachedToFile_byLevel, header = T, stringsAsFactors = F)
+	# attachedToFile_byLevel <- paste(prefix, "_attachedTo", sep = "")
+	# attachedToD <- read.delim(attachedToFile_byLevel, header = T, stringsAsFactors = F)
 
 	rCs <- c("truthLeafInDB", "novel_to_species", "novel_to_genus", "novel_to_superkingdom")
 	rCs <- rCs[rCs %in% barplotD_byLevel[["readCategory"]]]
@@ -761,7 +761,8 @@ HMP_like_reads_plot_2 <- function(prefix, plotTitle)
 	}
 	barplotPal_byLevel <- barplotPal[2:5]
 
-	for(what in c("PPV", "Recall", "Recall-1000"))
+	#for(what in c("PPV", "Recall", "Recall-1000"))
+	for(what in c("PPV", "Recall", "Recall-Bases"))
 	#for(what in c("PPV", "Recall"))
 	{
 		#for(rC in rCs)
@@ -804,7 +805,8 @@ HMP_like_reads_plot_2 <- function(prefix, plotTitle)
 					{
 						rC <- "p1000"
 					}
-					
+
+										
 					stopifnot(rC %in% labels(rCs_labels))
 					stopifnot(rC %in% labels(rCs_to_evaluationLevels))
 										
@@ -820,6 +822,10 @@ HMP_like_reads_plot_2 <- function(prefix, plotTitle)
 					{
 						accuracies_by_Method_byLevel[[iM]][[eL]] <- barplotD_byLevel[["accuracyAvg"]][relevantIndices[[1]]]
 					}
+					else if(what == "Recall-Bases")
+					{
+						accuracies_by_Method_byLevel[[iM]][[eL]] <- barplotD_byLevel[["Sensitivity_perBase"]][relevantIndices[[1]]]					
+					}
 					else
 					{
 						accuracies_by_Method_byLevel[[iM]][[eL]] <- ( barplotD_byLevel[["accuracyAvg"]][relevantIndices[[1]]] * barplotD_byLevel[["callRateAvg"]][relevantIndices[[1]]] ) 
@@ -833,6 +839,14 @@ HMP_like_reads_plot_2 <- function(prefix, plotTitle)
 				stopifnot(length(iMs) > 0)
 				for(iM in iMs)
 				{
+					if(!(eL %in% names(accuracies_by_Method_byLevel[[iM]])))
+					{
+						print(c("Error -- missing eL", eL, barPlotFile_byLevel, iM))
+						#print(names(accuracies_by_Method_byLevel))
+						#print(names(accuracies_by_Method_byLevel[[iM]]))
+						#print(accuracies_by_Method_byLevel)
+						#print(names(barplotD_byLevel))
+					}
 					stopifnot(eL %in% names(accuracies_by_Method_byLevel[[iM]]))
 					if((eL == "absolute") && (iM != "Metamap-EM-Reads"))
 					{
@@ -1080,7 +1094,7 @@ xyPlots_i100_p25 <- function(f1, t1, f2, t2, f3, t3)
 							#if(nPlot == 1)
 							if(nPlot == 1)
 							{
-								plot(0, 0, col = "white", main = paste(titles[[dI]], " ", l_name, "-level composition", sep = ""), cex.main = 2.5, cex.axis = 2, cex.lab = 2, xlab = "True frequency", axes = F, ylab = "Estimated frequency", xlim = c(xAxis_min, xAxis_max), ylim = c(yAxis_min, yAxis_max))	
+								plot(0, 0, col = "white", main = paste(titles[[dI]], " - ", l_name, "", sep = ""), cex.main = 2.5, cex.axis = 2, cex.lab = 2, xlab = "True frequency", axes = F, ylab = "Estimated frequency", xlim = c(xAxis_min, xAxis_max), ylim = c(yAxis_min, yAxis_max))	
 								lines(c(xAxis_min, xAxis_max), c(yAxis_min, yAxis_max), col = "gray")
 								axis(2, xaxs = "i", labels = T, cex.axis = 2)			
 								axis(1, xaxs = "i", labels = T, cex.axis = 2)
@@ -1349,16 +1363,25 @@ HMPreadPlot <- function()
 	dev.off()   
 }
 
-xyPlots_i100_p25("../databases/miniSeq+H/simulations_i100_specifiedFrequencies/_forPlot_frequencies_xy", "i100", "../databases/miniSeq+H/simulations_p25_logNormal/_forPlot_frequencies_xy", "p25", "/data/projects/phillippy/projects/MetaMap/externalDataResults/CAMIMouseGut_forPlot_frequencies_xy", "CAMI")
-
-stop()
 
 
-HMP_like_reads_plot_2("/data/projects/phillippy/projects/MetaMap/externalDataResults/Zymo_forPlot_barplots", "Zymo")
+
+# stop()
+
 HMP_like_reads_plot_2("/data/projects/phillippy/projects/MetaMap/externalDataResults/CAMIMouseGut_forPlot_barplots", "CAMI")
 HMP_like_reads_plot_2("/data/projects/phillippy/projects/MetaMap/externalDataResults/HMP_forPlot_barplots", "HMP")
 HMP_like_reads_plot_2("../databases/miniSeq+H/simulations_p25_logNormal/_forPlot_barplots", "p25")
 HMP_like_reads_plot_2("../databases/miniSeq+H/simulations_i100_specifiedFrequencies/_forPlot_barplots", "i100")
+HMP_like_reads_plot_2("/data/projects/phillippy/projects/MetaMap/externalDataResults/Zymo_forPlot_barplots", "Zymo")
+
+stop()
+
+xyPlots_i100_p25("../databases/miniSeq+H/simulations_i100_specifiedFrequencies/_forPlot_frequencies_xy", "i100", "../databases/miniSeq+H/simulations_p25_logNormal/_forPlot_frequencies_xy", "p25", "/data/projects/phillippy/projects/MetaMap/externalDataResults/CAMIMouseGut_forPlot_frequencies_xy", "CAMI")
+
+
+stop()
+
+
 
 
 readLengthPlot("../databases/miniSeq+H/simulations_i100_specifiedFrequencies", "i100")

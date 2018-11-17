@@ -30,30 +30,30 @@ my @resultsSets = (
 		# 'tmp/truthHMP7_bwa_nanopore',
 		# '/scratch/tmp/hmp-nanopore.fasta.fastq'
 	# ],
-	# [
-		# 'HMP',
-		# 'tmp/hmp7_2_miniSeq+H',
-		# [
-			# '/scratch/tmp/hmp_set7_combined_kraken_results',
-			# '/scratch/tmp/hmp_set7_combined_kraken2_results',
-			# '/scratch/tmp/hmp_set7_combined_centrifuge_results',
-			# 'tmp/HMP7_rL2000/hmp7_2_miniSeq+H',
-			# 'tmp/hmp7_2_miniSeq+H_20G',
-		# ],
-		# 'tmp/truthHMP7_bwa_pacbio',
-		# '/scratch/tmp/hmp_set7_combined.fastq.mappable'
-	# ],
-	# [
-		# 'Zymo',
-		# 'tmp/Zymo_metamaps',
-		# [ 
-			# '/scratch/tmp/Zymo_combined_kraken_results',
-			# '/scratch/tmp/Zymo_combined_kraken2_results',
-			# '/scratch/tmp/Zymo_combined_centrifuge_results',
-		# ],
-		# 'tmp/truthZymp_bwa_nanopore',
-		# '/data/projects/phillippy/projects/MetaMap/loman/Zymo-GridION-EVEN-BB-SN/GA10000/combined.fastq.subsampled.mappable'
-	# ],	
+	[
+		'HMP',
+		'tmp/hmp7_2_miniSeq+H',
+		[
+			'/scratch/tmp/hmp_set7_combined_kraken_results',
+			'/scratch/tmp/hmp_set7_combined_kraken2_results',
+			'/scratch/tmp/hmp_set7_combined_centrifuge_results',
+			'tmp/HMP7_rL2000/hmp7_2_miniSeq+H',
+			'tmp/hmp7_2_miniSeq+H_20G',
+		],
+		'tmp/truthHMP7_bwa_pacbio',
+		'/scratch/tmp/hmp_set7_combined.fastq.mappable'
+	],
+	[
+		'Zymo',
+		'tmp/Zymo_metamaps',
+		[ 
+			'/scratch/tmp/Zymo_combined_kraken_results',
+			'/scratch/tmp/Zymo_combined_kraken2_results',
+			'/scratch/tmp/Zymo_combined_centrifuge_results',
+		],
+		'tmp/truthZymp_bwa_nanopore',
+		'/data/projects/phillippy/projects/MetaMap/loman/Zymo-GridION-EVEN-BB-SN/GA10000/combined.fastq.subsampled.mappable'
+	],	
 	[
 		'CAMIMouseGut',
 		'tmp/CAMI_metamaps',

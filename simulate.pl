@@ -1114,6 +1114,7 @@ sub evaluateOneSimulation
 		
 		foreach my $methodName (keys %expected_results_files)
 		{
+			# next unless($methodName =~ /Kraken-/);
 			my $methodDetails = $expected_results_files{$methodName};
 			my $evaluationType = $methodDetails->[0];
 			my $f = $simulation_results_dir . '/' . $methodDetails->[1];
