@@ -117,11 +117,9 @@ while(<ANNOTATIONS>)
 		my $geneId = $line{GeneName} . '//' . $line{GeneLocusTag};
 		$foundAnnotations_perContig{$line{ContigId}}->insert($geneId, $line{Start}, $line{Stop}+1);
 		die Dumper("Multi-defined gene - $line{GeneName} - $annotations_file $.") if(defined $gene_2_protein_and_product{$line{GeneName}});
-		$gene_2_protein_and_product{$geneId} = [$line{GeneName}, $line{GeneLocusTag}, $line{CDSProteinId}, $line{CDSProduct}]; # CDSProteinId is actually product, and vice versa
-		die Dumper(\%line);
+		$gene_2_protein_and_product{$geneId} = [$line{GeneName}, $line{GeneLocusTag}, $line{CDSProteinId}, $line{CDSProduct}];
 		if($line{CDSProduct})
 		{
-			die Dumper(\%line);
 			$relevantProteinProduct{$line{CDSProduct}}++;		
 		}
 	}
@@ -129,8 +127,6 @@ while(<ANNOTATIONS>)
 close(ANNOTATIONS);
 
 print "\t... of which we have annotations for ", scalar(keys %foundAnnotations_perContig), ".\n";
-
-exit;
 
 my $n_proteins_in_proteinAnnotations_but_not_in_genomeAnnotations = 0;
 my $n_total_proteinAnnotations = 0;
@@ -195,17 +191,24 @@ my $readFunc_getOverlappingGenes = sub {
 			push(@{$summary_per_gene_name{$gene_name}[1]}, $bestMapping_aref->[4]);
 			
 			my $proteinID = $gene_2_protein_and_product{$gene_name}[2];
-			$found_proteins{$proteinID}++;
-			die "Weird -- $proteinID" unless($knownProteinProduct{$proteinID});
-			if(exists $protein_2_annotation{$proteinID})
+			if($proteinID)
 			{
-				foreach my $annotation_type (keys %{$protein_2_annotation{$proteinID}})
+				$found_proteins{$proteinID}++;
+				die "Weird -- $proteinID" unless($knownProteinProduct{$proteinID});
+				if(exists $protein_2_annotation{$proteinID})
 				{
-					$found_annotated_proteins{$proteinID}++;
-					foreach my $annotation_value (@{$protein_2_annotation{$proteinID}{$annotation_type}})
+					foreach my $annotation_type (keys %{$protein_2_annotation{$proteinID}})
 					{
-						$summary_per_annotation{$annotation_type}{$annotation_value}++;
+						$found_annotated_proteins{$proteinID}++;
+						foreach my $annotation_value (@{$protein_2_annotation{$proteinID}{$annotation_type}})
+						{
+							$summary_per_annotation{$annotation_type}{$annotation_value}++;
+						}
 					}
+				}
+				else
+				{
+					warn "No annotation for $proteinID in $protein_classification_file";
 				}
 			}
 		}
@@ -219,7 +222,7 @@ processAllReads($EM_file, $readFunc_getOverlappingGenes);
 
 
 print "Of ", ($nReads_mapped_toContigWithAnnotations + $nReads_mapped_toContigWithoutAnnotations), " mapped reads, $nReads_mapped_toContigWithAnnotations go to contigs with annotations and $nReads_mapped_toContigWithoutAnnotations to contigs without.\n";
-print "\nFound ", scalar(keys %summary_per_gene_name), " genes and ", scalar(keys %found_proteins), ", of which ", scalar(keys %found_annotated_proteins), " carry any type of additional annotation.\n";
+print "\nFound ", scalar(keys %summary_per_gene_name), " genes and ", scalar(keys %found_proteins), " proteins, of which ", scalar(keys %found_annotated_proteins), " carry any type of additional annotation.\n";
 
 my $output_file = $EM_file . '.geneLevelAnalysis';
 open(OUTPUT, '>', $output_file) or die "Cannot open $output_file";

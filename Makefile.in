@@ -1,4 +1,4 @@
-CXXFLAGS += -O2 -ggdb -std=c++11 -Isrc -L @boostlib@ -I @mathinc@ 
+CXXFLAGS += -O2 -ggdb -fopenmp -std=c++11 -Isrc -L @boostlib@ -I @mathinc@ 
 CPPFLAGS += @amcppflags@
 
 UNAME_S=$(shell uname -s)
@@ -17,7 +17,7 @@ OBJECTS=$(SOURCES:.cpp=.o)
 all : metamaps
 
 metamaps : $(OBJECTS) 
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(OBJECTS) -o metamaps @mathlib@ -lstdc++ -lz -lm -lpthread -lboost_system -lboost_filesystem -lboost_serialization -lboost_regex
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(OBJECTS) -o metamaps @mathlib@ -lstdc++ -fopenmp -lz -lm -lpthread -lboost_system -lboost_filesystem -lboost_serialization -lboost_regex
 
 .SUFFIXES :
 

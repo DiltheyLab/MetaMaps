@@ -254,7 +254,7 @@ std::vector<oneMappingLocation> getMappingLocations(const std::map<std::string, 
 
 		if(! taxonInfo.count(contig_taxonID))
 		{
-			std::cerr << "Unknown taxonID " << contig_taxonID << "; please check that your mappings file was mapped against the database now specified." << std::endl;
+			std::cerr << "Unknown taxonID '" << contig_taxonID << "'; please check that your mappings file was mapped against the database now specified." << std::endl;
 			exit(1);
 		}
 		assert(taxonInfo.at(contig_taxonID).count(contigID));
@@ -473,13 +473,11 @@ void doEM(const skch::Parameters& parameters, const std::string& mappedFile)
 		
 		std::cout << "EM round " << EMiteration << std::endl;
 
-		int n_threads = omp_get_num_threads();
-
 		std::vector<double> ll_thisIteration_perThread;
-		ll_thisIteration_perThread.resize(n_threads, 0);
+		ll_thisIteration_perThread.resize(parameters.threads, 0);
 
 		std::vector<std::map<std::string, double>> f_nextIteration_perThread;
-		f_nextIteration_perThread.resize(n_threads, f);
+		f_nextIteration_perThread.resize(parameters.threads, f);
 
 		for(auto& one_f_nextIteration : f_nextIteration_perThread)
 		{
@@ -492,10 +490,20 @@ void doEM(const skch::Parameters& parameters, const std::string& mappedFile)
 		size_t processedRead = 0;
 		std::function<void(const std::vector<std::string>&)> processOneRead = [&](const std::vector<std::string>& readLines) -> void
 		{
-			assert(n_threads == omp_get_num_threads());
-			unsigned int thisThread = omp_get_thread_num();
-			assert(thisThread > 0);
-			assert(thisThread < n_threads);
+			//assert(n_threads == omp_get_num_threads());
+			int thisThread = omp_get_thread_num();
+			//std::cerr << "thisThread: " << thisThread << "\n" << std::flush;
+			assert(thisThread >= 0);
+			if(!(thisThread < parameters.threads))
+			{
+				#pragma omp critical
+				{
+					std::cerr << "!(thisThread < n_threads)" << "\n";
+					std::cerr << thisThread << "\n";
+					std::cerr << parameters.threads << "\n" << std::flush;
+				}
+			}
+			assert(thisThread < parameters.threads);
 
 			processedRead++;
 			if((processedRead % 10000) == 0)
@@ -1111,8 +1119,8 @@ void callBackForAllReads(std::string mappedFile, std::function<void(const std::v
 	{
 		if(cache_mappedFile != mappedFile)
 		{
-			cache_mappedFile.clear();
-
+			cache_perRead.clear();
+	
 			std::ifstream mappingsStream (mappedFile);
 			assert(mappingsStream.is_open());
 
@@ -1150,17 +1158,23 @@ void callBackForAllReads(std::string mappedFile, std::function<void(const std::v
 			{
 				cache_perRead.push_back(runningReadLines);
 			}
+			
+			cache_mappedFile = mappedFile;
 		}
 
+		// std::cerr << "overrideThreads " << overrideThreads << "\n" << std::flush;		
 		if(overrideThreads == 0)
 		{
+			// std::cerr << "Set threads I " << parameters.threads << "\n" << std::flush;
 			omp_set_num_threads(parameters.threads);
 		}
 		else
 		{
+			// std::cerr << "Set threads I " << overrideThreads << "\n" << std::flush;
 			omp_set_num_threads(overrideThreads);
 		}
 
+		// std::cerr << "cache_perRead.size(): " << cache_perRead.size() << "\n" << std::flush;
 		#pragma omp parallel for
 		for(size_t readI = 0; readI < cache_perRead.size(); readI++)
 		{
@@ -1327,10 +1341,11 @@ std::set<std::string> getTaxonIDsFromMappingsFile(std::string mappedFile)
 	return forReturn;
 }
 
-boost::regex matchTaxonID{"kraken:taxid\\|(x?\\d+)"};
-boost::smatch matchBrackets;
+
 std::string extractTaxonId(std::string line)
 {
+	boost::regex matchTaxonID{"kraken:taxid\\|(x?\\d+)"};
+	boost::smatch matchBrackets;	
 	assert(boost::regex_search(line, matchBrackets, matchTaxonID));
 	std::string taxonID = matchBrackets[1];
 	return taxonID;

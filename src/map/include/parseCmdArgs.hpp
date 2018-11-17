@@ -102,7 +102,10 @@ namespace skch
     {
         cmd.defineOption("DB", "Path to DB", ArgvParser::OptionRequired | ArgvParser::OptionRequiresValue);
         cmd.defineOption("mappings", "Path to mappings file", ArgvParser::OptionRequired | ArgvParser::OptionRequiresValue);
-        cmd.defineOption("minreads", "Minimum number of reads per contig to be considered for fitting identity and length for the 'Unknown' functionality", ArgvParser::OptionRequiresValue);		
+        cmd.defineOption("minreads", "Minimum number of reads per contig to be considered for fitting identity and length for the 'Unknown' functionality", ArgvParser::OptionRequiresValue);
+		
+        cmd.defineOption("threads", "count of threads for parallel execution [default : 1]", ArgvParser::OptionRequiresValue);
+        cmd.defineOptionAlternative("threads","t");		
     }
 	
     if(mode == "classifyU")
@@ -227,6 +230,7 @@ namespace skch
 		std::cout << "DB = " << parameters.DB << std::endl;
 		std::cout << "Mappings = " << parameters.mappingsForClassification << std::endl;
 		std::cout << "Min. reads for 'U' = " << parameters.minimumReadsForU << std::endl;
+		std::cout << "Threads = " << parameters.threads << std::endl;
 		std::cout << ">>>>>>>>>>>>>>>>>>" << std::endl;
 	}
 	else if(mode == "classifyU")
@@ -403,16 +407,16 @@ void parseandSave(int argc, char** argv,  CommandLineProcessing::ArgvParser &cmd
 			parameters.reportAll = false;
 		}
 
-    if(cmd.foundOption("threads"))
-    {
-			std::stringstream str;
-			str << cmd.optionValue("threads");
-			str >> parameters.threads;
-    }
-    else
-    {
-      parameters.threads = 1;
-    }
+		if(cmd.foundOption("threads"))
+		{
+				std::stringstream str;
+				str << cmd.optionValue("threads");
+				str >> parameters.threads;
+		}
+		else
+		{
+		  parameters.threads = 1;
+		}
 
 		if(!cmd.foundOption("output"))
 		{
@@ -465,6 +469,19 @@ void parseandSave(int argc, char** argv,  CommandLineProcessing::ArgvParser &cmd
 			str << cmd.optionValue("minreads");
 			str >> parameters.minimumReadsForU;
 		}
+		
+		if(cmd.foundOption("threads"))
+		{
+				std::stringstream str;
+				str << cmd.optionValue("threads");
+				str >> parameters.threads;
+				assert(parameters.threads >= 0);
+		}
+		else
+		{
+		  parameters.threads = 1;
+		}
+		
 	}
 	
 

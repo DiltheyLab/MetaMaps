@@ -44,7 +44,7 @@ namespace skch
 			ar & referenceSize;
 			ar & percentageIdentity;
 			ar & p_value;
-      ar & threads;
+			ar & threads;
 			ar & refSequences;
 			ar & querySequences;
 			ar & outFileName;
@@ -84,7 +84,7 @@ namespace skch
 		referenceSize = 0;
 		percentageIdentity = 0;
 		p_value = 0;
-    threads = 0;
+		threads = 0;
 		reportAll = false;
 		maximumMemory = 0;
 		minimumReadsForU = 0;
