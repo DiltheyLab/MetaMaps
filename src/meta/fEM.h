@@ -474,10 +474,18 @@ void doEM(const skch::Parameters& parameters, const std::string& mappedFile)
 		std::cout << "EM round " << EMiteration << std::endl;
 
 		std::vector<double> ll_thisIteration_perThread;
-		ll_thisIteration_perThread.resize(parameters.threads, 0);
-
 		std::vector<std::map<std::string, double>> f_nextIteration_perThread;
-		f_nextIteration_perThread.resize(parameters.threads, f);
+		
+		if(parameters.threads >= 1)
+		{
+			ll_thisIteration_perThread.resize(parameters.threads, 0);
+			f_nextIteration_perThread.resize(parameters.threads, f);		
+		}
+		else
+		{
+			ll_thisIteration_perThread.resize(1, 0);
+			f_nextIteration_perThread.resize(1, f);					
+		}
 
 		for(auto& one_f_nextIteration : f_nextIteration_perThread)
 		{
@@ -494,16 +502,23 @@ void doEM(const skch::Parameters& parameters, const std::string& mappedFile)
 			int thisThread = omp_get_thread_num();
 			//std::cerr << "thisThread: " << thisThread << "\n" << std::flush;
 			assert(thisThread >= 0);
-			if(!(thisThread < parameters.threads))
+			if(parameters.threads >= 1)
 			{
-				#pragma omp critical
+				if(!(thisThread < parameters.threads))
 				{
-					std::cerr << "!(thisThread < n_threads)" << "\n";
-					std::cerr << thisThread << "\n";
-					std::cerr << parameters.threads << "\n" << std::flush;
+					#pragma omp critical
+					{
+						std::cerr << "!(thisThread < n_threads)" << "\n";
+						std::cerr << thisThread << "\n";
+						std::cerr << parameters.threads << "\n" << std::flush;
+					}
 				}
+				assert(thisThread < parameters.threads);
 			}
-			assert(thisThread < parameters.threads);
+			else
+			{
+				assert(thisThread == 0);
+			}	
 
 			processedRead++;
 			if((processedRead % 10000) == 0)

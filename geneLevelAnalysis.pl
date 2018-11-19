@@ -150,15 +150,19 @@ while(<PROTEINS>)
 		$n_proteins_in_proteinAnnotations_but_not_in_genomeAnnotations++;
 	}
 	next unless($relevantProteinProduct{$protein_line{ProteinID}});
+	die unless($protein_line{ProteinID});
 	die "Protein annotation data defined more than once?" if (exists $protein_2_annotation{$protein_line{ProteinID}});
 	
-	foreach my $vP (['GO_terms', 'GO'], ['KEGG_KOs', 'KEGG'], ['BiGG_reactions', 'BiGG'], ['OGs', 'OG'], ['COG_cat'])
+	foreach my $vP (['GO_terms', 'GO'], ['KEGG_KOs', 'KEGG'], ['BiGG_reactions', 'BiGG'], ['OGs', 'OG'], ['COG_cat', 'COG'])
 	{
 		die "Unknwon field $vP->[0]" unless(defined $protein_line{$vP->[0]});
 		if($protein_line{$vP->[0]})
 		{
-			$protein_line{$vP->[0]} =~ s/\s//;
+			$protein_line{$vP->[0]} =~ s/\s//g;
 			my @v = split(/,/, $protein_line{$vP->[0]});
+			my %v = map {$_ => 1} @v;
+			@v = keys %v;
+			die unless($vP->[1]);
 			$protein_2_annotation{$protein_line{ProteinID}}{$vP->[1]} = \@v;
 		}
 	}
@@ -186,6 +190,8 @@ my $readFunc_getOverlappingGenes = sub {
 	{
 		$nReads_mapped_toContigWithAnnotations++;
 		my $overlapping_genes = $foundAnnotations_perContig{$bestMapping_aref->[0]}->fetch($bestMapping_aref->[1], $bestMapping_aref->[2]);
+		
+		my %local_annotationTypes;
 		foreach my $gene_name (@$overlapping_genes)
 		{
 			$summary_per_gene_name{$gene_name}[0]++;
@@ -203,7 +209,7 @@ my $readFunc_getOverlappingGenes = sub {
 						$found_annotated_proteins{$proteinID}++;
 						foreach my $annotation_value (@{$protein_2_annotation{$proteinID}{$annotation_type}})
 						{
-							$summary_per_annotation{$annotation_type}{$annotation_value}++;
+							$local_annotationTypes{$annotation_type}{$annotation_value}++;
 						}
 					}
 				}
@@ -211,6 +217,14 @@ my $readFunc_getOverlappingGenes = sub {
 				{
 					# warn "No annotation for $proteinID in $protein_classification_file";
 				}
+			}
+		}
+		
+		foreach my $annotationType (keys %local_annotationTypes)
+		{
+			foreach my $annotationValue (keys %{$local_annotationTypes{$annotationType}})
+			{ 
+				$summary_per_annotation{$annotationType}{$annotationValue}++;
 			}
 		}
 	}
@@ -240,16 +254,30 @@ print "\nDone. Produced $output_file\n\n";
 
 if(scalar(keys %summary_per_annotation))
 {
+	my $COG_href = getCOGExplanation();
+	print "Additional output files:\n";
 	foreach my $annotationType (keys %summary_per_annotation)
 	{
 		my $output_file = $EM_file . '.proteins.' . $annotationType;
 		open(ANNOTOUTPUT, '>'. $output_file) or die "Cannot open $output_file";
-		print ANNOTOUTPUT join("\t", "Feature", "SupportByReads", "SupportByReadsProportionTotalReads"), "\n";
+		my @header_fields = ("Feature", "SupportByReads", "SupportByReadsProportionTotalReads");
+		if($annotationType eq 'COG')
+		{
+			push(@header_fields, 'FeatureLong');
+		}
+		print ANNOTOUTPUT join("\t", @header_fields), "\n";
 		foreach my $value (keys %{$summary_per_annotation{$annotationType}})
 		{
-			print ANNOTOUTPUT join("\t", $value, $summary_per_annotation{$annotationType}{$value}, $summary_per_annotation{$annotationType}{$value}/$n_total_reads), "\n";
+			my @output_fields = ($value, $summary_per_annotation{$annotationType}{$value}, $summary_per_annotation{$annotationType}{$value}/$n_total_reads);
+			if($annotationType eq 'COG')
+			{
+				die "Unknown COG category $value" unless(defined $COG_href->{$value});
+				push(@output_fields, $COG_href->{$value});
+			}
+			print ANNOTOUTPUT join("\t", @output_fields), "\n";
 		}
 		close(ANNOTOUTPUT);
+		print "\t", "- ", $output_file, "\n";
 	}
 }
 sub getMedian
@@ -302,6 +330,36 @@ sub processAllReads
 	}
 }
 
+sub getCOGExplanation
+{
+	return {
+		'D' => 'Cell cycle control, cell division, chromosome partitioning',
+		'M' => 'Cell wall/membrane/envelope biogenesis',
+		'N' => 'Cell motility',
+		'O' => 'Post-translational modification, protein turnover, and chaperones',
+		'T' => 'Signal transduction mechanisms',
+		'U' => 'Intracellular trafficking, secretion, and vesicular transport',
+		'V' => 'Defense mechanisms',
+		'W' => 'Extracellular structures',
+		'Y' => 'Nuclear structure',
+		'Z' => 'Cytoskeleton',
+		'A' => 'RNA processing and modification',
+		'B' => 'Chromatin structure and dynamics',
+		'J' => 'Translation, ribosomal structure and biogenesis',
+		'K' => 'Transcription',
+		'L' => 'Replication, recombination and repair',
+		'C' => 'Energy production and conversion',
+		'E' => 'Amino acid transport and metabolism',
+		'F' => 'Nucleotide transport and metabolism',
+		'G' => 'Carbohydrate transport and metabolism',
+		'H' => 'Coenzyme transport and metabolism',
+		'I' => 'Lipid transport and metabolism',
+		'P' => 'Inorganic ion transport and metabolism',
+		'Q' => 'Secondary metabolites biosynthesis, transport, and catabolism',
+		'R' => 'General function prediction only',
+		'S' => 'Function unknown',
+	};
+}	
 sub print_help
 {
 	print qq(
