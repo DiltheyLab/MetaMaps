@@ -360,6 +360,7 @@ sub getCOGExplanation
 		'S' => 'Function unknown',
 	};
 }	
+
 sub print_help
 {
 	print qq(

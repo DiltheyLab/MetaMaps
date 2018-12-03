@@ -1114,13 +1114,13 @@ sub evaluateOneSimulation
 		
 		foreach my $methodName (keys %expected_results_files)
 		{
-			# next unless($methodName =~ /Kraken-/);
+			#next unless($methodName =~ /Centrifuge-/);
 			my $methodDetails = $expected_results_files{$methodName};
 			my $evaluationType = $methodDetails->[0];
 			my $f = $simulation_results_dir . '/' . $methodDetails->[1];
 			my $optional = $methodDetails->[2];
 			unless(-e $f)
-			{
+			{ 
 				if($optional or $makeAllOptional)
 				{
 					warn "Expected file $f for $methodName not present.";
@@ -1169,7 +1169,7 @@ sub evaluateOneSimulation
 				foreach my $varietyName_forStorage (@varietyNames_forStorage)
 				{
 					print "$methodName $varietyName_forStorage freqs\n";
-					validation::distributionLevelComparison($extendedMaster, $truth_mappingDatabase_distribution, $inferred_distribution, $methodName, $freq_byVariety_byLevel->{$varietyName_forStorage}, $frequencyComparison_href->{$varietyName_forStorage});
+					validation::distributionLevelComparison($extendedMaster, $truth_mappingDatabase_distribution, $inferred_distribution, $methodName, $freq_byVariety_byLevel->{$varietyName_forStorage}, $frequencyComparison_href->{$varietyName_forStorage}, \%reduced_taxonID_master_2_contigs);
 					print "$methodName $varietyName_forStorage freqs done\n";					
 				}
 				print "Done $f\n\n";

@@ -93,7 +93,7 @@ Usage:
   
 Example:
 
-  perl convertMetaMapToMash.pl databases/miniSeq
+  perl convertMetaMapToMash.pl databases/miniSeq+H
   
   
 );

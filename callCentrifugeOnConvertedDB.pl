@@ -50,7 +50,8 @@ SimulationsKraken::doCentrifugeOnExistingDB (
 	$FASTQ,
 	$outputDir,
 	$centrifugeBinDir,
-	\%taxonID_original_2_contigs
+	\%taxonID_original_2_contigs,
+	$database
 );
 
 sub print_help

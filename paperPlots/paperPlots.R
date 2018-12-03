@@ -48,10 +48,12 @@ print(colourByMethod)
 lineStyleByLevel <- list()
 lineStyleByLevel[["species"]] <- "solid"
 lineStyleByLevel[["absolute"]] <- "dashed"
+lineStyleByLevel[["strain"]] <- "dashed"
 
 dotStyleByLevel <- list()
 dotStyleByLevel[["species"]] <- 1
 dotStyleByLevel[["absolute"]] <- 2
+dotStyleByLevel[["strain"]] <- 2
 
 dotStyleByMethod <- list()
 dotStyleByMethod[["MetaMap-EM-Dist"]] <- 3
@@ -748,9 +750,10 @@ HMP_like_reads_plot_2 <- function(prefix, plotTitle)
 	rCs_to_evaluationLevels[["p1000"]] <- ""
 
 	evaluationLevels <- unique(barplotD_byLevel[["evaluationLevel"]])
-	evaluationLevels_ordered <- c("species", "genus", "family")
+	evaluationLevels_ordered <- c("strain", "species", "genus", "family")
 	evaluationLevels_ordered_assignment_names <- list()
-	evaluationLevels_ordered_assignment_names[["species"]] <- "Strain/Species"
+	evaluationLevels_ordered_assignment_names[["strain"]] <- "Strain"
+	evaluationLevels_ordered_assignment_names[["species"]] <- "Species"
 	evaluationLevels_ordered_assignment_names[["genus"]] <- "Genus"
 	evaluationLevels_ordered_assignment_names[["family"]] <- "Family"
 	evaluationLevels_ordered_assignment_names[["superkingdom"]] <- "Superkingdom"
@@ -834,7 +837,7 @@ HMP_like_reads_plot_2 <- function(prefix, plotTitle)
 			}
 			
 			vector_for_barplot <- c()
-			for(eL in c("absolute", evaluationLevels_ordered))
+			for(eL in c(evaluationLevels_ordered))
 			{
 				stopifnot(length(iMs) > 0)
 				for(iM in iMs)
@@ -848,7 +851,7 @@ HMP_like_reads_plot_2 <- function(prefix, plotTitle)
 						#print(names(barplotD_byLevel))
 					}
 					stopifnot(eL %in% names(accuracies_by_Method_byLevel[[iM]]))
-					if((eL == "absolute") && (iM != "Metamap-EM-Reads"))
+					if((eL == "strain") && (iM != "Metamap-EM-Reads") && (iM != "Centrifuge-Reads")) 
 					{
 						# print(c(eL, iM))
 						vector_for_barplot <- c(vector_for_barplot, 0)				
@@ -864,7 +867,7 @@ HMP_like_reads_plot_2 <- function(prefix, plotTitle)
 			
 			#print(vector_for_barplot)
 			stopifnot(length(vector_for_barplot) > 1)
-			matrix_for_barplot <- matrix(vector_for_barplot, ncol = 1 + length(evaluationLevels_ordered), nrow = length(iMs))
+			matrix_for_barplot <- matrix(vector_for_barplot, ncol = length(evaluationLevels_ordered), nrow = length(iMs))
 			# matrix_for_barplot[1] <- 0
 			# colnames(matrix_for_barplot) <- c("CR", evaluationLevels_ordered)
 			colorVector <- c(rep(barplotPal[[1]], length(iMs)))
@@ -908,8 +911,8 @@ HMP_like_reads_plot_2 <- function(prefix, plotTitle)
 			}			
 			bpPos <- barplot(matrix_for_barplot, beside = T, col = colorVector, ylim = c(0, 1), axes = F, cex.main = 2, cex.lab = 2.5, cex.axis = 2.5, ann = FALSE)
 			mtext(side = 2, text = ylab_barplots, line = 3.5, cex = 1.4)
-			axis(1, at = colMeans(bpPos), tick = F, labels = c("Strain", sapply(evaluationLevels_ordered, function(x){capitalize(x)}, USE.NAMES = F)), pos = -0.01, cex.axis = 2.5)
-			axis(1, at = bpPos, tick = F, labels = rep(iMs_labels, 1 + length(evaluationLevels_ordered)), las = 2, pos = -0.09, cex.axis = 2.5)
+			axis(1, at = colMeans(bpPos), tick = F, labels = c(sapply(evaluationLevels_ordered, function(x){capitalize(x)}, USE.NAMES = F)), pos = -0.01, cex.axis = 2.5)
+			axis(1, at = bpPos, tick = F, labels = rep(iMs_labels, length(evaluationLevels_ordered)), las = 2, pos = -0.09, cex.axis = 2.5)
 			axis(2, at = c(0, 0.5, 1), tick = T, cex.axis = 2.5, cex.lab = 2)
 			
 			if(what == "PPV")
@@ -931,7 +934,7 @@ xyPlots_i100_p25 <- function(f1, t1, f2, t2, f3, t3)
 
 	pdf("xyPlots_i100_p25_CAMI.pdf", useDingbats = F, height = 10, width = 15)
 	
-	plotLevels <- c("absolute", "species")
+	plotLevels <- c("strain", "species")
 	freq_methods <- c("Bracken-Dist", "MetaMap-EM-Dist")
 	freq_methods <- c("Bracken-Dist", "Centrifuge-Dist", "MetaMap-EM-Dist")
 
@@ -962,11 +965,11 @@ xyPlots_i100_p25 <- function(f1, t1, f2, t2, f3, t3)
 
 				for(m in freq_methods)
 				{	
-					if(!(((m == "Bracken-Dist") || (m == "Centrifuge-Dist")) && (l == "absolute")))
+					if(!(((m == "Bracken-Dist")) && (l == "strain")))
 					{
 						l_lookup <- l
 						l_name <- l
-						if((l == "absolute"))
+						if((l == "strain"))
 						{
 							l_lookup <- "definedAndHypotheticalGenomes"
 							l_name <- "strain"
@@ -1363,20 +1366,27 @@ HMPreadPlot <- function()
 	dev.off()   
 }
 
+xyPlots_i100_p25("../databases/miniSeq+H/simulations_i100_specifiedFrequencies/_forPlot_frequencies_xy", "i100", "../databases/miniSeq+H/simulations_p25_logNormal/_forPlot_frequencies_xy", "p25", "/data/projects/phillippy/projects/MetaMap/externalDataResults/CAMIMouseGut_forPlot_frequencies_xy", "CAMI")
 
 
-
-# stop()
-
-HMP_like_reads_plot_2("/data/projects/phillippy/projects/MetaMap/externalDataResults/CAMIMouseGut_forPlot_barplots", "CAMI")
-HMP_like_reads_plot_2("/data/projects/phillippy/projects/MetaMap/externalDataResults/HMP_forPlot_barplots", "HMP")
 HMP_like_reads_plot_2("../databases/miniSeq+H/simulations_p25_logNormal/_forPlot_barplots", "p25")
 HMP_like_reads_plot_2("../databases/miniSeq+H/simulations_i100_specifiedFrequencies/_forPlot_barplots", "i100")
+HMP_like_reads_plot_2("/data/projects/phillippy/projects/MetaMap/externalDataResults/CAMIMouseGut_forPlot_barplots", "CAMI")
+
+HMP_like_reads_plot_2("/data/projects/phillippy/projects/MetaMap/externalDataResults/HMP_forPlot_barplots", "HMP")
 HMP_like_reads_plot_2("/data/projects/phillippy/projects/MetaMap/externalDataResults/Zymo_forPlot_barplots", "Zymo")
+
+cat("\n\nOK\n\n")
 
 stop()
 
-xyPlots_i100_p25("../databases/miniSeq+H/simulations_i100_specifiedFrequencies/_forPlot_frequencies_xy", "i100", "../databases/miniSeq+H/simulations_p25_logNormal/_forPlot_frequencies_xy", "p25", "/data/projects/phillippy/projects/MetaMap/externalDataResults/CAMIMouseGut_forPlot_frequencies_xy", "CAMI")
+
+
+stop()
+
+
+stop()
+
 
 
 stop()

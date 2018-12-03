@@ -394,7 +394,8 @@ sub doCentrifuge
 		$simulatedReads,
 		$jobDir_abs,
 		$centrifugeBinDir,
-		\%taxonID_original_2_contigs
+		\%taxonID_original_2_contigs,
+		$dbDir
 	);
 }
  
@@ -405,8 +406,11 @@ sub doCentrifugeOnExistingDB
 	my $outputDir = shift;
 	my $centrifugeBinDir = shift;
 	my $taxonID_original_2_contigs_href = shift;
+	my $MetaMapsDBDir = shift;
 	
 	die unless(defined $taxonID_original_2_contigs_href);
+	die unless(defined $MetaMapsDBDir);
+	
 	my $pre_chdir_cwd = getcwd();
 	 
 	# chdir($kraken2_dir) or die "Cannot chdir into $kraken2_dir";  
@@ -415,19 +419,19 @@ sub doCentrifugeOnExistingDB
 	die "We have a directory problem - DB as specified in $centrifugeDBDir not present" unless(-e $centrifugeDBDir . '/DB.1.cf');
 	my $cmd_classify = qq(/usr/bin/time -v ${centrifugeBinDir}/centrifuge -p 16 -x ${centrifugeDBDir}/DB -U $simulatedReads -S $outputDir/reads_classified --report-file $outputDir/reads_classified_report 2> $outputDir/centrifuge_resources);
 	print "Now executing: $cmd_classify\n";
-	system($cmd_classify) and die "Could not execute command: $cmd_classify"; # todo
+	system($cmd_classify) and die "Could not execute command: $cmd_classify";
 
 	
 	my $cmd_report = qq(/usr/bin/time -v ${centrifugeBinDir}/centrifuge-kreport  -x ${centrifugeDBDir}/DB $outputDir/reads_classified > $outputDir/reads_classified_kreport 2> $outputDir/centrifuge_report_resources);
 	print "Now executing: $cmd_report\n";
-	system($cmd_report) and die "Could not execute command: $cmd_report"; # todo
+	system($cmd_report) and die "Could not execute command: $cmd_report";
 	
 	#my $cmd_report = qq(/usr/bin/time -v ${kraken2_binPrefix}-report --db DB $outputDir/reads_classified 1> $outputDir/reads_classified_report 2> $outputDir/kraken_report_resources);
 	#system($cmd_report) and die "Could not execute command: $cmd_report"; # todo 
 	
 	create_compatible_composition_file_from_centrifuge(
 		$outputDir . '/results_centrifuge.txt',
-		"${centrifugeDBDir}/taxonomy",
+		"${MetaMapsDBDir}/taxonomy", 
 		$outputDir.'/reads_classified_kreport',
 		$outputDir.'/reads_classified',	
 		$taxonID_original_2_contigs_href
@@ -435,8 +439,9 @@ sub doCentrifugeOnExistingDB
 
 	create_compatible_reads_file_from_centrifuge( 
 		$outputDir . '/results_centrifuge.txt.reads2Taxon', 
-		"${centrifugeDBDir}/taxonomy",
+		"${MetaMapsDBDir}/taxonomy",
 		$outputDir.'/reads_classified',
+		$taxonID_original_2_contigs_href
 	);
 
 	chdir($pre_chdir_cwd) or die;			
@@ -447,7 +452,7 @@ sub doCentrifugeOnExistingDB
 sub doKraken
 {
 	my $jobDir = shift;
-	my $dbDir = shift;
+	my $dbDir = shift; 
 	my $reads_fastq = shift;
 	
 	my $krakenDBTemplate = shift;
@@ -661,13 +666,28 @@ sub create_compatible_file_from_kraken
 sub create_compatible_composition_file_from_centrifuge
 {
 	my $target_output_fn = shift;
-	my $taxonomy_centrifuge_dir = shift;
+	my $taxonomy_metamaps_dir = shift;
 	my $f_distribution_krakenFormat = shift;
 	my $f_reads = shift;
-	my $create_compatible_file_from_kraken = shift;	
-	die unless(defined $create_compatible_file_from_kraken);
+	my $taxonID_original_2_contigs_href = shift;	
+	die unless(defined $taxonID_original_2_contigs_href);
+
+	my %contigID_2_taxonID;
+	foreach my $taxonID (keys %$taxonID_original_2_contigs_href)
+	{
+		foreach my $contigID (keys %{$taxonID_original_2_contigs_href->{$taxonID}})
+		{
+			unless($contigID =~ /^(C\d+)\|/)
+			{
+				# warn "Weird contig ID 1 $contigID";
+				next;
+			}
+			die if($contigID_2_taxonID{$1});
+			$contigID_2_taxonID{$1} = $taxonID;
+		}
+	}
 	
-	my $taxonomy_kraken = taxTree::readTaxonomy($taxonomy_centrifuge_dir);
+	my $taxonomy_metamaps = taxTree::readTaxonomy($taxonomy_metamaps_dir);
 		
 	my $target_output_fn_2 = $target_output_fn . '.ignoreUnclassified';
 	my %S_byLevel;
@@ -709,11 +729,11 @@ sub create_compatible_composition_file_from_centrifuge
 		}
 		else
 		{
-			unless(($taxonID eq '0') or (exists $taxonomy_kraken->{$taxonID}))
+			unless(($taxonID eq '0') or (exists $taxonomy_metamaps->{$taxonID}))
 			{
 				warn "Not sure what to do with taxon ID $taxonID (file $f_reads)";
 			}
-			my $lightning = validation::getAllRanksForTaxon_withUnclassified($taxonomy_kraken, $taxonID, $create_compatible_file_from_kraken);
+			my $lightning = validation::getAllRanksForTaxon_withUnclassified($taxonomy_metamaps, $taxonID, $taxonID_original_2_contigs_href);
 			$_getLightning_cache{$taxonID} = $lightning;
 			return $lightning;
 		}
@@ -726,8 +746,10 @@ sub create_compatible_composition_file_from_centrifuge
 	
 	my @evaluateAccuracyAtLevels = validation::getEvaluationLevels();
 	
+	my $unclassified_unclassified = 0;
 	my %classifications_per_read;
 	my %is_unclassified;
+	my %is_tax0_norank;
 	open(CENTRIFUGE, '<', $f_reads) or die "Cannot open $f_reads";
 	my %sawRead;
 	my $headerLine = <CENTRIFUGE>;
@@ -744,14 +766,51 @@ sub create_compatible_composition_file_from_centrifuge
 		my $readID = $f[0];
 		my $seqID = $f[1];
 		my $taxID = $f[2];
-		if(($seqID eq 'unclassified') or ($taxID eq '0'))
+		if($taxID eq '0')
 		{
-			$is_unclassified{$readID}++;
-		} 
+			die "Taxon ID is 0, but seqID is defined? $line\n$f_reads" unless(($seqID eq 'unclassified') or ($seqID eq 'no rank'));
+			if($seqID eq 'unclassified')
+			{
+				$unclassified_unclassified++;
+				if(not $is_unclassified{$readID})
+				{				
+					$is_unclassified{$readID}++;
+					print OUTPUT $readID, "\t", 0, "\n";		 
+					print OUTPUT_UNCL $readID, "\t", 'Unclassified', "\n";
+				}
+			}
+			else
+			{
+				die unless($seqID eq 'no rank');
+				$is_tax0_norank{$readID}++;
+			}
+			# if(not $is_unclassified{$readID})
+			# {
+				# $is_unclassified{$readID}++;
+				# print OUTPUT $readID, "\t", 0, "\n";		 
+				# print OUTPUT_UNCL $readID, "\t", 'Unclassified', "\n";			
+			# } 				
+		}
 		else
 		{
-			$classifications_per_read{$readID}{$taxID}++;
-			# print OUTPUT $readID, "\t", $taxID, "\n";
+			die if($seqID eq 'unclassified');
+			if($seqID =~ /^(C\d+)\|/)
+			{
+				my $contigID = $1;
+				die "Unknown contig ID $contigID" unless(exists $contigID_2_taxonID{$contigID});
+				$classifications_per_read{$readID}{$contigID_2_taxonID{$contigID}}++;			
+			}
+			elsif($seqID =~ /kraken:taxid\|(\w+)/)
+			{
+				my $taxonID_from_seqID = $1;
+				die Dumper("Weird taxon ID I", $taxonID_from_seqID, $readID, $f_reads, $seqID) unless($taxonomy_metamaps->{$taxonID_from_seqID});
+				$classifications_per_read{$readID}{$taxonID_from_seqID}++;							
+			}
+			else 
+			{
+				die Dumper("Weird taxon ID II", $taxID, $readID, $f_reads) unless($taxonomy_metamaps->{$taxID});
+				$classifications_per_read{$readID}{$taxID}++;						
+			}
 		}
 	}
 	close(CENTRIFUGE);
@@ -761,7 +820,7 @@ sub create_compatible_composition_file_from_centrifuge
 	{
 		if($classifications_per_read{$unclassifiedID})
 		{
-			warn "Read $unclassifiedID is classified and not? $f_reads" if($classifications_per_read{$unclassifiedID});
+			warn Dumper("Read $unclassifiedID is classified and not? $f_reads", $classifications_per_read{$unclassifiedID}) if($classifications_per_read{$unclassifiedID});
 			delete $classifications_per_read{$unclassifiedID};
 			$n_additional_unclassified_reads++;
 		}
@@ -769,10 +828,15 @@ sub create_compatible_composition_file_from_centrifuge
 		$classifications_per_read{$unclassifiedID}{0}++;
 	}	
 	
+	foreach my $readID (keys %is_tax0_norank)
+	{
+		die "Read ID $readID seems to have disappeared" unless(exists $classifications_per_read{$readID});
+	}	
+		
 	my %reads_at_levels;
 	foreach my $readID (keys %classifications_per_read)
 	{
-		my $lca = taxTree::lowestCommonAncestor($taxonomy_kraken, [keys %{$classifications_per_read{$readID}}]);
+		my $lca = taxTree::lowestCommonAncestor($taxonomy_metamaps, [keys %{$classifications_per_read{$readID}}]);
 		if($lca eq '0')
 		{
 			$n_unclassified_check++;				
@@ -790,10 +854,12 @@ sub create_compatible_composition_file_from_centrifuge
 		}
 	}
 	
-	close(OUTPUT);
+	close(OUTPUT); 
 	close(OUTPUT_UNCL);	
 
-	die "Inconsistency w.r.t. unclassified reads -- $n_unclassified_check vs $n_unclassified plus $n_additional_unclassified_reads" unless($n_unclassified_check == ($n_unclassified+$n_additional_unclassified_reads));
+	#die Dumper(scalar(keys %is_unclassified), $n_unclassified, $unclassified_unclassified);
+	# die "Inconsistency w.r.t. unclassified reads -- $n_unclassified_check vs $n_unclassified plus $n_additional_unclassified_reads" unless($n_unclassified_check == ($n_unclassified+$n_additional_unclassified_reads));
+	die "Inconsistency w.r.t. unclassified reads -- $n_unclassified_check vs $n_unclassified" unless($n_unclassified_check == $n_unclassified);
 	
 	open(OUTPUT, '>', $target_output_fn) or die "Cannot open $target_output_fn";
 	open(OUTPUT2, '>', $target_output_fn_2) or die "Cannot open $target_output_fn_2";
@@ -831,7 +897,7 @@ sub create_compatible_composition_file_from_centrifuge
 			}			
 			else
 			{
-				$name = taxTree::taxon_id_get_name($taxonID, $taxonomy_kraken);
+				$name = taxTree::taxon_id_get_name($taxonID, $taxonomy_metamaps);
 			}
 			
 			my $nReads  = $reads_at_levels{$level}{$taxonID};
@@ -887,15 +953,34 @@ sub create_compatible_reads_file_from_kraken
 	close(OUTPUT_UNCL);
 	
 }
-
+ 
 sub create_compatible_reads_file_from_centrifuge
 {
 	my $output_fn = shift;
-	my $taxonomy_kraken_dir = shift;
+	my $taxonomy_metamaps_dir = shift;
 	my $f_reads = shift;
+	my $taxonID_original_2_contigs_href = shift;	
+	die unless(defined $taxonID_original_2_contigs_href);
+
+	my %contigID_2_taxonID;
+	foreach my $taxonID (keys %$taxonID_original_2_contigs_href)
+	{
+		foreach my $contigID (keys %{$taxonID_original_2_contigs_href->{$taxonID}})
+		{
+			unless($contigID =~ /^(C\d+)\|/)
+			{
+				# warn "Weird contig ID 2 $contigID"; 
+				next;
+			}
+			die if($contigID_2_taxonID{$1});
+			$contigID_2_taxonID{$1} = $taxonID;
+		}
+	}			
 	
-	my $taxonomy_kraken = taxTree::readTaxonomy($taxonomy_kraken_dir);
+	my $taxonomy_metamaps = taxTree::readTaxonomy($taxonomy_metamaps_dir);
 	
+	my %is_tax0_norank;
+	my $unclassified_unclassified = 0;
 	my %is_unclassified;
 	my %classifications_per_read;
 	my $output_fn_unclassified = $output_fn . '.unclassified';
@@ -916,19 +1001,51 @@ sub create_compatible_reads_file_from_centrifuge
 		my $readID = $f[0];
 		my $seqID = $f[1];
 		my $taxID = $f[2];
-		if(($seqID eq 'unclassified') or ($taxID eq '0'))
+		if($taxID eq '0')
 		{
-			if(not $is_unclassified{$readID})
+			die "Taxon ID is 0, but seqID is defined? $line\n$f_reads" unless(($seqID eq 'unclassified') or ($seqID eq 'no rank'));
+			if($seqID eq 'unclassified')
 			{
-				$is_unclassified{$readID}++;
-				print OUTPUT $readID, "\t", 0, "\n";		 
-				print OUTPUT_UNCL $readID, "\t", 'Unclassified', "\n";			
-			} 
+				$unclassified_unclassified++;
+				if(not $is_unclassified{$readID})
+				{				
+					$is_unclassified{$readID}++;
+					print OUTPUT $readID, "\t", 0, "\n";		 
+					print OUTPUT_UNCL $readID, "\t", 'Unclassified', "\n";
+				}
+			}
+			else
+			{
+				die unless($seqID eq 'no rank');
+				$is_tax0_norank{$readID}++;
+			}
+			# if(not $is_unclassified{$readID})
+			# {
+				# $is_unclassified{$readID}++;
+				# print OUTPUT $readID, "\t", 0, "\n";		 
+				# print OUTPUT_UNCL $readID, "\t", 'Unclassified', "\n";			
+			# } 				
 		}
 		else
 		{
-			$classifications_per_read{$readID}{$taxID}++;
-			# print OUTPUT $readID, "\t", $taxID, "\n";
+			die if($seqID eq 'unclassified');
+			if($seqID =~ /^(C\d+)\|/)
+			{
+				my $contigID = $1;
+				die "Unknown contig ID $contigID" unless(exists $contigID_2_taxonID{$contigID});
+				$classifications_per_read{$readID}{$contigID_2_taxonID{$contigID}}++;			
+			}
+			elsif($seqID =~ /kraken:taxid\|(\w+)/)
+			{
+				my $taxonID_from_seqID = $1;
+				die Dumper("Weird taxon ID I", $taxonID_from_seqID, $readID, $f_reads, $seqID) unless($taxonomy_metamaps->{$taxonID_from_seqID});
+				$classifications_per_read{$readID}{$taxonID_from_seqID}++;							
+			}
+			else 
+			{
+				die Dumper("Weird taxon ID II", $taxID, $readID, $f_reads) unless($taxonomy_metamaps->{$taxID});
+				$classifications_per_read{$readID}{$taxID}++;						
+			}
 		}
 	} 
 	close(CENTRIFUGE);
@@ -943,7 +1060,8 @@ sub create_compatible_reads_file_from_centrifuge
 
 	foreach my $readID (keys %classifications_per_read)
 	{
-		my $lca = taxTree::lowestCommonAncestor($taxonomy_kraken, [keys %{$classifications_per_read{$readID}}]);
+		die unless(all {exists $taxonomy_metamaps->{$_}} keys %{$classifications_per_read{$readID}});
+		my $lca = taxTree::lowestCommonAncestor($taxonomy_metamaps, [keys %{$classifications_per_read{$readID}}]);
 		if($lca eq '0')
 		{
 			print OUTPUT $readID, "\t", 0, "\n";		 

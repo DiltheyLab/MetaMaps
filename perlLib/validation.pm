@@ -8,10 +8,10 @@ use taxTree;
 use Statistics::Basic qw/correlation/;
 use Storable qw/dclone store retrieve/;
 
-my @evaluateAccuracyAtLevels = qw/species genus family superkingdom/;
+my @evaluateAccuracyAtLevels = qw/strain species genus family superkingdom/;
 {
 	my %_knowRank = map {$_ => 1} taxTree::getRelevantRanks();
-	die unless(all {$_knowRank{$_}} @evaluateAccuracyAtLevels);
+	die unless(all {$_knowRank{$_} or ($_ eq 'strain')} @evaluateAccuracyAtLevels);
 }
 
 sub getEvaluationLevels
@@ -25,7 +25,7 @@ sub getMasterTaxonomyDir
 }
 
 my %_cache_prepare_masterTaxonomy_withX_taxonomies;
-sub prepare_masterTaxonomy_withX
+sub prepare_masterTaxonomy_withX 
 {
 	my $masterTaxonomy_dir = shift; 
 	my $taxonomyWithX = shift;
@@ -299,10 +299,12 @@ sub getAllRanksForTaxon_withUnclassified
 	if(defined $mappableTaxonIDs_href->{$taxonID})
 	{
 		$forReturn{definedGenomes} = $taxonID; 
+		$forReturn{strain} = $taxonID; 
 	}
 	else
 	{
 		$forReturn{definedGenomes} = 'Unclassified';
+		$forReturn{strain} = 'Unclassified';
 	}
 	return \%forReturn if($taxonID eq '0');
 	
@@ -357,6 +359,7 @@ sub getAllRanksForTaxon_withUnclassified
 		my $value = $forReturn{$rank};
 		next if($value eq 'Unclassified');
 		next if($rank eq 'definedGenomes');
+		next if($rank eq 'strain');
 		die Dumper("Taxonomy mismatch in getAllRanksForTaxon_withUnclassified", $taxonID, "Should be: $rank", "Is: $taxonomy->{$value}{rank}") unless($rank eq $taxonomy->{$value}{rank});
 	}
 	
@@ -458,7 +461,7 @@ sub readLevelComparison
 	die unless(all {($_ eq '0') or (exists $masterTaxonomy->{$_})} values %$reads_inferred);
 
 	# a 'lightning' is the way from a taxon ID to the top of the tree, and back
-	# ... setting levels below the ID to 'unclassified'
+	# ... setting levels below the ID to 'Unclassified'
 	my %_getLightning_cache;
 	my $getLightning = sub {
 		my $taxonID = shift;
@@ -1085,6 +1088,8 @@ sub analyseAndAddOneExperiment
 	#my %freq_details_byVariety_byLevel_local;	
 	my %directlyMappable;	
 
+	die unless(defined $reduced_taxonID_master_2_contigs_href);
+	
 	foreach my $tID (keys %$reduced_taxonID_master_2_contigs_href)
 	{
 		$directlyMappable{$varietyName_forStorage}{$tID} = 1;
@@ -1138,7 +1143,8 @@ sub analyseAndAddOneExperiment
 				$inferred_distributions_aref->[$methodI],
 				$methodNames_aref->[$methodI],
 				$freq_byVariety_byLevel_local{$varietyName_forStorage},
-				$frequencyComparison->{$varietyName_forStorage}
+				$frequencyComparison->{$varietyName_forStorage},
+				$reduced_taxonID_master_2_contigs_href,
 			);		
 		}			
 	}
@@ -1472,6 +1478,8 @@ sub distributionLevelComparison
 	my $label = shift;
 	my $external_comparison = shift;
 	my $frequencyComparison_href = shift;
+	my $reduced_taxonID_master_2_contigs_href = shift;
+	die unless(defined $reduced_taxonID_master_2_contigs_href);
 	# my $distributionLevelComparison = shift;
 
 	my %_in_evaluateAccuracyAtLevels = map {$_ => 1} @evaluateAccuracyAtLevels;
@@ -1483,7 +1491,7 @@ sub distributionLevelComparison
 			$lookupKey_level_InInference = 'definedGenomes';
 		}
 		
-		if($level eq 'absolute')
+		if(($level eq 'absolute') or ($level eq 'strain'))
 		{
 			if(defined $distribution_inferred->{'definedAndHypotheticalGenomes'})
 			{	
@@ -1499,18 +1507,74 @@ sub distributionLevelComparison
 				die if(defined $distribution_inferred->{$level});
 			}
 		}
+	
+		warn Dumper([keys %$distribution_inferred], $level, $lookupKey_level_InInference);
 		next unless(defined $distribution_inferred->{$lookupKey_level_InInference});
-		die unless(defined $distribution_truth->{$level});
 		
+		my $distribution_truth_atLevel;
+		my $distribution_inference_atLevel;
+		
+		if($level eq 'strain')
+		{
+			if(defined $distribution_truth->{$level})
+			{
+				warn "Level $level present in truth distribution, but ignore and re-compute here";
+			}
+			my $transformDistributionToStrain = sub {
+				my $input_href = shift;
+				die unless(defined $input_href);
+				my %output;
+				foreach my $taxonID (keys %$input_href)
+				{
+					die "Weird taxon ID $taxonID" unless((exists $masterTaxonomy->{$taxonID}) or ($taxonID eq 'Unclassified'));
+					if(($taxonID eq 'Unclassified') or ($reduced_taxonID_master_2_contigs_href->{$taxonID}))
+					{
+						if(ref($input_href->{$taxonID}) eq 'ARRAY')
+						{
+							$output{$taxonID}[0] += $input_href->{$taxonID}[0];
+							$output{$taxonID}[1] += $input_href->{$taxonID}[1];
+						}
+						else
+						{
+							$output{$taxonID} += $input_href->{$taxonID};						
+						}
+					}
+					else
+					{
+						if(ref($input_href->{$taxonID}) eq 'ARRAY')
+						{					
+							$output{'Unclassified'}[0] += $input_href->{$taxonID}[0];
+							$output{'Unclassified'}[1] += $input_href->{$taxonID}[1];
+						}
+						else
+						{
+							$output{'Unclassified'} += $input_href->{$taxonID};
+						}
+					}
+				}
+				return \%output;
+			};
+			die Dumper("Missing info in truth distribution", [keys %$distribution_truth]) unless(exists $distribution_truth->{'definedAndHypotheticalGenomes'});
+			$distribution_truth_atLevel = $transformDistributionToStrain->($distribution_truth->{'definedAndHypotheticalGenomes'});
+			$distribution_inference_atLevel = $transformDistributionToStrain->($distribution_inferred->{$lookupKey_level_InInference});			
+		}
+		else
+		{
+			die unless(defined $distribution_truth->{$level});
+			$distribution_truth_atLevel = $distribution_truth->{$level};
+			$distribution_inference_atLevel = $distribution_inferred->{$lookupKey_level_InInference};
+		}
+				
 		my $totalFreq = 0;
 		my $totalFreqCorrect = 0;
-		foreach my $inferredTaxonID (keys %{$distribution_inferred->{$lookupKey_level_InInference}})
+		foreach my $inferredTaxonID (keys %{$distribution_inference_atLevel})
 		{
-			my $isFreq = $distribution_inferred->{$lookupKey_level_InInference}{$inferredTaxonID}[1];
+			die Dumper($distribution_inference_atLevel, "Data structure mismatch - expect array", ref($distribution_inference_atLevel->{$inferredTaxonID}), $inferredTaxonID) unless(ref($distribution_inference_atLevel->{$inferredTaxonID}) eq 'ARRAY');
+			my $isFreq = $distribution_inference_atLevel->{$inferredTaxonID}[1];
 			my $shouldBeFreq = 0;
-			if(exists $distribution_truth->{$level}{$inferredTaxonID})
+			if(exists $distribution_truth_atLevel->{$inferredTaxonID})
 			{
-				$shouldBeFreq = $distribution_truth->{$level}{$inferredTaxonID};
+				$shouldBeFreq = $distribution_truth_atLevel->{$inferredTaxonID};
 			}
 			
 			$totalFreq += $isFreq;
@@ -1533,11 +1597,11 @@ sub distributionLevelComparison
 		
 		my $S_AVGRE = 0;
 		my $S_RRMSE = 0;
-		foreach my $trueTaxonID (keys %{$distribution_truth->{$level}})
+		foreach my $trueTaxonID (keys %{$distribution_truth_atLevel})
 		{
-			my $shouldBeFreq = $distribution_truth->{$level}{$trueTaxonID};
-			die Dumper("Problem with shouldBeFreq", $shouldBeFreq, $distribution_truth) unless($shouldBeFreq > 0);
-			my $isFreq = (exists $distribution_inferred->{$lookupKey_level_InInference}{$trueTaxonID}) ? $distribution_inferred->{$lookupKey_level_InInference}{$trueTaxonID}[1] : 0;
+			my $shouldBeFreq = $distribution_truth_atLevel->{$trueTaxonID};
+			die Dumper("Problem with shouldBeFreq", $shouldBeFreq, $distribution_truth_atLevel) unless($shouldBeFreq > 0);
+			my $isFreq = (exists $distribution_inference_atLevel->{$trueTaxonID}) ? $distribution_inference_atLevel->{$trueTaxonID}[1] : 0;
 			$S_AVGRE += ( abs($shouldBeFreq - $isFreq) / $shouldBeFreq);
 			$S_RRMSE += (($shouldBeFreq - $isFreq) / $shouldBeFreq)**2;
 		}
@@ -1551,15 +1615,15 @@ sub distributionLevelComparison
 		# my $unclassified_is = 0;
 		# my $unclassified_shouldBe = 0;
 		
-		my %joint_taxonIDs = map {$_ => 1} ((keys %{$distribution_inferred->{$lookupKey_level_InInference}}), (keys %{$distribution_truth->{$level}}));
+		my %joint_taxonIDs = map {$_ => 1} ((keys %{$distribution_inference_atLevel}), (keys %{$distribution_truth_atLevel}));
 		foreach my $taxonID (keys %joint_taxonIDs)
 		{
-			if($_in_evaluateAccuracyAtLevels{$level} and ($taxonID ne 'Unclassified'))
+			if($_in_evaluateAccuracyAtLevels{$level} and ($taxonID ne 'Unclassified') and ($level ne 'strain'))
 			{
-				die Dumper("Taxonomy level mismatch", [$taxonID, $masterTaxonomy->{$taxonID}], "Should be rank: $level", "In inference: " . (exists $distribution_inferred->{$lookupKey_level_InInference}{$taxonID} ? 1 : 0), "In truth: " . (exists $distribution_truth->{$level}{$taxonID} ? 1 : 0)) unless($masterTaxonomy->{$taxonID}{rank} eq $level);
+				die Dumper("Taxonomy level mismatch", [$taxonID, $masterTaxonomy->{$taxonID}], "Should be rank: $level", "In inference: " . (exists $distribution_inference_atLevel->{$taxonID} ? 1 : 0), "In truth: " . (exists $distribution_truth_atLevel->{$taxonID} ? 1 : 0)) unless($masterTaxonomy->{$taxonID}{rank} eq $level);
 			}
-			my $isFreq = (exists $distribution_inferred->{$lookupKey_level_InInference}{$taxonID}) ? $distribution_inferred->{$lookupKey_level_InInference}{$taxonID}[1] : 0;
-			my $shouldBeFreq = (exists $distribution_truth->{$level}{$taxonID}) ? $distribution_truth->{$level}{$taxonID} : 0;
+			my $isFreq = (exists $distribution_inference_atLevel->{$taxonID}) ? $distribution_inference_atLevel->{$taxonID}[1] : 0;
+			my $shouldBeFreq = (exists $distribution_truth_atLevel->{$taxonID}) ? $distribution_truth_atLevel->{$taxonID} : 0;
 			my $L1_diff = abs($isFreq - $shouldBeFreq);
 			my $L2_diff = ($isFreq - $shouldBeFreq)**2;
 			$L1_sum += $L1_diff;
@@ -1619,8 +1683,8 @@ sub distributionLevelComparison
 				}
 			}
 		}
-		my $AVGRE *= (1 / scalar(keys %{$distribution_inferred->{$lookupKey_level_InInference}}));
-		my $RRMSE *= (1 / scalar(keys %{$distribution_inferred->{$lookupKey_level_InInference}}));
+		my $AVGRE *= (1 / scalar(keys %{$distribution_inference_atLevel}));
+		my $RRMSE *= (1 / scalar(keys %{$distribution_inference_atLevel}));
 		$RRMSE = sqrt($RRMSE);
 		
 		die unless($n_isBigger0_n);
@@ -1680,6 +1744,7 @@ sub readInferredDistribution
 		next if($line{Name} eq 'totalReads');
 		next if($line{Name} eq 'readsLongEnough');
 		next if($line{Name} eq 'readsLongEnough_unmapped');
+		next if($line{AnalysisLevel} eq 'strain'); 
 		
 		if(((substr($taxonID_nonMaster, 0, 1) ne 'x') and ($taxonID_nonMaster <= 0)) and (($line{Name} eq 'Undefined') or ($line{Name} eq 'Unclassified') or ($line{Name} eq 'NotLabelledAtLevel')or ($line{Name} eq 'NotLabelledAtLevel')))
 		{
@@ -2172,7 +2237,7 @@ sub produceValidationOutputFiles
 			}
 		} keys %_readStratification;
 		# my @evaluationLevels = sort keys %_evaluationLevels;
-		my @evaluationLevels = qw/absolute species genus family/;
+		my @evaluationLevels = qw/absolute strain species genus family/;
 		die Dumper("Missing evaluation levels I", \@evaluationLevels, \%_evaluationLevels, [\@varieties]) unless(all {exists $_evaluationLevels{$_}} @evaluationLevels);
 		
 		open(BARPLOTSFULLDB, '>', $prefix_for_outputFiles . '_forPlot_barplots_fullDB') or die;
@@ -2695,7 +2760,7 @@ sub produceValidationOutputFiles
 		
 		my @methods = sort keys %_methods;
 		 
-		my @evaluationLevels = qw/absolute species genus family/;
+		my @evaluationLevels = qw/strain absolute species genus family/;
 		# my @evaluationLevels = sort keys %_evaluationLevels;
 		die Dumper("Missing evaluation levels II", \@evaluationLevels, \%_evaluationLevels, \@varieties, \%_methods, $allSimulations_data_href->{freq_byVariety_byLevel}) unless(all {exists $_evaluationLevels{$_}} @evaluationLevels);
 			
@@ -2803,7 +2868,7 @@ sub produceValidationOutputFiles
 								my $freqNovelNew = (not $have_truth_freq_data) ? 0 : ($allSimulations_data_href->{frequencyComparisons_details_bySimulation}->[$simulationI]{$variety}{truthReadsNovelTree}{$taxonID}[1] / $allSimulations_data_href->{frequencyComparisons_details_bySimulation}->[$simulationI]{$variety}{nReads});
 								my $freqNovelTotal = (not $have_truth_freq_data) ? 0 : ($allSimulations_data_href->{frequencyComparisons_details_bySimulation}->[$simulationI]{$variety}{truthReadsNovelTree}{$taxonID}[2] / $allSimulations_data_href->{frequencyComparisons_details_bySimulation}->[$simulationI]{$variety}{nReads});
 								
-								if(($taxonID ne 'Unclassified') and ($taxonID ne 'NotLabelledAtLevel') and ($level ne 'definedAndHypotheticalGenomes') and ($level ne 'definedGenomes'))
+								if(($taxonID ne 'Unclassified') and ($taxonID ne 'NotLabelledAtLevel') and ($level ne 'definedAndHypotheticalGenomes') and ($level ne 'definedGenomes') and ($level ne 'strain'))
 								{
 									unless (abs($controlFrequency - $allSimulations_data_href->{frequencyComparisons_bySimulation}->[$simulationI]{$variety}{$label}{$level}{$taxonID}[0]) <= 1e-4)
 									{

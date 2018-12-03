@@ -30,6 +30,9 @@ unless($DB)
 my $DB_fasta = $DB . '/DB.fa';
 die "File $DB_fasta does not exist" unless(-e $DB_fasta);
 
+my $input_fn_names = $DB . "/taxonomy/names.dmp";
+my $input_fn_nodes = $DB . "/taxonomy/nodes.dmp";
+
 my $output_fn = $DB_fasta . '.centrifugeTranslation';
 my $output_fn_names = $DB_fasta . '.centrifugeTranslation.names.dmp';
 my $output_fn_nodes = $DB_fasta . '.centrifugeTranslation.nodes.dmp';
@@ -38,29 +41,56 @@ my $output_fn_nodes = $DB_fasta . '.centrifugeTranslation.nodes.dmp';
 
 my $taxonomy = taxTree::readTaxonomy($DB . '/taxonomy');
 
-my %centrifuge_known_ID;
-open(KRAKENIDs, '<', $suitableMasterTaxonomy . '/names.dmp') or die "Cannot open names in $suitableMasterTaxonomy";
-while(<KRAKENIDs>)
-{	
-	chomp;
+open(NAMESIN, '<', $input_fn_names) or die "Cannot open $input_fn_names";
+open(NAMESOUT, '>', $output_fn_names) or die "Cannot open $output_fn_names";
+while(<NAMESIN>)
+{
 	next unless($_);
-	die unless($_ =~ /^(\d+)/);
-	$centrifuge_known_ID{$1}++;
+	if($_ !~ /^x/)
+	{
+		print NAMESOUT $_;
+	}		
 }
-close(KRAKENIDs);
-my %merged;
-open(MERGED, '<', $suitableMasterTaxonomy . '/merged.dmp') or die "Cannot open merged in $suitableMasterTaxonomy";
-while(<MERGED>)
-{	
-	chomp;
+close(NAMESOUT);
+close(NAMESIN);
+
+open(NODESIN, '<', $input_fn_nodes) or die "Cannot open $input_fn_nodes";
+open(NODESOUT, '>', $output_fn_nodes) or die "Cannot open $output_fn_nodes";
+while(<NODESIN>)
+{
 	next unless($_);
-	die unless($_ =~ /^(\d+)\s+\|+\s+(\d+)/);
-	my $from = $1;
-	my $to = $2;
-	die if(defined $merged{$from});
-	$merged{$from} = $to;
+	if($_ !~ /^x/)
+	{
+		print NODESOUT $_;
+	}		
 }
-close(MERGED);
+close(NODESOUT);
+close(NODESIN);
+
+# my %centrifuge_known_ID;
+# open(KRAKENIDs, '<', $suitableMasterTaxonomy . '/names.dmp') or die "Cannot open names in $suitableMasterTaxonomy";
+# while(<KRAKENIDs>)
+# {	
+	# chomp;
+	# next unless($_);
+	# die unless($_ =~ /^(\d+)/);
+	# $centrifuge_known_ID{$1}++;
+# }
+# close(KRAKENIDs);
+
+# my %merged;
+# open(MERGED, '<', $suitableMasterTaxonomy . '/merged.dmp') or die "Cannot open merged in $suitableMasterTaxonomy";
+# while(<MERGED>)
+# {	
+	# chomp;
+	# next unless($_);
+	# die unless($_ =~ /^(\d+)\s+\|+\s+(\d+)/);
+	# my $from = $1;
+	# my $to = $2;
+	# die if(defined $merged{$from});
+	# $merged{$from} = $to;
+# }
+# close(MERGED);
 
 # read input / substitute IDs
 
@@ -73,6 +103,7 @@ while(<INPUT>)
 		chomp;
 		die "Invalid space in line $. of $DB_fasta" if($_ =~ /\s/);
 		my $taxonID = Util::extractTaxonID($_, $DB_fasta, $.);
+		my $contigID = $_;
 		
 		die "Taxon ID not defined" unless(exists $taxonomy->{$taxonID});
 		
@@ -82,15 +113,15 @@ while(<INPUT>)
 			my @ancestors = taxTree::get_ancestors($taxonomy, $taxonID);
 			$newID = $ancestors[0];
 			die unless($newID =~ /^\d+$/);
-			print "Substitute $taxonID -> $newID \n";			
+			print "Substitute $taxonID [$contigID]-> $newID \n";			
 		}
 		
-		while(exists $merged{$newID})
-		{
-			$newID = $merged{$newID};
-		}	
+		# while(exists $merged{$newID})
+		# {
+			# $newID = $merged{$newID};
+		# }	
 		
-		die "Taxon ID $newID is unknown to centrifuge - $taxonID - $newID" unless($centrifuge_known_ID{$newID});
+		die "Taxon ID $newID is unknown to centrifuge - $taxonID - $newID" unless($taxonomy->{$newID});
 		
 		die unless($_ =~ /^>(.+?\|.+?)\|/);
 		my $id_for_centrifuge = $1;
@@ -101,7 +132,7 @@ while(<INPUT>)
 close(OUTPUT);
 close(INPUT);
 
-system("cp ${suitableMasterTaxonomy}/names.dmp $output_fn_names") and die "Cannot copy names to $output_fn_names";
-system("cp ${suitableMasterTaxonomy}/nodes.dmp $output_fn_nodes") and die "Cannot copy nodes to $output_fn_nodes";
+#system("cp ${suitableMasterTaxonomy}/names.dmp $output_fn_names") and die "Cannot copy names to $output_fn_names";
+#system("cp ${suitableMasterTaxonomy}/nodes.dmp $output_fn_nodes") and die "Cannot copy nodes to $output_fn_nodes";
 
 print "\nProduced file $output_fn\n\n";

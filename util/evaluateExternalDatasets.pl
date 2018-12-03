@@ -31,19 +31,21 @@ my @resultsSets = (
 		# '/scratch/tmp/hmp-nanopore.fasta.fastq'
 	# ],
 	[
-		'HMP',
+		'HMP', 
 		'tmp/hmp7_2_miniSeq+H',
+		#'/data/projects/phillippy/projects/MetaMapsMT/mt_test_t20',
+		#'tmp/hmp7_2_miniSeq+H_rL1000_k18',
 		[
-			'/scratch/tmp/hmp_set7_combined_kraken_results',
+			'/scratch/tmp/hmp_set7_combined_kraken_results', 
 			'/scratch/tmp/hmp_set7_combined_kraken2_results',
 			'/scratch/tmp/hmp_set7_combined_centrifuge_results',
-			'tmp/HMP7_rL2000/hmp7_2_miniSeq+H',
-			'tmp/hmp7_2_miniSeq+H_20G',
+			#'tmp/HMP7_rL2000/hmp7_2_miniSeq+H',
+			#'tmp/hmp7_2_miniSeq+H_20G',
 		],
 		'tmp/truthHMP7_bwa_pacbio',
 		'/scratch/tmp/hmp_set7_combined.fastq.mappable'
 	],
-	[
+	[ 
 		'Zymo',
 		'tmp/Zymo_metamaps',
 		[ 
@@ -54,7 +56,7 @@ my @resultsSets = (
 		'tmp/truthZymp_bwa_nanopore',
 		'/data/projects/phillippy/projects/MetaMap/loman/Zymo-GridION-EVEN-BB-SN/GA10000/combined.fastq.subsampled.mappable'
 	],	
-	[
+	[ 
 		'CAMIMouseGut',
 		'tmp/CAMI_metamaps',
 		[
@@ -345,15 +347,15 @@ foreach my $resultsSet (@resultsSets)
 				else
 				{
 					# print "C\n";
-					$taxonLabel = taxTree::taxon_id_get_name($taxonID, $master_taxonomy);			
+					$taxonLabel = taxTree::taxon_id_get_name($taxonID, $extendedMaster);			
 				}
 				print F join("\t", $level, $label, $taxonID2, $taxonLabel, $distributions_byLevel_byLabel{$level}{$label}{$taxonID}), "\n";
 			}
 		}
 	}
-	
+	 
 	# foreach my $label (keys %results_distribution)
-	# {
+	# { 
 		# print "Analysing $label -- at level of distribution!\n";
 
 		# $freq_byVariety_byLevel->{$label} = {} unless(defined $freq_byVariety_byLevel->{$label});
