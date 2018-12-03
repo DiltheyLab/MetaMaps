@@ -37,6 +37,17 @@ Example:
 ./metamaps classify --mappings classification_results --DB databases/miniSeq+H
 ```
 
+### Multi-threading
+
+You can use the parameter `-t` to speed up mapping and classification.
+
+Example:
+
+```
+./metamaps mapDirectly -t 5 --all -r databases/miniSeq+H/DB.fa -q input.fastq -o classification_results
+./metamaps classify -t 5 --mappings classification_results --DB databases/miniSeq+H
+```
+
 ## Output
 
 MetaMaps outputs both an overall compositional assignment and per-read taxonomic assignments. Specifically, it will (for `-o classification_results`) produce the following files:
@@ -128,3 +139,38 @@ Example:
 ```
 perl filterLowIdentityEntities.pl --DB miniSeq+H --mappings classification_results --identityThreshold 0.8
 ```
+
+### COG group analysis
+
+You can use MetaMaps to carry out a COG group analysis of your metagenomic sample. Whenever a read overlaps with an annotated gene location, it is counted towards the COG groups (and other annotations) associated with the corresponding gene. Note that a single read can overlap with multiple genes, and that a single gene can be associated with multiple COG groups (or other annotations). Gene locations and amino acid sequences come from GenBank/Refseq, and the annotations are produced with [eggnog-mapper](https://github.com/jhcepas/eggnog-mapper).
+
+1. Download an annotated database.
+
+To carry out this type of analysis, you need an "annotated" database that contains, in addition to the reference FASTA files, the locations and amino acid sequences of encoded genes, as well as a (gene) -> (annotation) mapping file. The [refseq_with_annotations](https://www.dropbox.com/s/36nz876g1hjh01r/refseq_with_annotations.tar.gz?dl=0) database (18.4 GB compressed) is a good place to start. You can untar this file from the main MetaMaps directory. Afterwards, you should see a `databases/refseq_with_annotations` directory.
+
+2. Carry out mapping and classification.
+
+Mapping and classification work as before - just make sure to map against the annotated database.
+
+Example:
+
+```
+./metamaps mapDirectly --all -r databases/refseq_with_annotations/DB.fa -q input.fastq -o classification_results
+./metamaps classify --mappings classification_results --DB databases/refseq_with_annotations
+```
+
+3. Carry out the gene- and annotation-level analysis.
+
+A gene- and annotation-level analysis is carried out with the script `geneLevelAnalysis.pl`. Example:
+
+```
+perl geneLevelAnalysis.pl --DB databases/refseq_with_annotations --mappings classification_results
+```
+
+This command will produce the following files:
+- `classification_results.EM.geneLevelAnalysis`: This file contains the names and (for some genes) protein IDs of genes hit by overlapping reads from the input dataset. It also contains the number of overlapping reads and their median identity.
+- `classification_results.EM.proteins.*`: Like `classification_results.EM.geneLevelAnalysis`, but agglomerated according to eggnog-mapper-produced gene annotations. For example, `classification_results.EM.proteins.COG` will contain a COG-level analysis of the input data. Note that features are not mutually exclusive, i.e. a single read can overlap with multiple genes, and a single gene can carry multiple annotations.
+
+
+
+
