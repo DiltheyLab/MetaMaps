@@ -1,7 +1,7 @@
 MetaMaps
 ========================================================================
 
-MetaMaps is tool specifically developed for the analysis of long-read (PacBio/ONT) metagenomic datasets.
+MetaMaps is tool specifically developed for the analysis of long-read (PacBio/Oxford Nanopore) metagenomic datasets.
 
 It simultaenously carries out read assignment and sample composition estimation.
 
@@ -37,7 +37,7 @@ Example:
 ./metamaps classify --mappings classification_results --DB databases/miniSeq+H
 ```
 
-### Multi-threading
+### Multithreading
 
 You can use the parameter `-t` to speed up mapping and classification.
 
@@ -47,6 +47,8 @@ Example:
 ./metamaps mapDirectly -t 5 --all -r databases/miniSeq+H/DB.fa -q input.fastq -o classification_results
 ./metamaps classify -t 5 --mappings classification_results --DB databases/miniSeq+H
 ```
+
+Important: if you encounter problems with multithreading efficiency, try `unset MALLOC_ARENA_MAX` immediately before calling MetaMaps.
 
 ## Output
 
