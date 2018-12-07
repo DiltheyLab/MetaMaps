@@ -37,7 +37,7 @@ colourByMethod[["Metamap-U-Reads"]] <- "yellow"
 
 colourByMethod[["Kraken-Reads"]] <- "firebrick2"
 colourByMethod[["Bracken-Dist"]] <- colourByMethod[["Kraken-Reads"]]
-colourByMethod[["Kraken2-Reads"]] <- "darksalmon"
+colourByMethod[["Kraken2-Reads"]] <- "firebrick2"
 
 
 colourByMethod[["Centrifuge-Reads"]] <- "orange"
@@ -335,7 +335,7 @@ readLengthPlot <- function(d1, t1)
 	byReadLengthD <- read.delim(readLengthFile, header = T, stringsAsFactors = F)
 	stopifnot(all(byReadLengthD[["variety"]] == "fullDB"))
 	methodNames_reads <- c("Metamap-EM-Reads", "Metamap-U-Reads", "Kraken-Reads")
-	methodNames_reads <- c("Metamap-EM-Reads", "Kraken-Reads", "Kraken2-Reads", "Centrifuge-Reads")
+	methodNames_reads <- c("Metamap-EM-Reads", "Kraken2-Reads", "Centrifuge-Reads")
 
 	rL_l_min <- min(byReadLengthD[["readLength"]])
 	rL_l_max <- max(byReadLengthD[["readLength"]])
@@ -956,9 +956,13 @@ xyPlots_i100_p25 <- function(f1, t1, f2, t2, f3, t3)
 		legend_titles <- c()
 		legend_colours <- c()
 		legend_symbols <- c()
-		
+		legend_2_r <- list()
+
 		xAxis_values <- c()
 		yAxis_values <- c()
+
+		lastMethod <- ""
+
 		for(iteration in c("defineAxes", "realDeal"))
 		{
 			nPlot <- 0
@@ -971,7 +975,8 @@ xyPlots_i100_p25 <- function(f1, t1, f2, t2, f3, t3)
 						l_name <- l
 						if((l == "strain"))
 						{
-							l_lookup <- "definedAndHypotheticalGenomes"
+							#l_lookup <- "definedAndHypotheticalGenomes"
+							l_lookup <- "strain"
 							l_name <- "strain"
 						}
 						
@@ -993,22 +998,31 @@ xyPlots_i100_p25 <- function(f1, t1, f2, t2, f3, t3)
 						}
 						
 						indices <- which((freqD[["method"]] == m_lookup) & (freqD[["level"]] == l_lookup) & (freqD[["variety"]] == "fullDB"))
+						#indices_noUnclassified <- which((freqD[["method"]] == m_lookup) & (freqD[["level"]] == l_lookup) & (freqD[["variety"]] == "fullDB") & (freqD[["taxonID"]] != "Unclassified"))
+						if((m == "Centrifuge-Dist") && (l == "strain"))
+						{
+							indices_noUnclassified <- which((freqD[["method"]] == m_lookup) & (freqD[["level"]] == l_lookup) & (freqD[["variety"]] == "fullDB") & (freqD[["taxonID"]] != "Unclassified"))
+						}
+						else
+						{
+							indices_noUnclassified <- indices
+						}
 						if(length(indices) == 0)
 						{
 							print(c("lengthIndices", length(indices), m, m_lookup))
-						}
-						
+						}						
 						stopifnot(length(indices) > 0)
 
 						if(iteration == "defineAxes")
 						{
-							xAxis_values <- c(xAxis_values, freqD[["freqTarget"]][indices])
-							yAxis_values <- c(yAxis_values, freqD[["freqIs"]][indices])
+							xAxis_values <- c(xAxis_values, freqD[["freqTarget"]][indices_noUnclassified])
+							yAxis_values <- c(yAxis_values, freqD[["freqIs"]][indices_noUnclassified])
 							
 							legend_titles <- c(legend_titles, paste(captions[[m]], " ", l_name, sep = ""))
 							legend_colours <- c(legend_colours, colourByMethod[[m]])
 							# legend_symbols <- c(legend_symbols, dotStyleByLevel[[l]])
 							legend_symbols <- c(legend_symbols, dotStyleByMethod[[m]])
+							lastMethod <- m
 						}
 						else
 						{
@@ -1102,10 +1116,7 @@ xyPlots_i100_p25 <- function(f1, t1, f2, t2, f3, t3)
 								axis(2, xaxs = "i", labels = T, cex.axis = 2)			
 								axis(1, xaxs = "i", labels = T, cex.axis = 2)
 							}
-							#if(nGlobalPlot == 2)
-							{
-								legend("bottomright", legend = legend_titles, col = legend_colours, pch = legend_symbols, cex = 2)							
-							}
+
 							
 							frTarget <- freqD[["freqTarget"]][indices]
 							frIs <- freqD[["freqIs"]][indices]
@@ -1119,7 +1130,34 @@ xyPlots_i100_p25 <- function(f1, t1, f2, t2, f3, t3)
 							r <- cor(frTarget, frIs)
 							L1 <- sum(abs(frTarget - frIs))
 			
+							# if((captions[[m]] == "Centrifuge") && (l_name == "strain"))
+							# {
+								# cat(paste(titles[[dI]], " ", captions[[m]], " ", l_name, sep = ""), sprintf("%.3f", r**2), " ", length(frTarget), " ", cor(frTarget, frIs), "\n")
+								# print(c("lengthIndices", length(indices), m, m_lookup) )
+								# print(head(indices))
+								# print(tail(indices))
+
+							# }
+
+							legend_2_r[[paste(captions[[m]], " ", l_name, sep = "")]] <- sprintf("%.2f", r**2)
 					
+							if(m == lastMethod)
+							{
+								extended_legend_titles <- c()
+								for(existingTitle in legend_titles)
+								{
+									if(!(existingTitle %in% names(legend_2_r)))
+									{
+										cat("Error: missing title! ", existingTitle, "\n")
+									}
+									stopifnot(existingTitle %in% names(legend_2_r))
+									extended_legend_titles <- c(extended_legend_titles, paste(existingTitle, "; r² = ", legend_2_r[[existingTitle]], sep = ""))
+								}
+								
+								# extended_legend_titles <- 
+
+								legend("topleft", legend = extended_legend_titles, col = legend_colours, pch = legend_symbols, cex = 1.7, bty = "n")							
+							}
 							#text(xAxis_twoThirds, yAxis_twoThirds, labels = paste("r**2 = ", sprintf("%.3f", r**2), sep = ""), cex = 1.5)
 							#text(xAxis_twoThirds, yAxis_twoThirds_2, labels = paste("L1 = ", sprintf("%.3f", L1), sep = ""), cex = 1.5)
 	
@@ -1366,7 +1404,13 @@ HMPreadPlot <- function()
 	dev.off()   
 }
 
+readLengthPlot("../databases/miniSeq+H/simulations_i100_specifiedFrequencies", "i100")
+
+
+stop()
+
 xyPlots_i100_p25("../databases/miniSeq+H/simulations_i100_specifiedFrequencies/_forPlot_frequencies_xy", "i100", "../databases/miniSeq+H/simulations_p25_logNormal/_forPlot_frequencies_xy", "p25", "/data/projects/phillippy/projects/MetaMap/externalDataResults/CAMIMouseGut_forPlot_frequencies_xy", "CAMI")
+
 
 
 HMP_like_reads_plot_2("../databases/miniSeq+H/simulations_p25_logNormal/_forPlot_barplots", "p25")
@@ -1378,7 +1422,6 @@ HMP_like_reads_plot_2("/data/projects/phillippy/projects/MetaMap/externalDataRes
 
 cat("\n\nOK\n\n")
 
-stop()
 
 
 
@@ -1394,7 +1437,6 @@ stop()
 
 
 
-readLengthPlot("../databases/miniSeq+H/simulations_i100_specifiedFrequencies", "i100")
 
 
 #HMP_like_reads_plot("../databases/miniSeq+H/simulations_i100_specifiedFrequencies/", "i100")
