@@ -72,7 +72,7 @@ namespace skch
             ArgvParser::OptionRequiresValue);
         cmd.defineOptionAlternative("window","w");
 
-        cmd.defineOption("minReadLen", "minimum read length to map [default : 2000]", ArgvParser::OptionRequiresValue);
+        cmd.defineOption("minReadLen", "minimum read length to map [default : 1000]", ArgvParser::OptionRequiresValue);
         cmd.defineOptionAlternative("minReadLen","m");
 
         cmd.defineOption("perc_identity", "threshold for identity [default : 80]", ArgvParser::OptionRequiresValue);
@@ -345,7 +345,7 @@ void parseandSave(int argc, char** argv,  CommandLineProcessing::ArgvParser &cmd
 		}
 		else
 		{
-			parameters.minReadLength = 2000;
+			parameters.minReadLength = 1000;
 		}
 
 		if(cmd.foundOption("perc_identity"))
