@@ -16,6 +16,7 @@
 #include <assert.h>
 #include <boost/regex.hpp>
 #include <omp.h>
+#include <limits>
 
 #include "util.h"
 #include "taxonomy.h"
@@ -259,8 +260,25 @@ std::vector<oneMappingLocation> getMappingLocations(const std::map<std::string, 
 		}
 		assert(taxonInfo.at(contig_taxonID).count(contigID));
 
-		double mappingQuality = std::stod(line_fields.at(13));
-	
+		double mappingQuality;
+		try {
+			mappingQuality = std::stod(line_fields.at(13));
+		} catch (const std::invalid_argument&) {
+			std::cerr << "std::stod: invalid argument." << "\n" << line_fields.at(13) << "\n" << line << "\n";
+			throw;
+		} catch (const std::out_of_range&) { 
+			if(line_fields.at(13).find("e-") != std::string::npos)
+			{
+				assert(line_fields.at(13).at(0) != '-');
+				mappingQuality = 0;
+				//std::cerr << "Warning: use " << mappingQuality << " instead of " << line_fields.at(13) << " as mapping quality\n";
+			}
+			else
+			{
+				std::cerr << "std::stod: ouf of range." << "\n" << line_fields.at(13) << "\n" << line << "\n";			
+				throw;
+			}
+		}		
 		assert(mappingQuality >= 0);
 		assert(mappingQuality <= 1);
 		mQ_sum += mappingQuality;
@@ -274,7 +292,17 @@ std::vector<oneMappingLocation> getMappingLocations(const std::map<std::string, 
 			assert(readID == line_fields.at(0));
 
 		// todo perhaps back to 12
-		double identity = std::stod(line_fields.at(9))/100.0;
+		double identity;
+		try {
+			identity = std::stod(line_fields.at(9))/100.0;
+		} catch (const std::invalid_argument&) {
+			std::cerr << "std::stod: invalid argument." << "\n" << line_fields.at(13) << "\n" << line << "\n";
+			throw;
+		} catch (const std::out_of_range&) {
+			std::cerr << "std::stod: ouf of range." << "\n" << line_fields.at(13) << "\n" << line << "\n";			
+			throw;
+		}
+		
 		assert(identity >= 0);
 		assert(identity <= 1);
 
