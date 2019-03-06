@@ -44,6 +44,15 @@ sub getMasterTaxonomy
 	return qq(/data/projects/phillippy/software/centrifuge-1.0.4-beta);
 }
 
+sub getMeganDir
+{
+	return qq(/data/projects/phillippy/software/MEGAN6);
+}	
+
+sub getLASTbin
+{
+	return qq(/data/projects/phillippy/software/last-959/src//lastal);
+}
 
 sub translateMetaMapToCentrifuge
 {
@@ -355,6 +364,71 @@ sub doKraken2OnExistingDB
 	chdir($pre_chdir_cwd) or die;			
 }
 
+sub doMegan
+{
+	my $jobDir = shift;
+	my $dbDir = shift;
+	my $reads_fastq = shift;
+	my $meganBinDir = shift;
+		
+	unless(($jobDir =~ /_fullDB/) and ($dbDir =~ /_fullDB/))
+	{
+		die Dumper("Megan is only implemented for full DB - you can usually use --useVarietyI 0 to constrain the inference process", $jobDir, $dbDir, $reads_fastq, $meganBinDir);
+	}
+	
+	
+	my $megan_protein_db = $dbDir . '/../../../DB.fa.megan.fpa';
+	unless(-e $megan_protein_db)
+	{
+		die "Expected Megan protein DB file $megan_protein_db not present";
+	}	
+	
+	my $simulatedReads = abs_path($reads_fastq);
+	die unless(-e $simulatedReads);
+	
+	my $megan_dir = $jobDir . '/megan/';
+	my $jobDir_abs = abs_path($jobDir);
+	
+	unless(-e $megan_dir)
+	{
+		mkdir($megan_dir) or "Cannot mkdir $megan_dir";
+	}
+	
+	# my $centrifuge_DB_dir = $centrifuge_dir . '/DB/';
+	# unless(-e $centrifuge_DB_dir)
+	# {
+		# mkdir($centrifuge_DB_dir) or "Cannot mkdir $centrifuge_DB_dir";
+	# }	
+	
+	my %taxonID_original_2_contigs;
+	my %contigLength;
+	Util::read_taxonIDs_and_contigs($dbDir, \%taxonID_original_2_contigs, \%contigLength);
+	
+	# SimulationsKraken::translateMetaMapToCentrifuge (
+		# $centrifuge_DB_dir,
+		# $dbDir, 
+		# $centrifugeBinDir,
+	# );
+
+	SimulationsKraken::doMeganOnExistingDB (
+		$megan_protein_db,
+		$simulatedReads,
+		$jobDir_abs,
+		$meganBinDir,
+		\%taxonID_original_2_contigs,
+		$dbDir
+	);
+	
+	# SimulationsKraken::doCentrifugeOnExistingDB (
+		# $centrifuge_DB_dir,
+		# $simulatedReads,
+		# $jobDir_abs,
+		# $centrifugeBinDir,
+		# \%taxonID_original_2_contigs,
+		# $dbDir
+	# );
+}
+
 sub doCentrifuge
 {
 	my $jobDir = shift;
@@ -441,6 +515,72 @@ sub doCentrifugeOnExistingDB
 		$outputDir . '/results_centrifuge.txt.reads2Taxon', 
 		"${MetaMapsDBDir}/taxonomy",
 		$outputDir.'/reads_classified',
+		$taxonID_original_2_contigs_href
+	);
+
+	chdir($pre_chdir_cwd) or die;			
+}
+
+sub doMeganOnExistingDB
+{
+	my $megan_protein_DB_fn = shift;
+	my $simulatedReads = shift;
+	my $outputDir = shift;
+	my $meganBinDir = shift;
+	my $taxonID_original_2_contigs_href = shift;
+	my $MetaMapsDBDir = shift;
+	
+	die unless(defined $taxonID_original_2_contigs_href);
+	die unless(defined $MetaMapsDBDir);
+	
+	my $pre_chdir_cwd = getcwd();
+	 
+	# chdir($kraken2_dir) or die "Cannot chdir into $kraken2_dir";  
+	
+	die "We have a directory problem - DB as specified by $megan_protein_DB_fn not present from " . getcwd() unless(-e $megan_protein_DB_fn);
+	die "We have a directory problem - DB as specified by $megan_protein_DB_fn not present (.bck file missing)" unless(-e $megan_protein_DB_fn . '.bck');
+	die "We have a directory problem - DB as specified by $megan_protein_DB_fn not present (.taxonMapping file missing)" unless(-e $megan_protein_DB_fn . '.taxonMapping');
+	
+	my $megan_protein_DB_taxonMapping_fn = abs_path($megan_protein_DB_fn . '.taxonMapping');
+	
+	my $megan_output_dir =  $outputDir . '/megan';
+	unless(-d $megan_output_dir)
+	{
+		mkdir($megan_output_dir) or die "Cannot mkdir $megan_output_dir";
+	}
+	
+	my $MAF = abs_path($megan_output_dir . '/alignments.maf');
+	
+	chdir($meganBinDir) or die "Cannot chdir into $meganBinDir";
+	
+	my $LAST_bin = getLASTbin();
+	my $cmd_megan_map = qq($LAST_bin lastal -F15 -Q0 lastdb $simulatedReads > $MAF);
+	
+	my $cmd_Megan_sort = qq(tools/sort-last-maf -i $MAF -o ${MAF}.sorted);
+	system($cmd_Megan_sort) and die "Could not execute: $cmd_Megan_sort";
+
+	my $cmd_Megan_rma = qq(tools/blast2rma -i ${MAF}.sorted -f LastMAF -o ${MAF}.sorted.rma -lg -alg longReads --acc2taxa $megan_protein_DB_taxonMapping_fn);
+	system($cmd_Megan_rma) and die "Could not execute: $cmd_Megan_rma";
+	
+	my $cmd_Megan_info = qq(tools/rma2info -i ${MAF}.sorted.rma -r2c Taxonomy --ignoreUnassigned false > ${MAF}.sorted.rma.reads);
+	system($cmd_Megan_info) and die "Could not execute: $cmd_Megan_info";
+	
+	
+	#my $cmd_report = qq(/usr/bin/time -v ${kraken2_binPrefix}-report --db DB $outputDir/reads_classified 1> $outputDir/reads_classified_report 2> $outputDir/kraken_report_resources);
+	#system($cmd_report) and die "Could not execute command: $cmd_report"; # todo 
+	
+	create_compatible_composition_file_from_megan(
+		$outputDir . '/results_megan.txt',
+		"${MetaMapsDBDir}/taxonomy", 
+		"${MAF}.sorted.rma.reads",
+		$taxonID_original_2_contigs_href,
+		$simulatedReads,
+	);
+
+	create_compatible_reads_file_from_megan( 
+		$outputDir . '/results_megan.txt.reads2Taxon', 
+		"${MetaMapsDBDir}/taxonomy",
+		"${MAF}.sorted.rma.reads",
 		$taxonID_original_2_contigs_href
 	);
 
@@ -650,10 +790,11 @@ sub create_compatible_file_from_kraken
 			my $nReads  = $reads_at_levels{$level}{$taxonID};
 			
 			print OUTPUT join("\t", $level, $taxonID_for_print, $name, $nReads, $nReads / $n_total_reads), "\n";
-			print OUTPUT2 join("\t", $level, $taxonID_for_print, $name, ($taxonID eq 'Unclassified') ? ($nReads - $n_unclassified): $nReads, $nReads / $n_root), "\n";
+			my $nReads_ignoreUnclassified = ($taxonID eq 'Unclassified') ? ($nReads - $n_unclassified) : $nReads;
+			print OUTPUT2 join("\t", $level, $taxonID_for_print, $name, $nReads_ignoreUnclassified, $nReads_ignoreUnclassified / $n_root), "\n";
 			
 			$reads_all_taxa += $nReads;
-			$reads_all_taxa_ignoreUnclassified += (($taxonID eq 'Unclassified') ? ($nReads - $n_unclassified): $nReads);
+			$reads_all_taxa_ignoreUnclassified += $nReads_ignoreUnclassified;
 		}
 		
 		die unless($reads_all_taxa == $n_total_reads);
@@ -903,10 +1044,11 @@ sub create_compatible_composition_file_from_centrifuge
 			my $nReads  = $reads_at_levels{$level}{$taxonID};
 			
 			print OUTPUT join("\t", $level, $taxonID_for_print, $name, $nReads, $nReads / $n_total_reads), "\n";
-			print OUTPUT2 join("\t", $level, $taxonID_for_print, $name, ($taxonID eq 'Unclassified') ? ($nReads - $n_unclassified_check): $nReads, $nReads / $n_root), "\n";
+			my $nReads_withoutUnclassified = ($taxonID eq 'Unclassified') ? ($nReads - $n_unclassified_check): $nReads;
+			print OUTPUT2 join("\t", $level, $taxonID_for_print, $name, $nReads_withoutUnclassified, $nReads_withoutUnclassified / $n_root), "\n";
 			
 			$reads_all_taxa += $nReads;
-			$reads_all_taxa_ignoreUnclassified += (($taxonID eq 'Unclassified') ? ($nReads - $n_unclassified_check): $nReads);
+			$reads_all_taxa_ignoreUnclassified += $nReads_withoutUnclassified;
 		}
 		
 		die "$reads_all_taxa != $n_total_reads output file $f_reads" unless($reads_all_taxa == $n_total_reads);
@@ -915,6 +1057,138 @@ sub create_compatible_composition_file_from_centrifuge
 	close(OUTPUT);
 	close(OUTPUT2);
 }
+
+sub create_compatible_composition_file_from_megan
+{
+	my $target_output_fn = shift;
+	my $taxonomy_metamaps_dir = shift;
+	my $f_megan_reads = shift;
+	my $taxonID_original_2_contigs_href = shift;
+	my $reads_FASTQ = shift;
+	
+	die unless(defined $reads_FASTQ);
+	
+	my $readLengths_href = Util::getReadLengths($reads_FASTQ);
+	my $n_total_reads = scalar(keys %$readLengths_href);
+	
+	my $taxonomy_metamaps = taxTree::readTaxonomy($taxonomy_metamaps_dir);
+	
+	my %_getLightning_cache;
+	my $getLightning = sub {
+		my $taxonID = shift;
+		if(exists $_getLightning_cache{$taxonID})
+		{
+			return $_getLightning_cache{$taxonID};
+		}
+		else
+		{
+			my $lightning = validation::getAllRanksForTaxon_withUnclassified($taxonomy_metamaps, $taxonID, $f_megan_reads);
+			$_getLightning_cache{$taxonID} = $lightning;
+			return $lightning;
+		}
+	};
+	
+	my $n_unclassified_check = 0;
+	my @evaluateAccuracyAtLevels = validation::getEvaluationLevels();
+	
+	my $n_reads_fromMegan = 0;
+	my %reads_at_levels;
+	open(MEGAN, '<', $f_megan_reads) or die "Cannot open $f_megan_reads";
+	while(<MEGAN>)
+	{
+		my $line = $_;
+		chomp($line);
+		next unless($line);
+		
+		my @f = split(/\t/, $line);
+		die "Weird line $. in $f_megan_reads" unless(scalar(@f) == 2);
+		
+		my $readID = $f[0];
+		my $taxonID = $f[1];
+		die unless(($taxonID eq '-2') or ($taxonID > 0));
+		if($taxonID ne '-2')
+		{
+			unless(exists $taxonomy_metamaps->{$taxonID})
+			{
+				die "Unknown taxon ID in metamaps taxonomy: $taxonID (this is coming from Megan)";
+			}
+			
+			my $lightning = $getLightning->($taxonID);
+			$reads_at_levels{'definedAndHypotheticalGenomes'}{$taxonID}++;
+			RANK: foreach my $rank (@evaluateAccuracyAtLevels)
+			{
+				die unless(defined $lightning->{$rank});
+				$reads_at_levels{$rank}{$lightning->{$rank}}++;
+			}			
+		}
+		else
+		{
+			$n_unclassified_check++;
+		}
+		$n_reads_fromMegan++;
+	}
+	
+	unless($n_total_reads == $n_reads_fromMegan)
+	{
+		die "Read number discrepancy - $n_total_reads in input FASTQ $reads_FASTQ, $n_reads_fromMegan seen in file $f_megan_reads";
+	}
+	
+	my $target_output_fn_2 = $target_output_fn . '.ignoreUnclassified';	
+	open(OUTPUT, '>', $target_output_fn) or die "Cannot open $target_output_fn";
+	open(OUTPUT2, '>', $target_output_fn_2) or die "Cannot open $target_output_fn_2";
+	print OUTPUT join("\t", qw/AnalysisLevel ID Name Absolute PotFrequency/), "\n";		
+	print OUTPUT2 join("\t", qw/AnalysisLevel ID Name Absolute PotFrequency/), "\n";		
+	
+	my $n_reads_classified = $n_total_reads - $n_unclassified_check;
+	foreach my $level ('definedAndHypotheticalGenomes', @evaluateAccuracyAtLevels)
+	{
+		$reads_at_levels{$level}{"Unclassified"} = 0 if(not exists $reads_at_levels{$level}{"Unclassified"});		
+		$reads_at_levels{$level}{"Unclassified"} += $n_unclassified_check;
+		my $reads_all_taxa = 0;
+		my $reads_all_taxa_ignoreUnclassified = 0;
+		foreach my $taxonID (keys %{$reads_at_levels{$level}})
+		{
+			my $taxonID_for_print = $taxonID;
+			my $name;   
+			if($taxonID eq 'Unclassified')
+			{
+				$name = 'Unclassified';
+				$taxonID_for_print = 0;
+			}
+			elsif($taxonID eq 'Undefined')
+			{
+				die;
+				$name = 'NotLabelledAtLevel'; 
+				$taxonID_for_print = -1;				
+			}
+			elsif($taxonID eq 'NotLabelledAtLevel')
+			{
+				die;
+				$name = 'NotLabelledAtLevel'; 
+				$taxonID_for_print = -1;				
+			}			
+			else
+			{
+				$name = taxTree::taxon_id_get_name($taxonID, $taxonomy_metamaps);
+			}
+			
+			my $nReads  = $reads_at_levels{$level}{$taxonID};
+			
+			print OUTPUT join("\t", $level, $taxonID_for_print, $name, $nReads, $nReads / $n_total_reads), "\n";
+			my $readCount_ignoreUnclassified = (($taxonID eq 'Unclassified') ? ($nReads - $n_unclassified_check) : $nReads);
+			print OUTPUT2 join("\t", $level, $taxonID_for_print, $name, $readCount_ignoreUnclassified, $readCount_ignoreUnclassified / $n_reads_classified), "\n";
+			
+			$reads_all_taxa += $nReads;
+			$reads_all_taxa_ignoreUnclassified += $readCount_ignoreUnclassified;
+		}
+		
+		die "$reads_all_taxa != $n_total_reads output file $f_megan_reads" unless($reads_all_taxa == $n_total_reads);
+		die Dumper("Discrepancy", $reads_all_taxa_ignoreUnclassified, $n_reads_classified) unless($reads_all_taxa_ignoreUnclassified == $n_reads_classified);
+	}
+	close(OUTPUT);
+	close(OUTPUT2);
+}
+
 
 sub create_compatible_reads_file_from_kraken
 {
@@ -954,6 +1228,42 @@ sub create_compatible_reads_file_from_kraken
 	
 }
  
+sub create_compatible_reads_file_from_megan
+{
+	my $output_fn = shift;
+	my $taxonomy_kraken_dir = shift;
+	my $f_reads = shift;
+		
+	my $output_fn_unclassified = $output_fn . '.unclassified';
+	open(OUTPUT, '>', $output_fn) or die "Cannot open $output_fn";	
+	open(OUTPUT_UNCL, '>', $output_fn_unclassified) or die "Cannot open $output_fn_unclassified";	
+	open(MEGAN, '<', $f_reads) or die "Cannot open $f_reads";
+	while(<MEGAN>)
+	{
+		my $line = $_;
+		chomp($line);
+		next unless($line);
+		my @f = split(/\t/, $line);
+		die "Weird line $. in $f_reads" unless(scalar(@f) == 2);
+		
+		my $readID = $f[0];
+		my $taxonID = $f[1];
+		die unless(($taxonID eq '-2') or ($taxonID > 0));
+		if($taxonID ne '-2')
+		{
+			print OUTPUT $readID, "\t", $taxonID, "\n";
+		}
+		else
+		{
+			print OUTPUT $readID, "\t", 0, "\n";		 
+			print OUTPUT_UNCL $readID, "\t", 'Unclassified', "\n";		
+		}
+	}
+	close(MEGAN);
+	close(OUTPUT);
+	close(OUTPUT_UNCL);
+	
+}
 sub create_compatible_reads_file_from_centrifuge
 {
 	my $output_fn = shift;

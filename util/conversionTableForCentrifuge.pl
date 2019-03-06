@@ -12,8 +12,8 @@ use taxTree;
 use Util;
 use SimulationsKraken;
 
-my $suitableMasterTaxonomy = SimulationsKraken::getKrakenDBTemplate() . '/taxonomy';
-die "$suitableMasterTaxonomy does not exist" unless(-d $suitableMasterTaxonomy);
+#my $suitableMasterTaxonomy = SimulationsKraken::getKrakenDBTemplate() . '/taxonomy';
+#die "$suitableMasterTaxonomy does not exist" unless(-d $suitableMasterTaxonomy);
 
 # my $krakenTemplate_taxonomy_names = '/data/projects/phillippy/projects/mashsim/src/krakenDBTemplate/taxonomy/names.dmp';
 

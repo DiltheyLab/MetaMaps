@@ -188,6 +188,7 @@ sub getReadLengths
 	my $cutAfterWhiteSpace = shift;
 	
 	my %forReturn;
+	my $n_reads = 0;
 	open(F, '<', $file) or die "Cannot open $file";
 	while(<F>)
 	{
@@ -203,8 +204,11 @@ sub getReadLengths
 		die unless(substr($plus, 0, 1) eq '+');
 		my $qualities = <F>;
 		$forReturn{$readID} = length($sequence);
+		$n_reads++;
 	}	
 	close(F);
+	die Dumper("Read number discrepancy", scalar(keys %forReturn), $n_reads) unless(scalar(keys %forReturn) == $n_reads);
+	
 	return \%forReturn;
 }
 

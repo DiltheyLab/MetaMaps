@@ -203,10 +203,20 @@ Rscript plotIdentities_EM.R /data/projects/phillippy/projects/MetaMap/databases/
 ./metamaps classify --mappings tmp/hmp7_2_miniSeq+H --DB databases/miniSeq+H
 
 
+miniSeq_100 test commands:
+
 perl simulate.pl --DB databases/miniSeq_100 --action prepare --n_simulations 1 --suffix logNormal --coverageMode logNormal
 perl simulate.pl --DB databases/miniSeq_100 --action prepareII --suffix logNormal 
 perl simulate.pl --DB databases/miniSeq_100 --action analyzeAll --suffix logNormal 
 
+
+perl simulate.pl --DB databases/miniSeq_100 --action prepare --n_simulations 1 --suffix logNormal --coverageMode logNormal
+
+perl simulate.pl --DB databases/miniSeq_100 --action inferenceJobI --jobI 0 --suffix logNormal --skipKraken 1 --skipCentrifuge 1 --useVarietyI 0
+
+Megan only:
+
+perl simulate.pl --DB databases/miniSeq_100 --action inferenceJobI --jobI 0 --suffix logNormal --skipKraken 1 --skipCentrifuge 1 --skipMetaMaps 1 --useVarietyI 0
 
 /usr/bin/time -v ./metamaps mapDirectly --all -r databases/refseq/DB.fa -q /scratch/tmp/hmp_set7_combined.fastq -o tmp/hmp7_2_refseq --mm 60 &> tests/resources/hmp7_2_refseq_map;\
 /usr/bin/time -v ./metamaps classify --mappings tmp/hmp7_2_refseq+H --DB databases/refseq &> tests/resources/hmp7_2_refseq_classify

@@ -66,6 +66,7 @@ my $krakenDBTemplate = SimulationsKraken::getKrakenDBTemplate();
 my $kraken2DBTemplate = SimulationsKraken::getKraken2DBTemplate();
 my $kraken2_binPrefix = SimulationsKraken::getKraken2BinPrefix();
 my $centrifugeBinDir = SimulationsKraken::getCentrifugeDir();
+my $meganBinDir = SimulationsKraken::getMeganDir();
 
 die unless(-e $metamap_bin);
 
@@ -150,6 +151,7 @@ my $coverageTargetsAreOrganismAbundances = 0;
 my $ignoreFullDB;
 my $skipKraken;
 my $skipCentrifuge;
+my $skipMegan;
 my $skipMetaMaps;
 my $FASTA;
 my $FASTA_taxon_id;
@@ -174,6 +176,7 @@ GetOptions (
 	'ignoreFullDB:s' => \$ignoreFullDB,
 	'skipKraken:s' => \$skipKraken,
 	'skipCentrifuge:s' => \$skipCentrifuge,
+	'skipMegan:s' => \$skipMegan,
 	'skipMetaMaps:s' => \$skipMetaMaps,
 	'FASTA:s' => \$FASTA,
 	'FASTA_taxon_id:s' => \$FASTA_taxon_id,
@@ -644,7 +647,7 @@ elsif($action eq 'inferenceJobI')
 		}	
 	}
 					
-	inferenceOneSimulation($simulation_href, $skipKraken, $skipCentrifuge, $maxMemory, $minReadLengthForMetaMapsInference);
+	inferenceOneSimulation($simulation_href, $skipKraken, $skipCentrifuge, $skipMegan, $maxMemory, $minReadLengthForMetaMapsInference);
 }
 elsif($action eq 'analyzeJobI')
 {
@@ -886,6 +889,7 @@ sub inferenceOneSimulation
 	my $simulation_href = shift;
 	my $skipKraken = shift;
 	my $skipCentrifuge = shift;
+	my $skipMegan = shift;
 	my $maxMemory = shift;
 	my $minReadLength = shift;
 	
@@ -931,6 +935,12 @@ sub inferenceOneSimulation
 		{
 			SimulationsKraken::doCentrifuge($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $centrifugeBinDir); 
 		}
+		
+		unless($skipMegan)
+		{
+			SimulationsKraken::doMegan($inference_target_dir, $DB_target_dir, $simulation_href->{readsFastq}, $meganBinDir); 
+		}
+		
 	} 
 	
 	# foreach my $oneDBdir (@{$simulation_href->{dbDirs_metamap}}) 

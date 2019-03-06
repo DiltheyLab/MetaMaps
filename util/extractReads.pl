@@ -45,7 +45,7 @@ unless(($target eq '0') or (exists $taxonomy->{$target}))
 my @_targetNodes = ($target, ($target ne '0') ? taxTree::descendants($taxonomy, $target) : ());
 my %targetNodes = map {$_ => 1} @_targetNodes;
 
-print STDERR "\nHave ", scalar(keys %targetNodes), " target nodes.\n";
+print STDERR "\nHave ", scalar(keys %targetNodes), " target nodes. [" . join(", ", keys %targetNodes). "]\n";
 
 my %targetReads;
 open(R2T, '<', $r2t) or die "Cannot open --r2t $r2t";
