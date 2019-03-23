@@ -30,6 +30,7 @@ sub extractContigLengths
 		if(substr($_, 0, 1) eq '>')
 		{
 			$currentContigID = substr($_, 1);	
+			$currentContigID = substr($_, 1);	
 			$forReturn{$currentContigID} = 0;
 		}
 		else
@@ -182,6 +183,35 @@ sub sd
 	return $sd;
 }
 
+sub getReadsInMAF
+{
+	my $MAF = shift;
+	my %forReturn;
+	my $n_reads = 0;
+	open(MAF, '<', $MAF) or die "Cannot open $MAF";
+	while(<MAF>)
+	{
+		my $line = $_;
+		chomp($line);
+		next unless($line);
+		next if(substr($line, 0, 1) eq '#');
+		die unless(substr($line, 0, 2) eq 'a ');
+		
+		my $refLine = <MAF>;
+		my $readLine = <MAF>;
+		die unless(substr($refLine, 0, 2) eq 's ');
+		die unless(substr($readLine, 0, 2) eq 's ');
+				
+		die unless($readLine =~ /^s (\S+)\s+/);
+		my $readID = $1;
+		$forReturn{$readID}++;
+	}	
+	close(MAF);
+	
+	return \%forReturn;
+		
+}
+
 sub getReadLengths
 {
 	my $file = shift;
@@ -279,4 +309,59 @@ sub read_taxonIDs_and_contigs
 	close(GENOMEINFO);
 }
 
+sub randomAASequence
+{
+	my $length = shift;
+	die unless(defined $length);
+	my $forReturn = '';
+	my @AAs = split(//, 'ARNDCEQGHILKMFPSTWYV');
+	for(my $i = 0; $i < $length; $i++)
+	{
+		$forReturn .= $AAs[int(rand($#AAs)+1)];
+	}
+	die unless(length($forReturn) == $length);
+	return $forReturn;
+}
+
+sub translateAA2Nuc
+{
+	my $in_AA = shift;
+	
+	my %aacode = (
+	TTT => "F", TTC => "F", TTA => "L", TTG => "L",
+	TCT => "S", TCC => "S", TCA => "S", TCG => "S",
+	TAT => "Y", TAC => "Y", TAA => "STOP", TAG => "STOP",
+	TGT => "C", TGC => "C", TGA => "STOP", TGG => "W",
+	CTT => "L", CTC => "L", CTA => "L", CTG => "L",
+	CCT => "P", CCC => "P", CCA => "P", CCG => "P",
+	CAT => "H", CAC => "H", CAA => "Q", CAG => "Q",
+	CGT => "R", CGC => "R", CGA => "R", CGG => "R",
+	ATT => "I", ATC => "I", ATA => "I", ATG => "M",
+	ACT => "T", ACC => "T", ACA => "T", ACG => "T",
+	AAT => "N", AAC => "N", AAA => "K", AAG => "K",
+	AGT => "S", AGC => "S", AGA => "R", AGG => "R",
+	GTT => "V", GTC => "V", GTA => "V", GTG => "V",
+	GCT => "A", GCC => "A", GCA => "A", GCG => "A",
+	GAT => "D", GAC => "D", GAA => "E", GAG => "E",
+	GGT => "G", GGC => "G", GGA => "G", GGG => "G",
+	); # this is the hash table for the amino acids
+	
+	my %aa_2_nuc;
+	
+	foreach my $codon (keys %aacode)
+	{
+		die unless(length($codon) == 3);
+		push(@{$aa_2_nuc{$aacode{$codon}}}, $codon);
+	}
+	
+	my @AAs = split(//, $in_AA);
+	my $forReturn = '';
+	foreach my $AA (@AAs)
+	{
+		die unless(exists $aa_2_nuc{$AA});
+		$forReturn .= $aa_2_nuc{$AA}[0];
+	}
+	
+	return $forReturn;
+}
 1;

@@ -41,7 +41,7 @@ die unless(-e 'estimateSelfSimilarity.pl');
 my $simulation_read_length = 5000;
 
 # my $taxonomyDir = '/data/projects/phillippy/projects/mashsim/NCBI/refseq/taxonomy/';
-my $masterTaxonomy_dir =  '/data/projects/phillippy/projects/MetaMap/downloads/taxonomy';
+my $masterTaxonomy_dir =  SimulationsKraken::getGlobalTaxonomyMaster();
 
 # these are populated globally if required
 my $masterTaxonomy; 
@@ -972,11 +972,13 @@ sub get_files_for_evaluation
 		'Kraken-Dist' => ['distribution', 'results_kraken.txt'],		
 		'Kraken2-Dist' => ['distribution', 'results_kraken2.txt'],		
 		'Centrifuge-Dist' => ['distribution', 'results_centrifuge.txt'],		
+		'Megan-Dist' => ['distribution', 'results_megan.txt'],		
 		'MetaMap-EM-Dist' => ['distribution', 'metamap.EM.WIMP'],
 		# 'MetaMap-U-Dist' => ['distribution', 'metamap.U.WIMP'],
 		'Kraken-Reads' => ['reads', 'results_kraken.txt.reads2Taxon'],
 		'Kraken2-Reads' => ['reads', 'results_kraken2.txt.reads2Taxon'],
 		'Centrifuge-Reads' => ['reads', 'results_centrifuge.txt.reads2Taxon'],
+		'Megan-Reads' => ['reads', 'results_megan.txt.reads2Taxon'],
 		# 'Metamap-U-Reads' => ['reads', 'metamap.U.reads2Taxon'],
 		'Metamap-EM-Reads' => ['reads', 'metamap.EM.reads2Taxon'],
 		# 'MetaPalette' => ['distribution', 'results_metapalette.txt', 1]

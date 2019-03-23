@@ -39,6 +39,7 @@ my @resultsSets = (
 			'/scratch/tmp/hmp_set7_combined_kraken_results', 
 			'/scratch/tmp/hmp_set7_combined_kraken2_results',
 			'/scratch/tmp/hmp_set7_combined_centrifuge_results',
+			'/scratch/tmp/hmp_set7_combined_megan_results',
 			'tmp/HMP7_rL2000/hmp7_2_miniSeq+H', 
 			'tmp/hmp7_2_miniSeq+H_20G',
 			#'tmp/hmp7_miniSeq+H_rL_1000_16G',
@@ -46,32 +47,34 @@ my @resultsSets = (
 		'tmp/truthHMP7_bwa_pacbio',
 		'/scratch/tmp/hmp_set7_combined.fastq.mappable'
 	],
-	# [ 
-		# 'Zymo',
-		# 'tmp/Zymo_metamaps',
-		# [ 
-			# '/scratch/tmp/Zymo_combined_kraken_results',
-			# '/scratch/tmp/Zymo_combined_kraken2_results',
-			# '/scratch/tmp/Zymo_combined_centrifuge_results',
-		# ],
-		# 'tmp/truthZymp_bwa_nanopore',
-		# '/data/projects/phillippy/projects/MetaMap/loman/Zymo-GridION-EVEN-BB-SN/GA10000/combined.fastq.subsampled.mappable'
-	# ],	
-	# [ 
-		# 'CAMIMouseGut',
-		# 'tmp/CAMI_metamaps',
-		# [
-			# '/scratch/tmp/CAMI_combined_kraken_results',
-			# '/scratch/tmp/CAMI_combined_kraken2_results', 
-			# '/scratch/tmp/CAMI_combined_centrifuge_results',
-			# undef,
-			# undef,
-			# 'tmp/CAMI_metamaps',
+	[ 
+		'Zymo',
+		'tmp/Zymo_metamaps',
+		[ 
+			'/scratch/tmp/Zymo_combined_kraken_results',
+			'/scratch/tmp/Zymo_combined_kraken2_results',
+			'/scratch/tmp/Zymo_combined_centrifuge_results',
+			'/scratch/tmp/Zymo_combined_megan_results',
+		],
+		'tmp/truthZymp_bwa_nanopore',
+		'/data/projects/phillippy/projects/MetaMap/loman/Zymo-GridION-EVEN-BB-SN/GA10000/combined.fastq.subsampled.mappable'
+	],	
+	[ 
+		'CAMIMouseGut',
+		'tmp/CAMI_metamaps',
+		[
+			'/scratch/tmp/CAMI_combined_kraken_results',
+			'/scratch/tmp/CAMI_combined_kraken2_results', 
+			'/scratch/tmp/CAMI_combined_centrifuge_results',
+			'/scratch/tmp/CAMI_combined_megan_results',
+			undef,
+			undef,
+			'tmp/CAMI_metamaps',
 
-		# ],
-		# 'tmp/truthCAMI',
-		# '/data/projects/phillippy/software/camiClient/19122017_mousegut_pacbio_scaffolds/2018.02.13_14.02.01_sample_0/reads/anonymous_reads.fq'
-	# ],		
+		],
+		'tmp/truthCAMI',
+		'/data/projects/phillippy/software/camiClient/19122017_mousegut_pacbio_scaffolds/2018.02.13_14.02.01_sample_0/reads/anonymous_reads.fq'
+	],		
 );
 
 foreach my $resultsSet (@resultsSets)
@@ -80,9 +83,10 @@ foreach my $resultsSet (@resultsSets)
 	my $kraken_results_dir = $resultsSet->[2][0];
 	my $kraken2_results_dir = $resultsSet->[2][1];
 	my $centrifuge_results_dir = $resultsSet->[2][2];
-	my $MetaMap_2000_results = $resultsSet->[2][3];
-	my $MetaMap_20G_results = $resultsSet->[2][4];
-	my $MetaMap_filtered_results = $resultsSet->[2][5];
+	my $megan_results_dir = $resultsSet->[2][3];
+	my $MetaMap_2000_results = $resultsSet->[2][4];
+	my $MetaMap_20G_results = $resultsSet->[2][5];
+	my $MetaMap_filtered_results = $resultsSet->[2][6];
 	
 	my $truth = $resultsSet->[3];
 	my $fastq = $resultsSet->[4];
@@ -96,6 +100,7 @@ foreach my $resultsSet (@resultsSets)
 		'Bracken' => [undef, $kraken_results_dir . '/results_bracken.txt'], 
 		'Kraken2' => [$kraken2_results_dir . '/results_kraken2.txt.reads2Taxon', $kraken2_results_dir . '/results_kraken2.txt'],
 		'Centrifuge' => [$centrifuge_results_dir . '/results_centrifuge.txt.reads2Taxon', $centrifuge_results_dir . '/results_centrifuge.txt'],
+		'Megan' => [$megan_results_dir . '/results_megan.txt.reads2Taxon', $megan_results_dir . '/results_megan.txt'],
 	);
 	
 	if($MetaMap_2000_results)

@@ -27,7 +27,8 @@ captions[["MetaMap-EM-Dist"]] <- "MetaMaps"
 captions[["Bracken-Dist"]] <- "Bracken"
 captions[["Centrifuge-Dist"]] <- "Centrifuge"
 captions[["Centrifuge-Reads"]] <- "Centrifuge"
-
+captions[["Megan-Dist"]] <- "LAST+MEGAN-LR"
+captions[["Megan-Reads"]] <- "LAST+MEGAN-LR"
 # c("gray", "blue", "firebrick2")
 
 colourByMethod <- list()
@@ -38,6 +39,8 @@ colourByMethod[["Metamap-U-Reads"]] <- "yellow"
 colourByMethod[["Kraken-Reads"]] <- "firebrick2"
 colourByMethod[["Bracken-Dist"]] <- colourByMethod[["Kraken-Reads"]]
 colourByMethod[["Kraken2-Reads"]] <- "firebrick2"
+colourByMethod[["Megan-Reads"]] <- "lightpink3"
+colourByMethod[["Megan-Dist"]] <- colourByMethod[["Megan-Reads"]]
 
 
 colourByMethod[["Centrifuge-Reads"]] <- "orange"
@@ -59,6 +62,7 @@ dotStyleByMethod <- list()
 dotStyleByMethod[["MetaMap-EM-Dist"]] <- 3
 dotStyleByMethod[["Bracken-Dist"]] <- 1
 dotStyleByMethod[["Centrifuge-Dist"]] <- 1
+dotStyleByMethod[["Megan-Dist"]] <- 1
 
 pL <- list()
 pL[["Unclassified"]] <- "Unclassified"
@@ -335,7 +339,7 @@ readLengthPlot <- function(d1, t1)
 	byReadLengthD <- read.delim(readLengthFile, header = T, stringsAsFactors = F)
 	stopifnot(all(byReadLengthD[["variety"]] == "fullDB"))
 	methodNames_reads <- c("Metamap-EM-Reads", "Metamap-U-Reads", "Kraken-Reads")
-	methodNames_reads <- c("Metamap-EM-Reads", "Kraken2-Reads", "Centrifuge-Reads")
+	methodNames_reads <- c("Metamap-EM-Reads", "Kraken2-Reads", "Centrifuge-Reads", "Megan-Reads")
 
 	rL_l_min <- min(byReadLengthD[["readLength"]])
 	rL_l_max <- max(byReadLengthD[["readLength"]])
@@ -715,11 +719,11 @@ HMP_like_reads_plot <- function(prefix, plotTitle)
 
 HMP_like_reads_plot_2 <- function(prefix, plotTitle)
 {
-	pdf(paste("readsPlot_2_", plotTitle, ".pdf", sep = ""), useDingbats = F, height = 12, width = 7)
+	pdf(paste("readsPlot_2_", plotTitle, ".pdf", sep = ""), useDingbats = F, height = 15, width = 7)
 	par(mfrow=c(3,1)) 
 
 	pMar <- par()$mar
-	par(mar = pMar + c(0,2,4.2,-2)) 	
+	par(mar = pMar + c(5,2,4.2,-2)) 	
 	
 	barPlotFile_byLevel <- paste(prefix, "_readCategory", sep = "")
 	barplotD_byLevel <- read.delim(barPlotFile_byLevel, header = T, stringsAsFactors = F)
@@ -773,13 +777,15 @@ HMP_like_reads_plot_2 <- function(prefix, plotTitle)
 
 			iMs <- sort(unique(barplotD_byLevel[["method"]][which(barplotD_byLevel[["readCategory"]] == "ALL")]))
 			#print(iMs)
-			iMs <- c("Metamap-EM-Reads", "Kraken-Reads", "Kraken2-Reads", "Centrifuge-Reads")
+			iMs <- c("Metamap-EM-Reads", "Kraken-Reads", "Kraken2-Reads", "Centrifuge-Reads", "Megan-Reads")
 			iMs_labels <- iMs
 			iMs_labels[iMs_labels == "Metamap-EM-Reads"] <- "MetaMaps"
 			iMs_labels[iMs_labels == "MetaMap-EM"] <- "MetaMaps"
 			iMs_labels[iMs_labels == "Kraken-Reads"] <- "Kraken"
 			iMs_labels[iMs_labels == "Kraken2-Reads"] <- "Kraken2"
 			iMs_labels[iMs_labels == "Centrifuge-Reads"] <- "Centrifuge"
+			iMs_labels[iMs_labels == "Megan-Reads"] <- "LAST+MEGAN-LR"
+			
 			#print(iMs_labels)
 			
 			accuracies_by_Method_byLevel <- list()
@@ -912,7 +918,7 @@ HMP_like_reads_plot_2 <- function(prefix, plotTitle)
 			bpPos <- barplot(matrix_for_barplot, beside = T, col = colorVector, ylim = c(0, 1), axes = F, cex.main = 2, cex.lab = 2.5, cex.axis = 2.5, ann = FALSE)
 			mtext(side = 2, text = ylab_barplots, line = 3.5, cex = 1.4)
 			axis(1, at = colMeans(bpPos), tick = F, labels = c(sapply(evaluationLevels_ordered, function(x){capitalize(x)}, USE.NAMES = F)), pos = -0.01, cex.axis = 2.5)
-			axis(1, at = bpPos, tick = F, labels = rep(iMs_labels, length(evaluationLevels_ordered)), las = 2, pos = -0.09, cex.axis = 2.5)
+			axis(1, at = bpPos, tick = F, labels = rep(iMs_labels, length(evaluationLevels_ordered)), las = 2, pos = -0.09, cex.axis = 2.0)
 			axis(2, at = c(0, 0.5, 1), tick = T, cex.axis = 2.5, cex.lab = 2)
 			
 			if(what == "PPV")
@@ -937,6 +943,7 @@ xyPlots_i100_p25 <- function(f1, t1, f2, t2, f3, t3)
 	plotLevels <- c("strain", "species")
 	freq_methods <- c("Bracken-Dist", "MetaMap-EM-Dist")
 	freq_methods <- c("Bracken-Dist", "Centrifuge-Dist", "MetaMap-EM-Dist")
+	freq_methods <- c("Bracken-Dist", "Centrifuge-Dist", "Megan-Dist", "MetaMap-EM-Dist")
 
 	par(mfrow=c(2,3)) 
 	barplotFiles <- c(f1, f2, f3)
@@ -969,7 +976,7 @@ xyPlots_i100_p25 <- function(f1, t1, f2, t2, f3, t3)
 
 				for(m in freq_methods)
 				{	
-					if(!(((m == "Bracken-Dist")) && (l == "strain")))
+					if(!(((m == "Bracken-Dist") || (m == "Megan-Dist")) && (l == "strain")))
 					{
 						l_lookup <- l
 						l_name <- l
@@ -997,6 +1004,12 @@ xyPlots_i100_p25 <- function(f1, t1, f2, t2, f3, t3)
 							stopifnot(any(freqD[["method"]] == m_lookup))
 						}
 						
+						if((m == "Megan-Dist") && (! any(freqD[["method"]] == m_lookup)))
+						{
+							m_lookup <- "Megan"
+							stopifnot(any(freqD[["method"]] == m_lookup))
+						}						
+						
 						indices <- which((freqD[["method"]] == m_lookup) & (freqD[["level"]] == l_lookup) & (freqD[["variety"]] == "fullDB"))
 						#indices_noUnclassified <- which((freqD[["method"]] == m_lookup) & (freqD[["level"]] == l_lookup) & (freqD[["variety"]] == "fullDB") & (freqD[["taxonID"]] != "Unclassified"))
 						if((m == "Centrifuge-Dist") && (l == "strain"))
@@ -1009,7 +1022,7 @@ xyPlots_i100_p25 <- function(f1, t1, f2, t2, f3, t3)
 						}
 						if(length(indices) == 0)
 						{
-							print(c("lengthIndices", length(indices), m, m_lookup))
+							print(c("lengthIndices", length(indices), m, m_lookup, unique(freqD[["method"]])))
 						}						
 						stopifnot(length(indices) > 0)
 
@@ -1404,21 +1417,25 @@ HMPreadPlot <- function()
 	dev.off()   
 }
 
-readLengthPlot("../databases/miniSeq+H/simulations_i100_specifiedFrequencies", "i100")
+
+HMP_like_reads_plot_2("../databases/miniSeq+H/simulations_p25_logNormal/_forPlot_barplots", "p25")
+
+HMP_like_reads_plot_2("../databases/miniSeq+H/simulations_i100_specifiedFrequencies/_forPlot_barplots", "i100")
+HMP_like_reads_plot_2("/data/projects/phillippy/projects/MetaMap/externalDataResults/CAMIMouseGut_forPlot_barplots", "CAMI")
+
+HMP_like_reads_plot_2("/data/projects/phillippy/projects/MetaMap/externalDataResults/HMP_forPlot_barplots", "HMP")
+HMP_like_reads_plot_2("/data/projects/phillippy/projects/MetaMap/externalDataResults/Zymo_forPlot_barplots", "Zymo")
 
 
 stop()
 
 xyPlots_i100_p25("../databases/miniSeq+H/simulations_i100_specifiedFrequencies/_forPlot_frequencies_xy", "i100", "../databases/miniSeq+H/simulations_p25_logNormal/_forPlot_frequencies_xy", "p25", "/data/projects/phillippy/projects/MetaMap/externalDataResults/CAMIMouseGut_forPlot_frequencies_xy", "CAMI")
 
+readLengthPlot("../databases/miniSeq+H/simulations_i100_specifiedFrequencies", "i100")
 
 
-HMP_like_reads_plot_2("../databases/miniSeq+H/simulations_p25_logNormal/_forPlot_barplots", "p25")
-HMP_like_reads_plot_2("../databases/miniSeq+H/simulations_i100_specifiedFrequencies/_forPlot_barplots", "i100")
-HMP_like_reads_plot_2("/data/projects/phillippy/projects/MetaMap/externalDataResults/CAMIMouseGut_forPlot_barplots", "CAMI")
 
-HMP_like_reads_plot_2("/data/projects/phillippy/projects/MetaMap/externalDataResults/HMP_forPlot_barplots", "HMP")
-HMP_like_reads_plot_2("/data/projects/phillippy/projects/MetaMap/externalDataResults/Zymo_forPlot_barplots", "Zymo")
+
 
 cat("\n\nOK\n\n")
 

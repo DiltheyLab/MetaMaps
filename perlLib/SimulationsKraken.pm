@@ -44,6 +44,11 @@ sub getMasterTaxonomy
 	return qq(/data/projects/phillippy/software/centrifuge-1.0.4-beta);
 }
 
+sub getGlobalTaxonomyMaster
+{
+	return qq(/data/projects/phillippy/projects/MetaMap/downloads/taxonomy);
+}
+
 sub getMeganDir
 {
 	return qq(/data/projects/phillippy/software/MEGAN6);
@@ -373,7 +378,7 @@ sub doMegan
 		
 	unless(($jobDir =~ /_fullDB/) and ($dbDir =~ /_fullDB/))
 	{
-		die Dumper("Megan is only implemented for full DB - you can usually use --useVarietyI 0 to constrain the inference process", $jobDir, $dbDir, $reads_fastq, $meganBinDir);
+		die Dumper("Megan is only implemented for full DB - you can usually use --varietyI 0 to constrain the inference process", $jobDir, $dbDir, $reads_fastq, $meganBinDir);
 	}
 	
 	
@@ -534,11 +539,13 @@ sub doMeganOnExistingDB
 	die unless(defined $MetaMapsDBDir);
 	
 	my $pre_chdir_cwd = getcwd();
-	 
+	$MetaMapsDBDir = abs_path($MetaMapsDBDir);
+	
 	# chdir($kraken2_dir) or die "Cannot chdir into $kraken2_dir";  
 	
 	die "We have a directory problem - DB as specified by $megan_protein_DB_fn not present from " . getcwd() unless(-e $megan_protein_DB_fn);
-	die "We have a directory problem - DB as specified by $megan_protein_DB_fn not present (.bck file missing)" unless(-e $megan_protein_DB_fn . '.bck');
+	$megan_protein_DB_fn = abs_path($megan_protein_DB_fn);
+	die "We have a directory problem - DB as specified by $megan_protein_DB_fn not present (.bck file missing)" unless((-e $megan_protein_DB_fn . '.bck') or ((-e $megan_protein_DB_fn . '0.bck')));
 	die "We have a directory problem - DB as specified by $megan_protein_DB_fn not present (.taxonMapping file missing)" unless(-e $megan_protein_DB_fn . '.taxonMapping');
 	
 	my $megan_protein_DB_taxonMapping_fn = abs_path($megan_protein_DB_fn . '.taxonMapping');
@@ -547,41 +554,39 @@ sub doMeganOnExistingDB
 	unless(-d $megan_output_dir)
 	{
 		mkdir($megan_output_dir) or die "Cannot mkdir $megan_output_dir";
-	}
+	} 
+	$outputDir = abs_path($outputDir);
 	
 	my $MAF = abs_path($megan_output_dir . '/alignments.maf');
 	
 	chdir($meganBinDir) or die "Cannot chdir into $meganBinDir";
-	
+		
 	my $LAST_bin = getLASTbin();
-	my $cmd_megan_map = qq($LAST_bin lastal -F15 -Q0 lastdb $simulatedReads > $MAF);
-	
-	my $cmd_Megan_sort = qq(tools/sort-last-maf -i $MAF -o ${MAF}.sorted);
+	my $cmd_megan_map = qq(/usr/bin/time -v $LAST_bin -F15 -Q0 $megan_protein_DB_fn $simulatedReads > $MAF 2> $outputDir/megan_last_resources);
+	system($cmd_megan_map) and die "Could not execute: $cmd_megan_map";
+		
+	my $cmd_Megan_sort = qq(/usr/bin/time -v tools/sort-last-maf -i $MAF -o ${MAF}.sorted.maf 2> $outputDir/megan_sort_maf_resources);
 	system($cmd_Megan_sort) and die "Could not execute: $cmd_Megan_sort";
 
-	my $cmd_Megan_rma = qq(tools/blast2rma -i ${MAF}.sorted -f LastMAF -o ${MAF}.sorted.rma -lg -alg longReads --acc2taxa $megan_protein_DB_taxonMapping_fn);
+	my $cmd_Megan_rma = qq(/usr/bin/time -v tools/blast2rma -bm BlastX -i ${MAF}.sorted.maf -f LastMAF -o ${MAF}.sorted.rma -lg -alg longReads --acc2taxa $megan_protein_DB_taxonMapping_fn 2> $outputDir/megan_blast2rma_resources);
 	system($cmd_Megan_rma) and die "Could not execute: $cmd_Megan_rma";
 	
-	my $cmd_Megan_info = qq(tools/rma2info -i ${MAF}.sorted.rma -r2c Taxonomy --ignoreUnassigned false > ${MAF}.sorted.rma.reads);
+	my $cmd_Megan_info = qq(/usr/bin/time -v tools/rma2info -i ${MAF}.sorted.rma -r2c Taxonomy --ignoreUnassigned false > ${MAF}.sorted.rma.reads 2> $outputDir/megan_rma2info_resources);
 	system($cmd_Megan_info) and die "Could not execute: $cmd_Megan_info";
-	
-	
-	#my $cmd_report = qq(/usr/bin/time -v ${kraken2_binPrefix}-report --db DB $outputDir/reads_classified 1> $outputDir/reads_classified_report 2> $outputDir/kraken_report_resources);
-	#system($cmd_report) and die "Could not execute command: $cmd_report"; # todo 
-	
+ 
 	create_compatible_composition_file_from_megan(
 		$outputDir . '/results_megan.txt',
-		"${MetaMapsDBDir}/taxonomy", 
 		"${MAF}.sorted.rma.reads",
+		$MAF,
 		$taxonID_original_2_contigs_href,
 		$simulatedReads,
 	);
 
 	create_compatible_reads_file_from_megan( 
 		$outputDir . '/results_megan.txt.reads2Taxon', 
-		"${MetaMapsDBDir}/taxonomy",
 		"${MAF}.sorted.rma.reads",
-		$taxonID_original_2_contigs_href
+		$taxonID_original_2_contigs_href,
+		$simulatedReads
 	);
 
 	chdir($pre_chdir_cwd) or die;			
@@ -661,8 +666,8 @@ sub create_compatible_file_from_kraken
 	my $taxonomy_kraken_dir = shift;
 	my $f_K = shift;
 	my $f_reads = shift;
-	my $create_compatible_file_from_kraken = shift;	
-	die unless(defined $create_compatible_file_from_kraken);
+	my $taxonID_original_2_contigs_href = shift;	
+	die unless(defined $taxonID_original_2_contigs_href);
 	
 	my $taxonomy_kraken = taxTree::readTaxonomy($taxonomy_kraken_dir);
 	
@@ -705,7 +710,7 @@ sub create_compatible_file_from_kraken
 		}
 		else
 		{
-			my $lightning = validation::getAllRanksForTaxon_withUnclassified($taxonomy_kraken, $taxonID, $create_compatible_file_from_kraken);
+			my $lightning = validation::getAllRanksForTaxon_withUnclassified($taxonomy_kraken, $taxonID, $taxonID_original_2_contigs_href);
 			$_getLightning_cache{$taxonID} = $lightning;
 			return $lightning;
 		}
@@ -1059,19 +1064,25 @@ sub create_compatible_composition_file_from_centrifuge
 }
 
 sub create_compatible_composition_file_from_megan
-{
+{ 
 	my $target_output_fn = shift;
-	my $taxonomy_metamaps_dir = shift;
 	my $f_megan_reads = shift;
+	my $MAF = shift;
 	my $taxonID_original_2_contigs_href = shift;
 	my $reads_FASTQ = shift;
 	
 	die unless(defined $reads_FASTQ);
 	
-	my $readLengths_href = Util::getReadLengths($reads_FASTQ);
+	my $readLengths_href = Util::getReadLengths($reads_FASTQ, 1);
 	my $n_total_reads = scalar(keys %$readLengths_href);
 	
-	my $taxonomy_metamaps = taxTree::readTaxonomy($taxonomy_metamaps_dir);
+	my $readsInMAF = Util::getReadsInMAF($MAF);
+	unless(scalar(grep {not exists $readLengths_href->{$_}} keys %$readsInMAF) == 0)
+	{
+		die Dumper("I seem to have some MAF reads which don't exist with read lengths", [grep {not exists $readLengths_href->{$_}} keys %$readsInMAF]);
+	} 
+	
+	my $taxonomy_master = taxTree::readTaxonomy(getGlobalTaxonomyMaster());
 	
 	my %_getLightning_cache;
 	my $getLightning = sub {
@@ -1082,7 +1093,7 @@ sub create_compatible_composition_file_from_megan
 		}
 		else
 		{
-			my $lightning = validation::getAllRanksForTaxon_withUnclassified($taxonomy_metamaps, $taxonID, $f_megan_reads);
+			my $lightning = validation::getAllRanksForTaxon_withUnclassified($taxonomy_master, $taxonID, $taxonID_original_2_contigs_href);
 			$_getLightning_cache{$taxonID} = $lightning;
 			return $lightning;
 		}
@@ -1108,7 +1119,7 @@ sub create_compatible_composition_file_from_megan
 		die unless(($taxonID eq '-2') or ($taxonID > 0));
 		if($taxonID ne '-2')
 		{
-			unless(exists $taxonomy_metamaps->{$taxonID})
+			unless(exists $taxonomy_master->{$taxonID})
 			{
 				die "Unknown taxon ID in metamaps taxonomy: $taxonID (this is coming from Megan)";
 			}
@@ -1128,10 +1139,13 @@ sub create_compatible_composition_file_from_megan
 		$n_reads_fromMegan++;
 	}
 	
-	unless($n_total_reads == $n_reads_fromMegan)
+	unless(scalar(keys %$readsInMAF) == $n_reads_fromMegan)
 	{
-		die "Read number discrepancy - $n_total_reads in input FASTQ $reads_FASTQ, $n_reads_fromMegan seen in file $f_megan_reads";
+		die "Read number discrepancy - " . scalar(keys %$readsInMAF) . " in input MAF $MAF, $n_reads_fromMegan seen in file $f_megan_reads";
 	}
+	
+	my $reads_in_FASTQ_not_in_MAF = $n_total_reads - scalar(keys %$readsInMAF);
+	$n_unclassified_check += $reads_in_FASTQ_not_in_MAF;
 	
 	my $target_output_fn_2 = $target_output_fn . '.ignoreUnclassified';	
 	open(OUTPUT, '>', $target_output_fn) or die "Cannot open $target_output_fn";
@@ -1147,7 +1161,7 @@ sub create_compatible_composition_file_from_megan
 		my $reads_all_taxa = 0;
 		my $reads_all_taxa_ignoreUnclassified = 0;
 		foreach my $taxonID (keys %{$reads_at_levels{$level}})
-		{
+		{ 
 			my $taxonID_for_print = $taxonID;
 			my $name;   
 			if($taxonID eq 'Unclassified')
@@ -1169,7 +1183,7 @@ sub create_compatible_composition_file_from_megan
 			}			
 			else
 			{
-				$name = taxTree::taxon_id_get_name($taxonID, $taxonomy_metamaps);
+				$name = taxTree::taxon_id_get_name($taxonID, $taxonomy_master);
 			}
 			
 			my $nReads  = $reads_at_levels{$level}{$taxonID};
@@ -1231,9 +1245,15 @@ sub create_compatible_reads_file_from_kraken
 sub create_compatible_reads_file_from_megan
 {
 	my $output_fn = shift;
-	my $taxonomy_kraken_dir = shift;
 	my $f_reads = shift;
-		
+	my $taxonID_original_2_contigs_href = shift;
+	my $reads_FASTQ = shift;
+	
+	die unless(defined $reads_FASTQ);
+	
+	my $readLengths_href = Util::getReadLengths($reads_FASTQ, 1);
+	
+	my %saw_read_IDs;
 	my $output_fn_unclassified = $output_fn . '.unclassified';
 	open(OUTPUT, '>', $output_fn) or die "Cannot open $output_fn";	
 	open(OUTPUT_UNCL, '>', $output_fn_unclassified) or die "Cannot open $output_fn_unclassified";	
@@ -1249,6 +1269,8 @@ sub create_compatible_reads_file_from_megan
 		my $readID = $f[0];
 		my $taxonID = $f[1];
 		die unless(($taxonID eq '-2') or ($taxonID > 0));
+		die "Weird read ID $readID" unless(exists $readLengths_href->{$readID});
+		$saw_read_IDs{$readID}++;
 		if($taxonID ne '-2')
 		{
 			print OUTPUT $readID, "\t", $taxonID, "\n";
@@ -1260,6 +1282,14 @@ sub create_compatible_reads_file_from_megan
 		}
 	}
 	close(MEGAN);
+	foreach my $readID (keys %$readLengths_href)
+	{
+		unless($saw_read_IDs{$readID})
+		{
+			print OUTPUT $readID, "\t", 0, "\n";		 
+			print OUTPUT_UNCL $readID, "\t", 'Unclassified', "\n";		
+		}
+	}
 	close(OUTPUT);
 	close(OUTPUT_UNCL);
 	

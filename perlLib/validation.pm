@@ -2374,6 +2374,10 @@ sub produceValidationOutputFiles
 		}
 		
 		{
+					
+			my @print_forPaper_all_readLevel_types = qw/ALL p1000/;
+			my @print_forPaper_all_evaluationLevels = qw/strain species genus family/;
+					
 			open(READSCORRECTBYLEVEL, '>', $prefix_for_outputFiles . '_readsCorrectByLevel') or die;
 			open(READSCORRECTBYLEVEL_FORPAPER_BYREAD, '>', $prefix_for_outputFiles . '_forPaper_readsCorrectByLevel_byRead') or die;
 			open(READSCORRECTBYLEVEL_FORPAPER_BYBASE, '>', $prefix_for_outputFiles . '_forPaper_readsCorrectByLevel_byBase') or die;
@@ -2386,10 +2390,16 @@ sub produceValidationOutputFiles
 			my @header_fields_2_byLevelCorrect_forPaper = ('', '');
 			my @header_fields_3_byLevelCorrect_forPaper = ('', '');	
 			
+			my @header_fields_1_byLevelCorrect_forPaper_all = ('EvaluationLevel', 'Experiments');
+			my @header_fields_2_byLevelCorrect_forPaper_all = ('', '');
+			my @header_fields_3_byLevelCorrect_forPaper_all = ('', '');	
+			
+			die unless(scalar(grep {$_ eq 'fullDB'} @varieties) > 0);
 			foreach my $variety (@varieties)
 			{
 				my $hf2_before = $#header_fields_2_byLevelCorrect;
 				my $hf2_before_forPaper = $#header_fields_2_byLevelCorrect_forPaper;
+				my $hf2_before_forPaper_all = $#header_fields_2_byLevelCorrect_forPaper_all;
 
 				foreach my $method (@methods)
 				{
@@ -2398,11 +2408,27 @@ sub produceValidationOutputFiles
 						'Ntotal_avg', 'OKtotal_avg', 'NmadeCall_avg', 'OKmadeCall_avg', 'noCall_avg', 'NmadeCall_n0_avg', 'PPV_n0',
 						'Ntotal_avg_bases', 'OKtotal_avg_bases', 'NmadeCall_avg_bases', 'OKmadeCall_avg_bases', 'noCall_avg_bases', 'NmadeCall_n0_avg_bases', 'PPV_n0_bases'
 					);
-					
-					push(@header_fields_2_byLevelCorrect_forPaper, $method, '', '', '', '');
-					push(@header_fields_3_byLevelCorrect_forPaper, 'Experiments',
+
+				
+					push(@header_fields_2_byLevelCorrect_forPaper, $method, '', '', '');
+					push(@header_fields_3_byLevelCorrect_forPaper,
 						'# Reads', 'Precision', 'Precision2', 'Recall',
-					);
+					);		
+
+				}
+				
+				if($variety eq 'fullDB')
+				{				
+					foreach my $readLevel (@print_forPaper_all_readLevel_types)
+					{
+						foreach my $method (@methods)
+						{				
+							push(@header_fields_2_byLevelCorrect_forPaper_all, $method . '-' . $readLevel, '', '', '');
+							push(@header_fields_3_byLevelCorrect_forPaper_all,
+								'# Reads', 'Precision', 'Precision2', 'Recall',
+							);	
+						}
+					}	
 				}
 				
 				my $hf2_after = $#header_fields_2_byLevelCorrect;
@@ -2410,16 +2436,24 @@ sub produceValidationOutputFiles
 				die unless($requiredFields > 0);
 				my @addToHeader1 = ($variety, (('') x ($requiredFields - 1)));
 				die unless(scalar(@addToHeader1) == $requiredFields);
-				push(@header_fields_1_byLevelCorrect, @addToHeader1);
+				push(@header_fields_1_byLevelCorrect, @addToHeader1);				
 				
-				
-				my $hf2_after_forPaper = $#header_fields_2_byLevelCorrect_forPaper;
-				my $requiredFields_forPaper = $hf2_after_forPaper - $hf2_before_forPaper;
-				die unless($requiredFields_forPaper > 0);
-				my @addToHeader1_forPaper = ($variety, (('') x ($requiredFields_forPaper - 1)));
-				die unless(scalar(@addToHeader1_forPaper) == $requiredFields_forPaper);
-								
-				push(@header_fields_1_byLevelCorrect_forPaper, @addToHeader1_forPaper);
+				if($variety eq 'fullDB')
+				{
+					my $hf2_after_forPaper = $#header_fields_2_byLevelCorrect_forPaper;
+					my $requiredFields_forPaper = $hf2_after_forPaper - $hf2_before_forPaper;
+					die Dumper("Did we not add any fields?", $requiredFields_forPaper, \@header_fields_2_byLevelCorrect_forPaper) unless($requiredFields_forPaper > 0);
+					my @addToHeader1_forPaper = ($variety, (('') x ($requiredFields_forPaper - 1)));
+					die unless(scalar(@addToHeader1_forPaper) == $requiredFields_forPaper);
+					push(@header_fields_1_byLevelCorrect_forPaper, @addToHeader1_forPaper);
+					
+					my $hf2_after_forPaper_all = $#header_fields_2_byLevelCorrect_forPaper_all;
+					my $requiredFields_forPaper_all = $hf2_after_forPaper_all - $hf2_before_forPaper_all;
+					die unless($requiredFields_forPaper_all > 0);
+					my @addToHeader1_forPaper_all = ($variety, (('') x ($requiredFields_forPaper_all - 1)));
+					die unless(scalar(@addToHeader1_forPaper_all) == $requiredFields_forPaper_all);
+					push(@header_fields_1_byLevelCorrect_forPaper_all, @addToHeader1_forPaper_all);	
+				}				
 			}
 			
 			print READSCORRECTBYLEVEL join("\t", @header_fields_1_byLevelCorrect), "\n";
@@ -2440,15 +2474,16 @@ sub produceValidationOutputFiles
 				print READSCORRECTBYLEVEL_ALL join("\t", '', @header_fields_2_byLevelCorrect), "\n";
 				print READSCORRECTBYLEVEL_ALL join("\t", '', @header_fields_3_byLevelCorrect), "\n";
 				
-				print READSCORRECTBYLEVEL_ALL_FORPAPER_BYREAD join("\t", 'Experiment', @header_fields_1_byLevelCorrect_forPaper), "\n";
-				print READSCORRECTBYLEVEL_ALL_FORPAPER_BYREAD join("\t", '', @header_fields_2_byLevelCorrect_forPaper), "\n";
-				print READSCORRECTBYLEVEL_ALL_FORPAPER_BYREAD join("\t", '', @header_fields_3_byLevelCorrect_forPaper), "\n";		
+				print READSCORRECTBYLEVEL_ALL_FORPAPER_BYREAD join("\t", 'Experiment', @header_fields_1_byLevelCorrect_forPaper_all), "\n";
+				print READSCORRECTBYLEVEL_ALL_FORPAPER_BYREAD join("\t", '', @header_fields_2_byLevelCorrect_forPaper_all), "\n";
+				print READSCORRECTBYLEVEL_ALL_FORPAPER_BYREAD join("\t", '', @header_fields_3_byLevelCorrect_forPaper_all), "\n";		
 				
-				print READSCORRECTBYLEVEL_ALL_FORPAPER_BYBASE join("\t", 'Experiment', @header_fields_1_byLevelCorrect_forPaper), "\n";
-				print READSCORRECTBYLEVEL_ALL_FORPAPER_BYBASE join("\t", '', @header_fields_2_byLevelCorrect_forPaper), "\n";
-				print READSCORRECTBYLEVEL_ALL_FORPAPER_BYBASE join("\t", '', @header_fields_3_byLevelCorrect_forPaper), "\n";		
+				print READSCORRECTBYLEVEL_ALL_FORPAPER_BYBASE join("\t", 'Experiment', @header_fields_1_byLevelCorrect_forPaper_all), "\n";
+				print READSCORRECTBYLEVEL_ALL_FORPAPER_BYBASE join("\t", '', @header_fields_2_byLevelCorrect_forPaper_all), "\n";
+				print READSCORRECTBYLEVEL_ALL_FORPAPER_BYBASE join("\t", '', @header_fields_3_byLevelCorrect_forPaper_all), "\n";		
 			}
-						
+
+			my %lineFields_forPaper_all;						
 			foreach my $readLevel (@readLevels)
 			{
 				foreach my $evaluationLevel (@evaluationLevels)
@@ -2693,23 +2728,24 @@ sub produceValidationOutputFiles
 								$PPV_n0_bases							
 							);
 							
-							push(@output_fields_byLevelCorrect_forPaper_byRead,
-								scalar(@callRate),
-								
-								($N_total ne $N_total_truthDefined) ? join(' / ', $N_total, $N_total_truthDefined) : $N_total,
-								($percOK_madeCall ne $percOK_madeCall_truthDefined) ? join(' / ', $percOK_madeCall, $percOK_madeCall_truthDefined) : $percOK_madeCall,
-								$PPV_n0,
-								($percOK_total ne $percOK_total_truthDefined) ? join(' / ', $percOK_total, $percOK_total_truthDefined) : $percOK_total, 					
-							);	
+							if($variety eq 'fullDB')
+							{
+								push(@output_fields_byLevelCorrect_forPaper_byRead,
+									
+									($N_total ne $N_total_truthDefined) ? join(' / ', $N_total, $N_total_truthDefined) : $N_total,
+									($percOK_madeCall ne $percOK_madeCall_truthDefined) ? join(' / ', $percOK_madeCall, $percOK_madeCall_truthDefined) : $percOK_madeCall,
+									$PPV_n0,
+									($percOK_total ne $percOK_total_truthDefined) ? join(' / ', $percOK_total, $percOK_total_truthDefined) : $percOK_total, 					
+								);	
 
-							push(@output_fields_byLevelCorrect_forPaper_byBase,
-								scalar(@callRate),
-								
-								($N_total_bases ne $N_total_truthDefined_bases) ? join(' / ', $N_total_bases, $N_total_truthDefined_bases) : $N_total_bases,
-								($percOK_madeCall_bases ne $percOK_madeCall_truthDefined_bases) ? join(' / ', $percOK_madeCall_bases, $percOK_madeCall_truthDefined_bases) : $percOK_madeCall_bases,
-								$PPV_n0_bases,					
-								($percOK_total_bases ne $percOK_total_truthDefined_bases) ? join(' / ', $percOK_total_bases, $percOK_total_truthDefined_bases) : $percOK_total_bases, 
-							);											
+								push(@output_fields_byLevelCorrect_forPaper_byBase,
+									
+									($N_total_bases ne $N_total_truthDefined_bases) ? join(' / ', $N_total_bases, $N_total_truthDefined_bases) : $N_total_bases,
+									($percOK_madeCall_bases ne $percOK_madeCall_truthDefined_bases) ? join(' / ', $percOK_madeCall_bases, $percOK_madeCall_truthDefined_bases) : $percOK_madeCall_bases,
+									$PPV_n0_bases,					
+									($percOK_total_bases ne $percOK_total_truthDefined_bases) ? join(' / ', $percOK_total_bases, $percOK_total_truthDefined_bases) : $percOK_total_bases, 
+								);		
+							}
 							
 							print "Generating ", $prefix_for_outputFiles . '_forPlot_barplots_fullDB', " $readLevel $variety $methodName: averaging over ", scalar(@callRate), " iterations.\n";
 						 
@@ -2722,12 +2758,45 @@ sub produceValidationOutputFiles
 					print READSCORRECTBYLEVEL join("\t", @output_fields_byLevelCorrect), "\n";
 					print READSCORRECTBYLEVEL_ALL join("\t", $suffix, @output_fields_byLevelCorrect), "\n";
 					
+
+					#print READSCORRECTBYLEVEL_ALL_FORPAPER_BYBASE join("\t", $suffix, @output_fields_byLevelCorrect_forPaper_byBase), "\n";			
+					#print READSCORRECTBYLEVEL_ALL_FORPAPER_BYREAD join("\t", $suffix, @output_fields_byLevelCorrect_forPaper_byRead), "\n";
+
 					print READSCORRECTBYLEVEL_FORPAPER_BYREAD join("\t", @output_fields_byLevelCorrect_forPaper_byRead), "\n";
-					print READSCORRECTBYLEVEL_ALL_FORPAPER_BYREAD join("\t", $suffix, @output_fields_byLevelCorrect_forPaper_byRead), "\n";
-					
 					print READSCORRECTBYLEVEL_FORPAPER_BYBASE join("\t", @output_fields_byLevelCorrect_forPaper_byBase), "\n";
-					print READSCORRECTBYLEVEL_ALL_FORPAPER_BYBASE join("\t", $suffix, @output_fields_byLevelCorrect_forPaper_byBase), "\n";						
+
+					$lineFields_forPaper_all{'read'}{$suffix}{$evaluationLevel}{$readLevel} = [$suffix, @output_fields_byLevelCorrect_forPaper_byRead];
+					$lineFields_forPaper_all{'base'}{$suffix}{$evaluationLevel}{$readLevel} = [$suffix, @output_fields_byLevelCorrect_forPaper_byBase];
+				
 				}
+			}
+			
+			# e.g. $suffix = 'i100_specifiedFrequencies'
+
+			foreach my $suffix (keys %{$lineFields_forPaper_all{'read'}})
+			{
+				foreach my $evaluationLevel (@print_forPaper_all_evaluationLevels)
+				{
+					foreach my $outputFile (qw/read base/)
+					{						
+						my @outputFields = map {
+							my $readLevel = $_;
+							my @line_fields = @{$lineFields_forPaper_all{$outputFile}{$suffix}{$evaluationLevel}{$readLevel}};
+							die unless(scalar(@line_fields));
+							@line_fields[3 .. $#line_fields]
+						} @print_forPaper_all_readLevel_types;
+						
+						if($outputFile eq 'read')
+						{
+							print READSCORRECTBYLEVEL_ALL_FORPAPER_BYREAD join("\t", $suffix, $evaluationLevel, 1, @outputFields), "\n";							
+						}
+						else
+						{
+							print READSCORRECTBYLEVEL_ALL_FORPAPER_BYBASE join("\t", $suffix, $evaluationLevel, 1, @outputFields), "\n";							
+						}
+					}
+				}
+				
 			}
 			
 			close(READSCORRECTBYLEVEL);
