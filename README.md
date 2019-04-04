@@ -15,7 +15,7 @@ The approximate mapping algorithm employed by MetaMaps is based on [MashMap](htt
 ## Installation
 Follow [`INSTALL.txt`](INSTALL.txt) to compile and install MetaMaps.
 
-Then download a database, e.g. [miniSeq+H](https://www.dropbox.com/s/g2jzj8sklnlp3j2/miniSeq%2BH.tar.gz?dl=0) (~8G compressed, microbial genomes and the human reference genome). Extract the downloaded database into the `databases/` directory.
+Then download a database, e.g. [miniSeq+H](https://www.dropbox.com/s/6p9o42yufx2vkae/miniSeq%2BH.tar.gz?dl=0) (~8G compressed, microbial genomes and the human reference genome). Extract the downloaded database into the `databases/` directory.
 
 ## Usage
 
