@@ -562,7 +562,8 @@ sub doMeganOnExistingDB
 	chdir($meganBinDir) or die "Cannot chdir into $meganBinDir";
 		
 	my $LAST_bin = getLASTbin();
-	my $cmd_megan_map = qq(/usr/bin/time -v $LAST_bin -F15 -Q0 $megan_protein_DB_fn $simulatedReads > $MAF 2> $outputDir/megan_last_resources);
+	# my $cmd_megan_map = qq(/usr/bin/time -v $LAST_bin -F15 -Q0 $megan_protein_DB_fn $simulatedReads > $MAF 2> $outputDir/megan_last_resources);
+	my $cmd_megan_map = qq(/usr/bin/time -v $LAST_bin -F15 -Q1 $megan_protein_DB_fn $simulatedReads > $MAF 2> $outputDir/megan_last_resources);
 	system($cmd_megan_map) and die "Could not execute: $cmd_megan_map";
 		
 	my $cmd_Megan_sort = qq(/usr/bin/time -v tools/sort-last-maf -i $MAF -o ${MAF}.sorted.maf 2> $outputDir/megan_sort_maf_resources);

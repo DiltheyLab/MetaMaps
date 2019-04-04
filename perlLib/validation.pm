@@ -2971,17 +2971,17 @@ sub produceValidationOutputFiles
 		{
 				
 			open(FREQEVALUATION, '>', $prefix_for_outputFiles . '_frequenciesCorrectByLevel') or die;
-			my @header_fields_1_freqCorrect = ('EvaluationLevel');
-			my @header_fields_2_freqCorrect = ('');
-			my @header_fields_3_freqCorrect = ('');
-			
+			my @header_fields_1_freqCorrect = ('EvaluationLevel', 'Experiments');
+			my @header_fields_2_freqCorrect = ('', '');
+			my @header_fields_3_freqCorrect = ('', '');
+			 
 			foreach my $variety (@varieties)
 			{
 				my $hf2_before = $#header_fields_2_freqCorrect;
 				foreach my $method (@methods)
 				{
-					push(@header_fields_2_freqCorrect, $method, '', '', '', '');	
-					push(@header_fields_3_freqCorrect, 'nExperiments', 'L1_avg', 'r2_avg', 'precisionBinary_avg', 'recallBinary_avg');					
+					push(@header_fields_2_freqCorrect, $method, '', '', '');	
+					push(@header_fields_3_freqCorrect, 'L1_avg', 'r2_avg', 'precisionBinary_avg', 'recallBinary_avg');					
 				}
 				
 				my $hf2_after = $#header_fields_2_freqCorrect;
@@ -3008,7 +3008,7 @@ sub produceValidationOutputFiles
 
 			foreach my $evaluationLevel (@evaluationLevels)
 			{		
-				my @output_fields_freqCorrect = ($evaluationLevel);	
+				my @output_fields_freqCorrect = ($evaluationLevel, 1);	
 			 
 				foreach my $variety (@varieties)
 				{				
@@ -3041,7 +3041,8 @@ sub produceValidationOutputFiles
 							$M_binaryRecall = sum(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{binaryRecall}}) / scalar(@{$allSimulations_data_href->{freq_byVariety_byLevel}->{$variety}{$methodName}{$evaluationLevel}{binaryRecall}});
 						}
 						
-						push(@output_fields_freqCorrect, $n, $M_L1, $M_r2, $M_binaryPrecision, $M_binaryRecall);
+						die "Weird value for n: $n" unless(($n == 1) or ($n == 0));
+						push(@output_fields_freqCorrect, $M_L1, $M_r2, $M_binaryPrecision, $M_binaryRecall);
 					}				
 				}	
 				
