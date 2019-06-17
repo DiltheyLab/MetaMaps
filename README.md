@@ -98,8 +98,9 @@ You can also download and construct your own reference databases. For example, t
     ```
     perl util/addTaxonIDToFasta.pl --inputFA hg38.primary.fna --outputFA hg38.primary.fna.with9606 --taxonID 9606
     ```
-    
-4. Finally, construct the MetaMaps databasen (here `myDB`):
+4. If the `databases` directory does not exist, create it: `mkdir -p databases`.
+
+5. Finally, construct the MetaMaps databasen (here `myDB`):
 
     ```
     perl buildDB.pl --DB databases/myDB --FASTAs download/refseq,hg38.primary.fna.with9606 --taxonomy download/taxonomy_uniqueIDs
