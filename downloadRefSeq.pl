@@ -5,9 +5,10 @@ use warnings;
 use Data::Dumper;
 use Getopt::Long;
 use Net::FTP;
+use File::Copy;
 use FindBin;
 use lib "$FindBin::Bin/perlLib";
-use List::MoreUtils qw/all/;
+use List::MoreUtils qw/all mesh/;
 use Cwd qw/abs_path getcwd/;
 $| = 1;
 
@@ -15,12 +16,14 @@ my $DB = 'refseq';
 my $seqencesOutDirectory = '';
 my $taxonomyOutDirectory;
 my $targetBranches;
+my $skipIncompleteGenomes = 0;
 
 GetOptions (
 	'DB:s' => \$DB, 
 	'seqencesOutDirectory:s' => \$seqencesOutDirectory, 
 	'taxonomyOutDirectory:s' => \$taxonomyOutDirectory, 
 	'targetBranches:s' => \$targetBranches, 
+	'skipIncompleteGenomes:s' => \$skipIncompleteGenomes, 
 );
 
 # Get input arguments
@@ -103,50 +106,107 @@ foreach my $subDir (@target_subdirs)
 	$ftp->cwd($ftp_root_genomes . '/' . $DB . '/'. $subDir . '/') or die "Cannot change working directory ", $ftp->message;		
 	
 	my @subDir_content = $ftp->ls();
+	my @assembly_summary_files = grep {$_ =~ /assembly_summary.txt/} @subDir_content;
+	unless(scalar(@assembly_summary_files) == 1)
+	{
+		die Dumper("Could not identify assembly summary file in " . $ftp_root_genomes . '/' . $DB . '/'. $subDir . '/', \@assembly_summary_files);
+	}
 	
-	print "Now download genomes for ", scalar(@subDir_content), " $subDir species (", $DB, ").\n";
+	my $assembly_summary_file = $assembly_summary_files[0];
+                     
+	ATTEMPT: for(my $attempt = 0; $attempt <= 100; $attempt++)
+	{
+		if($ftp->get($assembly_summary_file))
+		{
+			last ATTEMPT;
+		}	
+		else
+		{
+			warn "Cannot transfer file " . $ftp->message;	
+			if($attempt <= 1)
+			{
+				initFTP(0);
+			}
+			else
+			{
+				initFTP(1);
+			}
+			if($attempt >= 2)
+			{
+				die "Attempt $attempt to get assembly_summary_file $assembly_summary_file failed";
+			}
+		}
+	}
+	my $assembly_summary_file_local =  $subDir_local . '/' . $assembly_summary_file;
+	move($assembly_summary_file, $assembly_summary_file_local) or die "Cannot move $assembly_summary_file to $assembly_summary_file_local - current cwd: " . getcwd();
+	
+	my $assemblies_to_download = 0;
+	my %assembly_dirs_by_species;
+	die "File §assembly_summary_file_local not existing" unless(-e $assembly_summary_file_local);
+	open(ASMSUM, '<', $assembly_summary_file_local) or die "Cannot open $assembly_summary_file_local";
+	<ASMSUM>;
+	my $asmsum_header = <ASMSUM>;
+	chomp($asmsum_header);
+	my @asmsum_header_fields = split(/\t/, $asmsum_header);
+	while(<ASMSUM>)
+	{
+		chomp;
+		next unless($_);
+		my @line_fields = split(/\t/, $_, -1);
+		die "Field number mismatch in file $assembly_summary_file_local - $#asmsum_header_fields / $#line_fields" unless(scalar(@asmsum_header_fields) == scalar(@line_fields));
+		my %line = (mesh @asmsum_header_fields, @line_fields);	
+		my $ftp_path = $line{'ftp_path'};
+		my $assembly_level = $line{'assembly_level'};
+		my $organism_name = $line{'organism_name'};
+		die unless(defined $ftp_path);
+		die unless(defined $assembly_level);
+		next if($skipIncompleteGenomes and ($assembly_level ne 'Complete Genome'));
+		(my $organism_name_safe = $organism_name) =~ s/\W/_/g;
+		push(@{$assembly_dirs_by_species{$organism_name_safe}}, $ftp_path);
+		$assemblies_to_download++;
+		
+	}
+	close(ASMSUM);
+	
+	print "Now download genomes for ", scalar(keys %assembly_dirs_by_species), " $subDir species ($assemblies_to_download genomes - ", $DB, " - skip incomplete genomes: $skipIncompleteGenomes).\n";
+		
 	my $downloaded_species = 0;
 	my $skipped_species = 0;
 	my $downloaded_assemblies = 0;
 	
 	my $speciesI = 0;
-	SPECIES: foreach my $speciesDir (@subDir_content)
+	
+	my $total_fileI = 0;
+	SPECIES: foreach my $speciesName (keys %assembly_dirs_by_species)
 	{
-		next if(($speciesDir eq '.') or ($speciesDir eq '..'));
 		$speciesI++;
-		
-		my $speciesDir_local = $subDir_local. '/' . $speciesDir;
+				
+		my $speciesDir_local = $subDir_local. '/' . $speciesName;
 		mkdir($speciesDir_local);
 		die "Directory $speciesDir_local not existing, but it should (I just tried to mkdir it - do I have write permissions?" unless(-d $speciesDir_local);	
 
-		my $speciesDir_with_latest = $speciesDir . '/latest_assembly_versions';
-		
-		unless($ftp->cwd(join('/', $ftp_root_genomes,  $DB, $subDir, $speciesDir_with_latest)))
-		{
-			$skipped_species++;
-			next SPECIES;
-		}	
-
-		$downloaded_species++;
-		my @speciesDir_latest_content = $ftp->ls();
-
 		my $fileI = 0;
-		foreach my $assembly_version (@speciesDir_latest_content)
+		foreach my $assembly_path_fullURL (@{$assembly_dirs_by_species{$speciesName}})
 		{
-			$fileI++;
-			next if(($assembly_version eq '.') or ($assembly_version eq '..'));	
-
-			$ftp->cwd(join('/', $ftp_root_genomes,  $DB, $subDir, $speciesDir_with_latest)) or die "Cannot change working directory ", $ftp->message;		
-			$ftp->cwd($assembly_version) or die "Cannot change working directory (assembly_version) ", $ftp->message;		
+			$fileI++; 
+			$total_fileI++;
 			
+			# last SPECIES  if($downloaded_assemblies > 100);  
+			(my $assembly_path_FTP = $assembly_path_fullURL) =~ s/ftp:\/\/ftp.ncbi.nlm.nih.gov//g;
+			$ftp->cwd($assembly_path_FTP) or die "Cannot change working directory into assembly path $assembly_path_FTP ", $ftp->message;		
 			my @assembly_dir_contents = $ftp->ls();
 	  
 			my @genomic_fna_files = grep {($_ =~ /_genomic.fna.gz$/) or ($_ =~ /_genomic.gff.gz$/) or ($_ =~ /_protein.faa.gz$/)} grep {$_ !~ /(_cds_from_)|(_rna_from_g)/} @assembly_dir_contents;
 			my @assembly_report_files = grep {$_ =~ /_assembly_report.txt$/} @assembly_dir_contents;
-			die Dumper("Problem identifying files for download", \@genomic_fna_files, \@assembly_report_files, join('/', $ftp_root_genomes,  $DB, $subDir, $speciesDir_with_latest), $assembly_version) unless((scalar(@assembly_report_files) == 1) and (scalar(@genomic_fna_files) >= 1) and (scalar(@genomic_fna_files) <= 3));
+			
+			
+			die "Can't parse assembly version from assembly path: $assembly_path_fullURL" unless($assembly_path_fullURL =~ /.+\/(.+?)$/);
+			my $assembly_version = $1;
+			
+			die Dumper("Problem identifying files for download", \@genomic_fna_files, \@assembly_report_files, $assembly_path_fullURL, $assembly_version) unless((scalar(@assembly_report_files) == 1) and (scalar(@genomic_fna_files) >= 1) and (scalar(@genomic_fna_files) <= 3));
 			
 			my $assemblyVersion_local = $speciesDir_local . '/'. $assembly_version;
-			mkdir($assemblyVersion_local);
+			mkdir($assemblyVersion_local); 
 			die unless(-d $assemblyVersion_local);	
 			
 			my $cwd_before = getcwd();
@@ -155,7 +215,7 @@ foreach my $subDir (@target_subdirs)
 			
 			foreach my $file_to_transfer (@genomic_fna_files, @assembly_report_files)
 			{
-				print "\r\t $speciesI / ", scalar(@subDir_content), " $subDir ($speciesDir) -- version $fileI / ", scalar(@speciesDir_latest_content), ": GET $file_to_transfer                        ";
+				print "\r\t Genome $total_fileI / $assemblies_to_download ; species $speciesI / ", scalar(keys %assembly_dirs_by_species), " $subDir ($speciesName) -- version $fileI / ", scalar(@{$assembly_dirs_by_species{$speciesName}}), ": GET $file_to_transfer                        ";
 				ATTEMPT: for(my $attempt = 0; $attempt <= 100; $attempt++)
 				{
 					if($ftp->get($file_to_transfer))
@@ -188,12 +248,15 @@ foreach my $subDir (@target_subdirs)
 			
 			chdir($cwd_before) or die "Cannot chdir into $cwd_before";
 		}
+		
+		$downloaded_species++;			
 	}
+	
 	
 	print "\n";
 	print "Summary for $subDir:\n";
 	print "\tDownloaded species: $downloaded_species \n";
-	print "\tSkipped species (most likely because there is no 'latest_assembly_versions' link in species directory): $skipped_species \n";
+	# print "\tSkipped species (most likely because there is no 'latest_assembly_versions' link in species directory): $skipped_species \n";
 	print "\tDownloaded assemblies: $downloaded_assemblies\n";
 	$DB_downloaded_assemblies += $downloaded_assemblies;
 }	
@@ -245,7 +308,12 @@ Parameters:
 	  Output directory for taxonomy
 	  
   targetBranches  
+  
 	  Specification of target branches (comma-separated), e.g. archaea,bacteria,fungi
+	  
+  skipIncompleteGenomes
+  
+	  Skip incomplete genomes. Default: 0.
    
 );
 exit;
