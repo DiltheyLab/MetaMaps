@@ -17,6 +17,7 @@ my $seqencesOutDirectory = '';
 my $taxonomyOutDirectory;
 my $targetBranches;
 my $skipIncompleteGenomes = 0;
+my $timeout = 360;
 
 GetOptions (
 	'DB:s' => \$DB, 
@@ -24,6 +25,7 @@ GetOptions (
 	'taxonomyOutDirectory:s' => \$taxonomyOutDirectory, 
 	'targetBranches:s' => \$targetBranches, 
 	'skipIncompleteGenomes:s' => \$skipIncompleteGenomes, 
+	'timeout:s' => \$timeout, 
 );
 
 # Get input arguments
@@ -322,7 +324,7 @@ exit;
 sub initFTP
 {
 	my $debug = shift;
-	$ftp = Net::FTP->new($ftp_server, Debug => $debug, Timeout => 360) or die "Cannot connect to some.host.name: $@";
+	$ftp = Net::FTP->new($ftp_server, Debug => $debug, Timeout => $timeout) or die "Cannot connect to some.host.name: $@";
 	$ftp->login("anonymous",'-anonymous@') or die "Cannot login ", $ftp->message;
 	$ftp->binary();	
 }
