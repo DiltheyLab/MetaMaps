@@ -2,7 +2,7 @@ package taxTree;
 
 use strict;
 use Data::Dumper;
-use List::Util qw/all/;
+use List::MoreUtils qw/all/;
 use Storable qw/dclone/;
 use File::Copy qw/move/;
 
