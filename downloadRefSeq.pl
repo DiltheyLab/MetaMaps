@@ -113,24 +113,26 @@ SUBDIR: foreach my $subDir (@target_subdirs)
 	$ftp->cwd($ftp_root_genomes . '/' . $DB . '/'. $subDir . '/') or die "Cannot change working directory ", $ftp->message;
 	
 	my @subDir_content = $ftp->ls();
-        my $num_subdirs = scalar @subDir_content;
-        print "Processing " . $num_subdirs . " entries";
+	my $num_subdirs = scalar @subDir_content;
+	print "Processing " . $num_subdirs . " entries";
 	my @assembly_summary_files = grep {$_ =~ /assembly_summary.txt/} @subDir_content;
 
 	unless(scalar(@assembly_summary_files) == 1)
 	{
 		say $report_fh Dumper("Could not identify assembly summary file in " . $ftp_root_genomes . '/' . $DB . '/'. $subDir . '/', \@assembly_summary_files);
+		next;
 	}
 	
 	my $assembly_summary_file = $assembly_summary_files[0];
-        my $assembly_summary_file_local =  $subDir_local . '/' . $assembly_summary_file;
+	my $assembly_summary_file_local =  $subDir_local . '/' . $assembly_summary_file;
 
 	ATTEMPT: for(my $attempt = 0; $attempt <= 100; $attempt++)
 	{
-                if (-e $assembly_summary_file_local) {
-                  print "\nAssembly summary file exists - skipping.\n";
-                  last ATTEMPT;
-                }
+		if (-e $assembly_summary_file_local)
+		{
+			print "\nAssembly summary file exists - skipping.\n";
+			last ATTEMPT;
+		}
 
 		if($ftp->get($assembly_summary_file))
 		{
@@ -150,13 +152,13 @@ SUBDIR: foreach my $subDir (@target_subdirs)
 			if($attempt >= 2)
 			{
 				say $report_fh "Attempt $attempt to get assembly_summary_file $assembly_summary_file failed";
-                                next SUBDIR;
+				next SUBDIR;
 			}
 		}
 	}
 
-        if (! -e $assembly_summary_file_local) {
-          move($assembly_summary_file, $assembly_summary_file_local) or die "Cannot move $assembly_summary_file to $assembly_summary_file_local - current cwd: " . getcwd();
+	if (! -e $assembly_summary_file_local) {
+		move($assembly_summary_file, $assembly_summary_file_local) or die "Cannot move $assembly_summary_file to $assembly_summary_file_local - current cwd: " . getcwd();
 	}
 
 	my $assemblies_to_download = 0;
@@ -178,44 +180,46 @@ SUBDIR: foreach my $subDir (@target_subdirs)
 		my $assembly_level = $line{'assembly_level'};
 		my $organism_name = $line{'organism_name'};
 		if (defined $ftp_path) {
-  		  die unless(defined $assembly_level);
-		  next if($skipIncompleteGenomes and ($assembly_level ne 'Complete Genome'));
-                  (my $organism_name_safe = $organism_name) =~ s/\W/_/g;
-                  push(@{$assembly_dirs_by_species{$organism_name_safe}}, $ftp_path);
-                  $assemblies_to_download++;
-                }
+			die unless(defined $assembly_level);
+			next if($skipIncompleteGenomes and ($assembly_level ne 'Complete Genome'));
+			(my $organism_name_safe = $organism_name) =~ s/\W/_/g;
+			push(@{$assembly_dirs_by_species{$organism_name_safe}}, $ftp_path);
+			$assemblies_to_download++;
+		}
 	}
 	close(ASMSUM);
 	my $total_dirs = 1;
-        foreach my $check_species_name (keys %assembly_dirs_by_species) {
-          my $check_subdir_species = $subDir_local. '/' . $check_species_name;
-          if (-e $check_subdir_species) {
-            my @check_dirs = read_dir($check_subdir_species);
-            my $num_check_dirs = scalar @check_dirs;
-            my $processed_species_subdirs = 0;
-            my $all_ok = 0;
-            my $checked_dirs = 1;
-            foreach my $dir (@check_dirs) {
-              my @check_files = read_dir($check_subdir_species . '/' . $dir);
-              print "[".$total_dirs."/".(scalar(keys %assembly_dirs_by_species))."] : Checking [" . $checked_dirs . "/" . $num_check_dirs . "]" . $check_subdir_species . '/' . $dir . "\n";
-              my @check_genomic_fna_files = grep {($_ =~ /_genomic.fna.gz$/) or ($_ =~ /_genomic.gff.gz$/) or ($_ =~ /_protein.faa.gz$/)} grep {$_ !~ /(_cds_from_)||(_rna_from_g)/} @check_files;
-              my @check_assembly_report_files = grep {$_ =~ /_assembly_report.txt$/} @check_files;
-              if (@check_genomic_fna_files and @check_assembly_report_files) {
-              }
-              else {
-                $all_ok = 1;
-              }
-              $checked_dirs++;
-            }
+	foreach my $check_species_name (keys %assembly_dirs_by_species) {
+		my $check_subdir_species = $subDir_local. '/' . $check_species_name;
+		if (-e $check_subdir_species) {
+			my @check_dirs = read_dir($check_subdir_species);
+			my $num_check_dirs = scalar @check_dirs;
+			my $processed_species_subdirs = 0;
+			my $all_ok = 0;
+			my $checked_dirs = 1;
+			foreach my $dir (@check_dirs) {
+				my @check_files = read_dir($check_subdir_species . '/' . $dir);
+				print "[".$total_dirs."/".(scalar(keys %assembly_dirs_by_species))."] : Checking [" . $checked_dirs . "/" . $num_check_dirs . "]" . $check_subdir_species . '/' . $dir . "\n";
+				my @check_genomic_fna_files = grep {($_ =~ /_genomic.fna.gz$/) or ($_ =~ /_genomic.gff.gz$/) or ($_ =~ /_protein.faa.gz$/)} grep {$_ !~ /(_cds_from_)||(_rna_from_g)/} @check_files;
+				my @check_assembly_report_files = grep {$_ =~ /_assembly_report.txt$/} @check_files;
+				if (@check_genomic_fna_files and @check_assembly_report_files)
+				{
+				}
+				else
+				{
+					$all_ok = 1;
+				}
+				$checked_dirs++;
+			}
 
-            if ($all_ok) {
-              print "[".$total_dirs."/".(scalar(keys %assembly_dirs_by_species))."] : All local files OK\n";
-              delete $assembly_dirs_by_species{$check_species_name};
-              $assemblies_to_download--;
-            }
-          }
-          $total_dirs++;
-        }
+			if ($all_ok) {
+				print "[".$total_dirs."/".(scalar(keys %assembly_dirs_by_species))."] : All local files OK\n";
+				delete $assembly_dirs_by_species{$check_species_name};
+				$assemblies_to_download--;
+			}
+		}
+		$total_dirs++;
+	}
 
 	print "Now download genomes for ", scalar(keys %assembly_dirs_by_species), " $subDir species ($assemblies_to_download genomes - ", $DB, " - skip incomplete genomes: $skipIncompleteGenomes).\n";
 		
@@ -225,8 +229,8 @@ SUBDIR: foreach my $subDir (@target_subdirs)
 	
 	my $speciesI = 0;
 	
-        # init connection if checking local files takes ages (often get CLOSE_WAIT)
-        initFTP(0);
+	# init connection if checking local files takes ages (often get CLOSE_WAIT)
+	initFTP(0);
 
 	my $total_fileI = 0;
 	SPECIES: foreach my $speciesName (keys %assembly_dirs_by_species)
@@ -246,26 +250,26 @@ SUBDIR: foreach my $subDir (@target_subdirs)
 			# last SPECIES  if($downloaded_assemblies > 100);
 			(my $assembly_path_FTP = $assembly_path_fullURL) =~ s/ftp:\/\/ftp.ncbi.nlm.nih.gov//g;
 			$ftp->cwd($assembly_path_FTP) or do {
-                                say $report_fh "Cannot change working directory into assembly path $assembly_path_FTP " . $ftp->message;
-                                close $report_fh;
-                                die "Cannot change working directory into assembly path $assembly_path_FTP ", $ftp->message;
-                        };
+					say $report_fh "Cannot change working directory into assembly path $assembly_path_FTP " . $ftp->message;
+					close $report_fh;
+					die "Cannot change working directory into assembly path $assembly_path_FTP ", $ftp->message;
+			};
 
 			my @assembly_dir_contents = $ftp->ls();
 	  
 			my @genomic_fna_files = grep {($_ =~ /_genomic.fna.gz$/) or ($_ =~ /_genomic.gff.gz$/) or ($_ =~ /_protein.faa.gz$/)} grep {$_ !~ /(_cds_from_)|(_rna_from_g)/} @assembly_dir_contents;
 			my @assembly_report_files = grep {$_ =~ /_assembly_report.txt$/} @assembly_dir_contents;
 						
-                        unless($assembly_path_fullURL =~ /.+\/(.+?)$/) {
-                        	say $report_fh $speciesName . ": Can't parse assembly version from assembly path: $assembly_path_fullURL";
-                                next SPECIES;
-                        }
+			unless($assembly_path_fullURL =~ /.+\/(.+?)$/) {
+				say $report_fh $speciesName . ": Can't parse assembly version from assembly path: $assembly_path_fullURL";
+				next SPECIES;
+			}
 			my $assembly_version = $1;
 			
-                        unless((scalar(@assembly_report_files) == 1) and (scalar(@genomic_fna_files) >= 1) and (scalar(@genomic_fna_files) <= 3)) {
-                        	say $report_fh Dumper($speciesName . " [".$assembly_version."] Problem identifying files for download", \@genomic_fna_files, \@assembly_report_files, $assembly_path_fullURL, $assembly_version);
-                                next SPECIES;
-                        }
+			unless((scalar(@assembly_report_files) == 1) and (scalar(@genomic_fna_files) >= 1) and (scalar(@genomic_fna_files) <= 3)) {
+				say $report_fh Dumper($speciesName . " [".$assembly_version."] Problem identifying files for download", \@genomic_fna_files, \@assembly_report_files, $assembly_path_fullURL, $assembly_version);
+				next SPECIES;
+			}
 			
 			my $assemblyVersion_local = $speciesDir_local . '/'. $assembly_version;
 			mkdir($assemblyVersion_local);
@@ -280,10 +284,10 @@ SUBDIR: foreach my $subDir (@target_subdirs)
 				print "\r\t Genome $total_fileI / $assemblies_to_download ; species $speciesI / ", scalar(keys %assembly_dirs_by_species), " $subDir ($speciesName) -- version $fileI / ", scalar(@{$assembly_dirs_by_species{$speciesName}}), ": GET $file_to_transfer                        ";
 				ATTEMPT: for(my $attempt = 0; $attempt <= 100; $attempt++)
 				{
-                                        if (-e $file_to_transfer) {
-                                          print "\nFile exists: [FTP] ", $ftp->size($file_to_transfer), " <=> ", (-s $file_to_transfer), " [LOCAL]\n";
-                                          next FTT if($ftp->size($file_to_transfer) == (-s $file_to_transfer));
-                                        }
+					if (-e $file_to_transfer) {
+						print "\nFile exists: [FTP] ", $ftp->size($file_to_transfer), " <=> ", (-s $file_to_transfer), " [LOCAL]\n";
+						next FTT if($ftp->size($file_to_transfer) == (-s $file_to_transfer));
+					}
 
 					if($ftp->get($file_to_transfer))
 					{
