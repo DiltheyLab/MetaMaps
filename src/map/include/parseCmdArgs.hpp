@@ -64,7 +64,7 @@ namespace skch
         cmd.defineOption("pval", "p-value cutoff, used to determine window/sketch sizes [default e-03]", ArgvParser::OptionRequiresValue);
         cmd.defineOptionAlternative("pval","p");
 
-        cmd.defineOption("maxmemory", "maximum memory, in GB [default e-03]", ArgvParser::OptionRequiresValue);
+        cmd.defineOption("maxmemory", "maximum memory, in GB [default : not active]", ArgvParser::OptionRequiresValue);
         cmd.defineOptionAlternative("maxmemory","mm");
 
         cmd.defineOption("window", "window size [default : computed using pvalue cutoff]\n\
