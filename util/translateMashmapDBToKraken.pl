@@ -20,12 +20,15 @@ $krakenTemplate_taxonomy = '';
 
 my $input_fn;
 my $really;
+my $output_fn;
 GetOptions (
 	'input:s' => \$input_fn,
+	'output_fn:s' => \$output_fn,
 	'taxonomyDir:s' => \$taxonomyDir,
 	'krakenTemplate_taxonomy:s' => \$krakenTemplate_taxonomy,
 );
-my $output_fn = $input_fn . '.kraken';
+
+$output_fn = $input_fn . '.kraken' unless($output_fn);
 
 # read taxonomy
 
