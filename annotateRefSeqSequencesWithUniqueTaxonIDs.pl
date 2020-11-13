@@ -220,10 +220,10 @@ foreach my $taxonID (keys %taxonID_2_files)
 	{
 		my $thisNode_rank = $taxonomy_href->{$taxonID}{rank};
 		die unless(defined $thisNode_rank);
-		unless(($thisNode_rank eq 'species') or ($thisNode_rank eq 'no rank') or ($thisNode_rank eq 'subspecies') or ($thisNode_rank eq 'varietas'))
+		unless(($thisNode_rank eq 'species') or ($thisNode_rank eq 'no rank') or ($thisNode_rank eq 'subspecies') or ($thisNode_rank eq 'varietas') or ($thisNode_rank eq 'strain'))
 		{
 			die Dumper("Unexpected rank", $thisNode_rank, $taxonID, $taxonID_2_files{$taxonID});
-		}	
+		} 
 		my @associated_files = @{$taxonID_2_files{$taxonID}};
 		foreach my $f (@associated_files)
 		{
