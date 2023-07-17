@@ -17,7 +17,7 @@ OBJECTS=$(SOURCES:.cpp=.o)
 all : metamaps
 
 metamaps : $(OBJECTS) 
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(OBJECTS) -o metamaps @mathlib@ -lstdc++ -fopenmp -lz -lm -lpthread -lboost_system -lboost_filesystem -lboost_serialization -lboost_regex
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(OBJECTS) -o metamaps -lstdc++ -fopenmp -lz -lm -lpthread -lboost_system -lboost_filesystem -lboost_serialization -lboost_regex -lboost_math_c99
 
 .SUFFIXES :
 
