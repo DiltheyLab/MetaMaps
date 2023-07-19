@@ -464,7 +464,10 @@ void doEM(const skch::Parameters& parameters, const std::string& mappedFile)
 	size_t minimumReadsPerBestContig = parameters.minimumReadsForU;
 
 	std::set<std::string> relevantTaxonIDs = getTaxonIDsFromMappingsFile(mappedFile);
-
+	if(relevantTaxonIDs.size() == 0)
+	{
+    	throw std::runtime_error("No relevant taxon IDs found in your mappings file - is it possible that none of your reads are mapped?");		
+	}
 	// Get numbers of unmapped, short reads
 	std::map<std::string, size_t> mappingStats = getMappingStats(mappedFile);
 	size_t nUnmapped = mappingStats.at("ReadsNotMapped");
