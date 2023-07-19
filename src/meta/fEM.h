@@ -398,7 +398,12 @@ std::map<std::string, std::string> getMappingParameters(std::string mappedFile)
 std::map<std::string, size_t> getMappingStats(std::string mappedFile)
 {
 	std::map<std::string, size_t> forReturn;
-	std::ifstream statsStream (mappedFile + ".meta");
+	std::string statsStream_fn = mappedFile + ".meta";
+	std::ifstream statsStream (statsStream_fn);
+	if(! statsStream.is_open())
+	{
+    	throw std::runtime_error("The file " + statsStream_fn + " is not present or could not be opened - this file is generated automatically as part of the mapping process, so please check whether the mapping process finished successfully.");				
+	}
 	assert(statsStream.is_open());
 	std::string line;
 	while(statsStream.good())
