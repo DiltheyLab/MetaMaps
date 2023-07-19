@@ -493,6 +493,7 @@ public:
 		useParameters.windowSize = restoredParameters.windowSize;
 		useParameters.referenceSize = restoredParameters.referenceSize;
 		useParameters.reportAll = param.reportAll;
+		useParameters.threads = param.threads;
   
 		std::cout << "Parameters restored from index " << fn_serialize_arguments << "\n";
 		std::cout << "\t" << "- alphabetSize: " << useParameters.alphabetSize << "\n";
