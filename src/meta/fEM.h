@@ -1397,6 +1397,10 @@ std::string extractTaxonId(std::string line)
 {
 	boost::regex matchTaxonID{"kraken:taxid\\|(x?\\d+)"};
 	boost::smatch matchBrackets;	
+	if(!(boost::regex_search(line, matchBrackets, matchTaxonID)))
+	{
+		throw std::runtime_error("Could not extract taxon ID from contig identifier '" + line + "' - did you use the MetMaps build scripts to construct your database?");				
+	}
 	assert(boost::regex_search(line, matchBrackets, matchTaxonID));
 	std::string taxonID = matchBrackets[1];
 	return taxonID;
