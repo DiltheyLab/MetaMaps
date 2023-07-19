@@ -1401,7 +1401,14 @@ std::string extractTaxonId(std::string line)
 	{
 		throw std::runtime_error("Could not extract taxon ID from contig identifier '" + line + "' - did you use the MetMaps build scripts to construct your database?");				
 	}
-	assert(boost::regex_search(line, matchBrackets, matchTaxonID));
+	if(!(matchBrackets.size() == 2))
+	{
+		throw std::runtime_error("Could not extract taxon ID from contig identifier (II) '" + line + "' - did you use the MetMaps build scripts to construct your database?");				
+	}
+	if(!(matchBrackets[1].matched))
+	{
+		throw std::runtime_error("Could not extract taxon ID from contig identifier (III) '" + line + "' - did you use the MetMaps build scripts to construct your database?");				
+	}		
 	std::string taxonID = matchBrackets[1];
 	return taxonID;
 }
