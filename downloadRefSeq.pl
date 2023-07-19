@@ -105,7 +105,7 @@ open(my $report_fh, '>', $report_filename) or die "Could not open file '$report_
 
 SUBDIR: foreach my $subDir (@target_subdirs)
 {
-        my $processed_entries = 1;
+    my $processed_entries = 1;
 	my $subDir_local = $seqencesOutDirectory . '/' . $subDir;
 	mkdir($subDir_local);
 	die "Directory $subDir_local not existing, but it should (I just tried to mkdir it - do I have write permissions?"  unless(-d $subDir_local);
@@ -249,11 +249,23 @@ SUBDIR: foreach my $subDir (@target_subdirs)
 			
 			# last SPECIES  if($downloaded_assemblies > 100);
 			(my $assembly_path_FTP = $assembly_path_fullURL) =~ s/ftp:\/\/ftp.ncbi.nlm.nih.gov//g;
-			$ftp->cwd($assembly_path_FTP) or do {
-					say $report_fh "Cannot change working directory into assembly path $assembly_path_FTP " . $ftp->message;
-					close $report_fh;
-					die "Cannot change working directory into assembly path $assembly_path_FTP ", $ftp->message;
-			};
+			$assembly_path_FTP =~ s/https:\/\/ftp.ncbi.nlm.nih.gov//g;
+			
+			ATTEMPT: for(my $attempt = 0; $attempt <= 3; $attempt++)
+			{
+				if($attempt == 3)
+				{
+						close $report_fh;
+						die "Cannot change working directory into assembly path (gave up - $assembly_path_fullURL) $assembly_path_FTP ", $ftp->message;
+				}
+				
+				$ftp->cwd($assembly_path_FTP) or do {
+						say $report_fh "Cannot change working directory into assembly path (attempt $attempt - $assembly_path_fullURL) $assembly_path_FTP " . $ftp->message;
+						initFTP(0);
+						next ATTEMPT;
+				};
+				last ATTEMPT;
+			}
 
 			my @assembly_dir_contents = $ftp->ls();
 	  
