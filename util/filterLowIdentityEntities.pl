@@ -16,7 +16,7 @@ use validation;
 $| = 1;
 
 my $DB = 'miniSeq+H';
-my $mappings = 'tmp/CAMI_metamaps';
+my $mappings;
 my $identityThreshold = 0.8;
 GetOptions (
 	'DB:s' => \$DB, 
