@@ -584,7 +584,7 @@ sub get_ancestors_by_rank
 		my $rank = $tree_href->{$ancestorID}{rank};
 		die unless(defined $rank);
 		next if($rank eq 'no rank');
-		die Dumper("taxTree::get_ancestors_by_rank(..): Rank '$rank' for node is already defined", $node, \%byRank) if(defined $byRank{$rank});
+		die Dumper("taxTree::get_ancestors_by_rank(..): Rank '$rank' for node is already defined - trying to set it to value '$ancestorID'", $node, \%byRank) if((defined $byRank{$rank}) and ($byRank{$rank} ne $ancestorID));
 		$byRank{$rank} = $ancestorID;
 	}
 	return \%byRank;
